@@ -73,6 +73,18 @@ export function worse(a: Severity | null, b: Severity | null): Severity | null {
   return SEVERITY_RANK[a] >= SEVERITY_RANK[b] ? a : b;
 }
 
+/**
+ * True when committed + pipeline load passes the red threshold. At-risk weeks
+ * stay "at risk" (pipeline-driven) but are drawn red like an overallocation.
+ */
+export function totalIsCritical(
+  committed: number,
+  tentative: number,
+  settings: Pick<PlanSettings, 'criticalThreshold'>,
+): boolean {
+  return committed + tentative > settings.criticalThreshold;
+}
+
 export function severity(
   committed: number,
   tentative: number,

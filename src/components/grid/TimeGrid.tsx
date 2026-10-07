@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { bucketStats } from '../../domain/aggregate';
 import { assignmentFlagWeeks } from '../../domain/conflicts';
-import { weekKind, type Severity } from '../../domain/load';
+import { totalIsCritical, weekKind, type Severity } from '../../domain/load';
 import type { WeekKey, Zoom } from '../../domain/types';
 import { nextStep } from '../../domain/steps';
 import { currentWeek, formatWeek, type Bucket } from '../../domain/weeks';
@@ -279,6 +279,19 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     if (selected) classes.push('selected');
     if (isFocus) classes.push('focus');
     if (flag) classes.push(flag);
+    // Pipeline-driven overload past the red threshold is drawn red, like an overallocation.
+    if (
+      flag === 'risk' &&
+      flags.risk.some((w) =>
+        totalIsCritical(
+          d.loads.committed.get(a.resourceId)?.get(w) ?? 0,
+          d.loads.tentative.get(a.resourceId)?.get(w) ?? 0,
+          plan.settings,
+        ),
+      )
+    ) {
+      classes.push('risk-critical');
+    }
     if (cls === 'tentative') classes.push('tentative');
     if (cls === 'excluded') classes.push('excluded');
     if (b.weeks.includes(thisWeek)) classes.push('today');

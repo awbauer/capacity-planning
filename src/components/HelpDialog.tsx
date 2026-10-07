@@ -92,7 +92,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
             { what: 'Presales: always counts toward load', how: 'Violet weeks, before the start date' },
             { what: 'Delivery: counts once Won, tentative while Pipeline, ignored if Lost', how: 'Blue weeks, from the start date' },
             { what: 'Tentative pipeline delivery', how: 'Dashed circle' },
-            { what: 'Overallocated: committed work of 150% or more', how: 'Red' },
+            { what: 'Overallocated: 150% or more, committed work alone or once pipeline work is counted', how: 'Red' },
             { what: 'Stretched: 101–149% of committed work, or over 100% once pipeline work is counted (shown as +N / dashed)', how: 'Orange text' },
             { what: 'At risk: over 100% only if pipeline work is won (listed separately in Conflicts)', how: 'Orange text + yellow “At risk” badge' },
             { what: 'Workstream start and end', how: 'Vertical line, labelled on the workstream row' },

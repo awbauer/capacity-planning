@@ -19,7 +19,7 @@ A browser-based planner for allocating people (resources) to workstreams by % pe
   - **Presales** time always counts toward load, whether or not the deal is won.
   - **Delivery** time counts once the workstream is *Won*. While the workstream is *Pipeline* it is **tentative**: shown with a dashed outline in the grid and as a small `+N` in the Resources view. On a *Lost* workstream it isn't counted.
   - Flags, based on a person's weekly load:
-    - **Red, overallocated:** committed work of 150% or more.
+    - **Red, overallocated:** 150% or more, whether from committed work alone or once pipeline work is counted.
     - **Orange, stretched:** committed work of 101–149%.
     - **At risk:** committed work fits, but goes over 100% if pipeline delivery is won. In the grid these show the same orange text, with the pipeline share shown as `+N` and dashed circles. They have their own yellow "At risk" badge and conflicts-panel section.
   - Both thresholds can be changed under Manage → Settings & data.
