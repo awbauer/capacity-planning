@@ -3,7 +3,7 @@ import { bucketStats, totalsGetter } from '../domain/aggregate';
 import { assignmentFlagWeeks } from '../domain/conflicts';
 import type { Derived } from '../domain/derive';
 import { STATUS_LABELS } from '../domain/labels';
-import { severity } from '../domain/load';
+import { severity, totalIsCritical } from '../domain/load';
 import { CAREER_LEVELS, type CareerLevel, type Resource } from '../domain/types';
 import type { Bucket } from '../domain/weeks';
 import { usePlan, usePlanStore } from '../store/planStore';
@@ -119,7 +119,12 @@ export function ResourceView({ buckets }: Props) {
         let className = 'heat';
         if (sevs.includes('over')) className += ' heat-over';
         else if (sevs.includes('stretch')) className += ' heat-stretch';
-        else if (sevs.includes('risk')) className += ' heat-risk';
+        else if (sevs.includes('risk')) {
+          className += ' heat-risk';
+          if (b.weeks.some((w) => sevOf(w) === 'risk' && totalIsCritical(committed(w), tentative(w), plan.settings))) {
+            className += ' heat-risk-critical';
+          }
+        }
         else if (c.avg >= threshold * 0.8) className += ' heat-full';
         else if (c.avg > 0) className += ' heat-part';
         else if (t.avg > 0) className += ' heat-tentative';

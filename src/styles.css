@@ -572,8 +572,9 @@ button:focus-visible {
 }
 
 .cell.risk {
-  background-color: var(--risk-bg);
-  color: var(--risk);
+  /* At-risk weeks (over only once pipeline work is counted) look like stretched
+     weeks: orange text, no background. The dashed circle / "+N" shows it's pipeline. */
+  color: var(--stretch);
   font-weight: 600;
 }
 
@@ -604,9 +605,7 @@ button:focus-visible {
   background-color: var(--danger-bg);
 }
 
-.cell.edit.filled.risk {
-  background-color: var(--risk-bg);
-}
+
 
 .cell.edit.selected {
   background-color: var(--sel);
@@ -665,8 +664,7 @@ button:focus-visible {
 }
 
 .grid tr.depth-0 td.heat-risk {
-  background-color: var(--risk-bg);
-  color: var(--risk);
+  color: var(--stretch);
   font-weight: 600;
 }
 
@@ -1212,7 +1210,7 @@ button:focus-visible {
   --pie: var(--presales);
 }
 
-.cells-pie .cell.edit.filled:not(.over):not(.risk):not(.selected):not(.excluded) {
+.cells-pie .cell.edit.filled:not(.over):not(.risk-critical):not(.selected):not(.excluded) {
   background-color: transparent;
 }
 
@@ -1225,7 +1223,7 @@ button:focus-visible {
 }
 
 .cells-pie .cell.risk {
-  --pie: var(--risk);
+  --pie: var(--stretch);
 }
 
 .cells-pie .cell.excluded {
@@ -1618,4 +1616,17 @@ kbd {
 .grid tr.depth-1 .row-name {
   color: color-mix(in srgb, var(--text) 68%, transparent);
   font-size: 13px;
+}
+
+/* At-risk weeks whose committed + pipeline total passes the red threshold
+   (default 150%+) are drawn red, the same as an overallocation. */
+.cell.risk-critical,
+.cell.edit.filled.risk-critical,
+.grid tr.depth-0 td.heat-risk-critical {
+  background-color: var(--danger-bg);
+  color: var(--danger);
+}
+
+.cells-pie .cell.risk-critical {
+  --pie: var(--danger);
 }
