@@ -50,6 +50,17 @@ Each week of a person's row on a workstream is **0, 25, 50 or 100%**. This is a 
 
 Older saved data and imported files with other values (e.g. 60%) are rounded to the nearest step when loaded.
 
+## CSV export
+
+- **One workstream:** click **⤓ CSV** on its row. The file has:
+  - a block of details: client, seller, status, dates and required capabilities
+  - one row per person, with a column per week holding 0/25/50/100
+  - a *Phase* row marking each week as Presales or Delivery
+  - a *Total FTE* row
+- **Everything:** click **CSV** in the toolbar. The file is one long table, with one line per person per allocated week and columns for workstream, client, seller, status, person, role, week, phase and %. It's ready for a pivot table.
+
+Files are UTF-8 with a byte-order mark, so Excel opens names with accents correctly.
+
 ## Data storage
 
 Everything is stored in your browser's `localStorage`. There is no server.
