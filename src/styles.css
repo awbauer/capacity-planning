@@ -1612,3 +1612,10 @@ kbd {
 .twisty {
   align-self: center;
 }
+
+/* Child rows (people under a workstream, workstreams under a person) read as
+   secondary to their parent row: lighter and slightly smaller. */
+.grid tr.depth-1 .row-name {
+  color: color-mix(in srgb, var(--text) 68%, transparent);
+  font-size: 13px;
+}
