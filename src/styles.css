@@ -1212,7 +1212,7 @@ button:focus-visible {
   --pie: var(--presales);
 }
 
-.cells-pie .cell.edit.filled:not(.over):not(.stretch):not(.risk):not(.selected):not(.excluded) {
+.cells-pie .cell.edit.filled:not(.over):not(.risk):not(.selected):not(.excluded) {
   background-color: transparent;
 }
 
@@ -1408,12 +1408,11 @@ kbd {
 
 /* ---------- Stretched (orange): committed load above capacity but not critical ---------- */
 
+/* Stretched is a softer warning than overallocated: orange text (and circles) only, no background. */
 .cell.stretch,
-.cell.edit.filled.stretch,
 .grid tr.depth-0 td.heat-stretch {
-  background-color: var(--stretch-bg);
   color: var(--stretch);
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .cells-pie .cell.stretch {
@@ -1462,8 +1461,8 @@ kbd {
 }
 
 .swatch-stretch {
-  background: var(--stretch-bg);
-  border-color: var(--stretch-strong);
+  background: var(--stretch);
+  border-color: var(--stretch);
 }
 
 /* Selection stays visible over every conflict tint. */
