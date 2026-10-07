@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Derived } from '../domain/derive';
 import { assignmentFlagWeeks } from '../domain/conflicts';
+import { slug, workstreamCsv } from '../domain/csv';
 import { weekKind, type Severity } from '../domain/load';
 import type { Project } from '../domain/types';
 import type { Bucket } from '../domain/weeks';
@@ -8,6 +9,7 @@ import { usePlan, usePlanStore } from '../store/planStore';
 import { isExpanded, useUIStore, type Filters } from '../store/uiStore';
 import { useDerived } from '../store/useDerived';
 import { AddAssignmentDialog } from './AddAssignmentDialog';
+import { downloadText, today } from './download';
 import { TagChips } from './Chips';
 import { TimeGrid, type GridRow } from './grid/TimeGrid';
 import { ProjectDialog } from './ProjectDialog';
@@ -139,9 +141,19 @@ export function ProjectView({ buckets }: Props) {
               </div>
             )}
           </div>
-          <button type="button" className="btn btn-small" onClick={() => setAdding(p.id)}>
-            + Person
-          </button>
+          <div className="row-actions">
+            <button type="button" className="btn btn-small" onClick={() => setAdding(p.id)}>
+              + Person
+            </button>
+            <button
+              type="button"
+              className="btn btn-small"
+              title="Download this workstream's staffing plan as CSV"
+              onClick={() => downloadText(`staffing-${slug(p.name)}-${today()}.csv`, workstreamCsv(plan, p.id), 'text/csv')}
+            >
+              ⤓ CSV
+            </button>
+          </div>
         </div>
       ),
       summary: (b) => {

@@ -104,6 +104,8 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
             { what: 'Show circles or numbers', how: '◑ / % toggle' },
             { what: 'Move through time', how: <><b>◀</b> <b>Today</b> <b>▶</b></> },
             { what: 'Back up or move your data (it lives only in this browser)', how: <><b>Export</b> / <b>Import</b></> },
+            { what: 'One workstream’s staffing plan as a spreadsheet', how: <><b>⤓ CSV</b> on the workstream row</> },
+            { what: 'All staffing in one CSV (one line per person per week)', how: <><b>CSV</b> in the toolbar</> },
           ]}
         />
       </div>

@@ -1,4 +1,5 @@
 import { useMemo, useRef } from 'react';
+import { allWorkstreamsCsv } from '../domain/csv';
 import { hashString } from '../domain/hash';
 import { STATUS_LABELS } from '../domain/labels';
 import { parsePlan } from '../domain/schema';
@@ -7,6 +8,7 @@ import { currentWeek, shiftAnchor, type Bucket } from '../domain/weeks';
 import { redo, undo, useHistory, usePlan, usePlanStore } from '../store/planStore';
 import { useUIStore, type View } from '../store/uiStore';
 import { useDerived } from '../store/useDerived';
+import { downloadText, today } from './download';
 import { Pie } from './grid/Pie';
 
 const VIEWS: { id: View; label: string }[] = [
@@ -44,15 +46,11 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
   const isGrid = ui.view !== 'manage';
 
   const exportPlan = () => {
-    const blob = new Blob([JSON.stringify(plan, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `capacity-plan-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadText(`capacity-plan-${today()}.json`, JSON.stringify(plan, null, 2), 'application/json');
     ui.markExported(planHash);
   };
+
+  const exportCsv = () => downloadText(`staffing-all-workstreams-${today()}.csv`, allWorkstreamsCsv(plan), 'text/csv');
 
   const onImportFile = async (file: File) => {
     try {
@@ -100,6 +98,14 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
         </button>
         <button type="button" className="btn" onClick={exportPlan}>
           Export
+        </button>
+        <button
+          type="button"
+          className="btn"
+          onClick={exportCsv}
+          title="Staffing for every workstream as one CSV (one line per person per week). Each workstream row also has its own CSV download."
+        >
+          CSV
         </button>
         <button type="button" className="btn" onClick={() => fileRef.current?.click()}>
           Import
