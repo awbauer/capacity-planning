@@ -282,7 +282,7 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
 
     let title: string | undefined;
     if (flag) title = `This row: ${Math.round(st.avg)}%. ${loadTitle(a.resourceId, flagWeek, flag)}`;
-    else if (cls === 'excluded' && st.avg > 0) title = 'Delivery on a lost project: not counted toward load.';
+    else if (cls === 'excluded' && st.avg > 0) title = 'Delivery on a lost workstream: not counted toward load.';
     else if (st.mixed) title = `Varies by week: avg ${Math.round(st.avg)}%, peak ${st.peak}%. Clicking or typing sets every week.`;
     else if (st.avg > 0) title = `${Math.round(st.avg)}%`;
 

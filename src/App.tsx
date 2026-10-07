@@ -62,11 +62,11 @@ export function App() {
             </span>
             <span className="legend-keys">
               <span className="swatch swatch-presales" /> presales
-              <span className="swatch swatch-edge" /> project start / end
+              <span className="swatch swatch-edge" /> workstream start / end
               <span className="swatch swatch-over" /> overallocated
               <span className="swatch swatch-risk" /> at risk if pipeline wins
               <span className="swatch swatch-tentative" /> tentative (pipeline delivery)
-              <span className="swatch swatch-outside" /> outside project dates
+              <span className="swatch swatch-outside" /> outside workstream dates
               <span className="mixed">~</span> varies by week
             </span>
           </footer>

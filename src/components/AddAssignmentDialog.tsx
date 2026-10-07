@@ -77,7 +77,7 @@ export function AddAssignmentDialog({ projectId, resourceId, onClose }: Props) {
   const loadClass = (worst: Severity | null) => (worst === 'over' ? 'load load-over' : worst === 'risk' ? 'load load-risk' : 'load');
 
   const q = query.trim().toLowerCase();
-  const title = projectId ? `Add person to ${project?.name ?? 'project'}` : `Assign ${resource?.name ?? 'person'} to a project`;
+  const title = projectId ? `Add person to ${project?.name ?? 'workstream'}` : `Assign ${resource?.name ?? 'person'} to a workstream`;
 
   let list: ReactNode;
   if (projectId && project) {
@@ -220,16 +220,16 @@ export function AddAssignmentDialog({ projectId, resourceId, onClose }: Props) {
           {kind === 'presales'
             ? 'Presales time counts toward load whether or not the deal is won.'
             : project.status === 'won'
-              ? 'Delivery on a won project counts toward load.'
+              ? 'Delivery on a won workstream counts toward load.'
               : project.status === 'pipeline'
-                ? 'Delivery on a pipeline project is tentative: it shows as “at risk”, not overallocated, until the project is won.'
-                : 'Delivery on a lost project is not counted.'}
+                ? 'Delivery on a pipeline workstream is tentative: it shows as “at risk”, not overallocated, until it is won.'
+                : 'Delivery on a lost workstream is not counted.'}
         </p>
       )}
       <input
         type="search"
         className="search"
-        placeholder={projectId ? 'Filter people…' : 'Filter projects…'}
+        placeholder={projectId ? 'Filter people…' : 'Filter workstreams…'}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         autoFocus

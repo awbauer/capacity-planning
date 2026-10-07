@@ -10,7 +10,7 @@ import { useDerived } from '../store/useDerived';
 import { Pie } from './grid/Pie';
 
 const VIEWS: { id: View; label: string }[] = [
-  { id: 'projects', label: 'Projects' },
+  { id: 'projects', label: 'Workstreams' },
   { id: 'resources', label: 'Resources' },
   { id: 'manage', label: 'Manage' },
 ];
@@ -58,8 +58,8 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
     try {
       const next = parsePlan(JSON.parse(await file.text()));
       const msg =
-        `Replace the current plan (${plan.projects.length} projects, ${plan.resources.length} resources) ` +
-        `with ${file.name} (${next.projects.length} projects, ${next.resources.length} resources)? You can undo with Ctrl+Z.`;
+        `Replace the current plan (${plan.projects.length} workstreams, ${plan.resources.length} resources) ` +
+        `with ${file.name} (${next.projects.length} workstreams, ${next.resources.length} resources)? You can undo with Ctrl+Z.`;
       if (window.confirm(msg)) {
         importPlan(next);
         ui.markExported(hashString(JSON.stringify(next)));
@@ -158,7 +158,7 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
           <input
             type="search"
             className="search"
-            placeholder={ui.view === 'projects' ? 'Search projects, clients, people…' : 'Search people…'}
+            placeholder={ui.view === 'projects' ? 'Search workstreams, clients, people…' : 'Search people…'}
             value={ui.filters.text}
             onChange={(e) => ui.setFilters({ text: e.target.value })}
           />
