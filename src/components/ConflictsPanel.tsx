@@ -1,5 +1,6 @@
 import type { Overallocation } from '../domain/conflicts';
 import { currentWeek, formatWeekRange } from '../domain/weeks';
+import { usePlan } from '../store/planStore';
 import { useUIStore } from '../store/uiStore';
 import { useDerived } from '../store/useDerived';
 
@@ -8,6 +9,7 @@ export function ConflictsPanel() {
   const d = useDerived();
   const jumpTo = useUIStore((s) => s.jumpTo);
   const thisWeek = currentWeek();
+  const s = usePlan().settings;
   const upcoming = d.overallocations.filter((o) => o.to >= thisWeek);
   const pastCount = d.overallocations.length - upcoming.length;
   const name = {
@@ -17,6 +19,7 @@ export function ConflictsPanel() {
   };
 
   const over = upcoming.filter((o) => o.severity === 'over');
+  const stretch = upcoming.filter((o) => o.severity === 'stretch');
   const risk = upcoming.filter((o) => o.severity === 'risk');
 
   const list = (items: Overallocation[], empty: string) =>
@@ -29,7 +32,7 @@ export function ConflictsPanel() {
             <button type="button" onClick={() => jumpTo('resources', `r:${o.resourceId}`, o.from)}>
               <span className="conflict-title">
                 {name.resource(o.resourceId)}{' '}
-                <span className={o.severity === 'over' ? 'pill-danger' : 'pill-risk'}>{o.peak}%</span>
+                <span className={`pill-${o.severity}`}>{o.peak}%</span>
               </span>
               <span className="muted small">
                 {formatWeekRange(o.from, o.to)} · {o.weeks.length} wk
@@ -43,10 +46,14 @@ export function ConflictsPanel() {
 
   return (
     <aside className="conflicts" aria-label="Conflicts">
-      <h2 title="Committed work (presales + delivery on won workstreams) over capacity">
-        Overallocated <span className="count">{over.length}</span>
+      <h2 title={`Committed work (presales + delivery on won workstreams) above ${s.criticalThreshold}%`}>
+        Overallocated ({s.criticalThreshold + 1}%+) <span className="count">{over.length}</span>
       </h2>
-      {list(over, 'Nobody is over capacity from this week on.')}
+      {list(over, 'Nobody is overallocated from this week on.')}
+      <h2 title={`Committed work above ${s.overallocationThreshold}% but not over ${s.criticalThreshold}%`}>
+        Stretched ({s.overallocationThreshold + 1}–{s.criticalThreshold}%) <span className="count">{stretch.length}</span>
+      </h2>
+      {list(stretch, 'Nobody is stretched from this week on.')}
       <h2 title="Over capacity only if pipeline delivery work is won">
         At risk if pipeline wins <span className="count">{risk.length}</span>
       </h2>

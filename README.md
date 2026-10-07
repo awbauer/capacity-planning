@@ -15,8 +15,11 @@ A browser-based planner for allocating people (resources) to workstreams by % pe
     - If a deal slips, move its start date.
   - **Presales** time always counts toward load, whether or not the deal is won.
   - **Delivery** time counts once the workstream is *Won*. While the workstream is *Pipeline* it is **tentative**: shown with a dashed outline in the grid and as a small `+N` in the Resources view. On a *Lost* workstream it isn't counted.
-  - **Red / overallocated**: committed work alone is over the threshold.
-  - **Amber / at risk**: the person is only over the threshold if pipeline delivery work is won.
+  - Flags, based on a person's weekly load:
+    - **Red, overallocated:** committed work of 150% or more.
+    - **Orange, stretched:** committed work of 101–149%.
+    - **Yellow, at risk:** committed work fits, but goes over 100% if pipeline delivery is won.
+  - Both thresholds can be changed under Manage → Settings & data.
   - There's deliberately no win-probability %. A per-person "140% weighted" load isn't something anyone can act on.
 - **Capability tags** go on both resources and workstreams. Create them from Manage → Capabilities, or by typing a new name into any capability picker.
 - **Sellers** are attached to workstreams. They are not allocatable.
@@ -29,7 +32,7 @@ Each week of a person's row on a workstream is **0, 25, 50 or 100%**. This is a 
 - **Colors:**
   - Presales weeks (before the start) are **violet**; delivery weeks are **blue**.
   - A dashed circle is pipeline delivery, which is tentative.
-  - Red and amber mark overallocated and at-risk weeks.
+  - Red, orange and yellow mark overallocated, stretched and at-risk weeks.
 - **Workstream start and end** are drawn as vertical lines across the workstream's rows, labelled on the workstream row.
   - On the workstream row, pre-start weeks that have presales work are tinted violet.
   - Everything after the end is shaded.

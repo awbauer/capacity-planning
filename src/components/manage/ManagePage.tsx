@@ -320,7 +320,7 @@ function SettingsPanel() {
   return (
     <section className="settings">
       <label>
-        Overallocation threshold (%)
+        Yellow above (%)
         <input
           type="number"
           min={1}
@@ -328,10 +328,27 @@ function SettingsPanel() {
           value={plan.settings.overallocationThreshold}
           onChange={(e) => {
             const v = Number(e.target.value);
-            if (v > 0) s.setThreshold(v);
+            if (v > 0) s.setThresholds({ overallocationThreshold: v });
           }}
         />
-        <span className="muted small">A person is flagged when their weekly total exceeds this.</span>
+        <span className="muted small">
+          Committed weekly load above this is flagged yellow (stretched). Pipeline delivery that would push someone over
+          it is flagged amber (at risk).
+        </span>
+      </label>
+      <label>
+        Red above (%)
+        <input
+          type="number"
+          min={1}
+          max={999}
+          value={plan.settings.criticalThreshold}
+          onChange={(e) => {
+            const v = Number(e.target.value);
+            if (v > 0) s.setThresholds({ criticalThreshold: v });
+          }}
+        />
+        <span className="muted small">Committed weekly load above this is flagged red (overallocated).</span>
       </label>
       <div className="callout">
         <strong>Your data lives only in this browser.</strong> Clearing site data or switching browsers loses it. Use

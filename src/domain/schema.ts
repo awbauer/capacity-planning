@@ -37,7 +37,10 @@ const planSchema = z.object({
       weekly: z.record(z.string(), z.number().min(0)),
     }),
   ),
-  settings: z.object({ overallocationThreshold: z.number().positive() }),
+  settings: z.object({
+    overallocationThreshold: z.number().positive(),
+    criticalThreshold: z.number().positive().default(149),
+  }),
 });
 
 /** Validates an imported plan, including references between entities. Throws on error. */
@@ -108,6 +111,10 @@ export function upgradePlan(raw: unknown): PlanData {
   return {
     ...plan,
     version: 3,
+    settings: {
+      overallocationThreshold: plan.settings?.overallocationThreshold ?? 100,
+      criticalThreshold: plan.settings?.criticalThreshold ?? 149,
+    },
     projects: (plan.projects ?? []).map((p) => ({ ...p, status: p.status ?? 'won' })),
     assignments: mergeAssignments(plan.assignments ?? []),
   };

@@ -30,7 +30,7 @@ export function createSamplePlan(today: WeekKey = currentWeek()): PlanData {
 
   return {
     version: 3,
-    settings: { overallocationThreshold: 100 },
+    settings: { overallocationThreshold: 100, criticalThreshold: 149 },
     tags: [
       { id: 'tag-dc', name: 'Data Cloud', color: '#2563eb' },
       { id: 'tag-mc', name: 'Marketing Cloud', color: '#db2777' },
@@ -142,7 +142,7 @@ export function createSamplePlan(today: WeekKey = currentWeek()): PlanData {
 export function createEmptyPlan(): PlanData {
   return {
     version: 3,
-    settings: { overallocationThreshold: 100 },
+    settings: { overallocationThreshold: 100, criticalThreshold: 149 },
     tags: [],
     sellers: [],
     resources: [],

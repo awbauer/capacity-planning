@@ -1,5 +1,5 @@
 import type { WeekTotals } from './aggregate';
-import type { AllocationKind, Assignment, PlanData, Project, ProjectStatus, WeekKey } from './types';
+import type { AllocationKind, Assignment, PlanData, PlanSettings, Project, ProjectStatus, WeekKey } from './types';
 
 /** How an allocated week counts toward a person's load. */
 export type LoadClass = 'committed' | 'tentative' | 'excluded';
@@ -59,13 +59,27 @@ export function splitLoads(plan: Pick<PlanData, 'assignments' | 'projects'>): Sp
 }
 
 /**
- * 'over': committed work alone exceeds the threshold — a real conflict.
- * 'risk': it only exceeds it if pipeline delivery work is won as planned.
+ * 'over' (red): committed work is above the critical threshold (default 149%).
+ * 'stretch' (yellow): committed work is above capacity but not critical (101–149%).
+ * 'risk' (amber): committed work fits, but not if pipeline delivery is won.
  */
-export type Severity = 'over' | 'risk';
+export type Severity = 'over' | 'stretch' | 'risk';
 
-export function severity(committed: number, tentative: number, threshold: number): Severity | null {
-  if (committed > threshold) return 'over';
-  if (committed + tentative > threshold) return 'risk';
+export const SEVERITY_RANK: Record<Severity, number> = { over: 3, stretch: 2, risk: 1 };
+
+export function worse(a: Severity | null, b: Severity | null): Severity | null {
+  if (!a) return b;
+  if (!b) return a;
+  return SEVERITY_RANK[a] >= SEVERITY_RANK[b] ? a : b;
+}
+
+export function severity(
+  committed: number,
+  tentative: number,
+  settings: Pick<PlanSettings, 'overallocationThreshold' | 'criticalThreshold'>,
+): Severity | null {
+  if (committed > settings.criticalThreshold) return 'over';
+  if (committed > settings.overallocationThreshold) return 'stretch';
+  if (committed + tentative > settings.overallocationThreshold) return 'risk';
   return null;
 }

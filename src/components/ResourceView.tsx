@@ -53,9 +53,11 @@ export function ResourceView({ buckets }: Props) {
     const open = isExpanded(expanded, key);
     const committed = totalsGetter(d.loads.committed.get(r.id));
     const tentative = totalsGetter(d.loads.tentative.get(r.id));
-    const sevOf = (w: string) => severity(committed(w), tentative(w), threshold);
+    const sevOf = (w: string) => severity(committed(w), tentative(w), plan.settings);
     const overCount = visibleWeeks.filter((w) => sevOf(w) === 'over').length;
+    const stretchCount = visibleWeeks.filter((w) => sevOf(w) === 'stretch').length;
     const riskCount = visibleWeeks.filter((w) => sevOf(w) === 'risk').length;
+    const weeksText = (n: number) => `${n} week${n === 1 ? '' : 's'}`;
     const assignments = [...(d.assignmentsByResource.get(r.id) ?? [])].sort(
       (a, b) =>
         (d.projectsById.get(a.projectId)?.name ?? '').localeCompare(d.projectsById.get(b.projectId)?.name ?? ''),
@@ -88,16 +90,21 @@ export function ResourceView({ buckets }: Props) {
                 {projectCount} workstream{projectCount === 1 ? '' : 's'}
               </span>
             </div>
-            {(overCount > 0 || riskCount > 0) && (
+            {(overCount > 0 || stretchCount > 0 || riskCount > 0) && (
               <div className="row-badges">
                 {overCount > 0 && (
-                  <span className="badge badge-danger" title="Committed work (presales + won delivery) over capacity">
-                    ⚠ Over {threshold}% in {overCount} week{overCount === 1 ? '' : 's'}
+                  <span className="badge badge-danger" title={`Committed work above ${plan.settings.criticalThreshold}%`}>
+                    ⚠ Overallocated {weeksText(overCount)}
+                  </span>
+                )}
+                {stretchCount > 0 && (
+                  <span className="badge badge-stretch" title={`Committed work above ${threshold}%`}>
+                    Stretched {weeksText(stretchCount)}
                   </span>
                 )}
                 {riskCount > 0 && (
                   <span className="badge badge-risk" title="Over capacity only if pipeline delivery work is won">
-                    At risk {riskCount} week{riskCount === 1 ? '' : 's'}
+                    At risk {weeksText(riskCount)}
                   </span>
                 )}
               </div>
@@ -114,6 +121,7 @@ export function ResourceView({ buckets }: Props) {
         const sevs = b.weeks.map(sevOf);
         let className = 'heat';
         if (sevs.includes('over')) className += ' heat-over';
+        else if (sevs.includes('stretch')) className += ' heat-stretch';
         else if (sevs.includes('risk')) className += ' heat-risk';
         else if (c.avg >= threshold * 0.8) className += ' heat-full';
         else if (c.avg > 0) className += ' heat-part';
@@ -136,8 +144,7 @@ export function ResourceView({ buckets }: Props) {
       const p = d.projectsById.get(a.projectId);
       if (!p) continue;
       const mismatch = d.mismatchedAssignmentIds.has(a.id);
-      const flags = assignmentFlagWeeks(a, visibleWeeks, d.loads, threshold);
-      const over = flags.over.length > 0;
+      const flags = assignmentFlagWeeks(a, visibleWeeks, d.loads, plan.settings);
       rows.push({
         key: `a:${a.id}`,
         depth: 1,
@@ -152,8 +159,7 @@ export function ResourceView({ buckets }: Props) {
                 <span className={`status-text status-${p.status}`}> · {STATUS_LABELS[p.status]}</span>
               </div>
               <AssignmentBadges
-                over={over}
-                risk={!over && flags.risk.length > 0}
+                worst={flags.over.length ? 'over' : flags.stretch.length ? 'stretch' : flags.risk.length ? 'risk' : null}
                 mismatch={mismatch}
               />
             </div>

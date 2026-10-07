@@ -39,18 +39,31 @@ describe('overallocation', () => {
         alloc('b', 'p2', { '2026-10-05': 20, '2026-10-12': 50, '2026-11-02': 10 }),
       ],
     });
-    const over = findOverallocations(p);
-    expect(over).toHaveLength(2);
-    expect(over[0]).toMatchObject({ severity: 'over', from: '2026-10-05', to: '2026-10-12', peak: 150, projectIds: ['p1', 'p2'] });
-    expect(over[1]).toMatchObject({ from: '2026-11-02', to: '2026-11-02', peak: 110 });
+    // 120% is stretched (orange), 150% overallocated (red); a change of level starts a new run.
+    expect(findOverallocations(p).map((o) => [o.severity, o.from, o.to, o.peak])).toEqual([
+      ['stretch', '2026-10-05', '2026-10-05', 120],
+      ['over', '2026-10-12', '2026-10-12', 150],
+      ['stretch', '2026-11-02', '2026-11-02', 110],
+    ]);
+  });
+
+  it('puts the red/orange boundary between 149% and 150%', () => {
+    const p = plan({
+      assignments: [alloc('a', 'p1', { '2026-10-05': 149, '2026-10-12': 150, '2026-10-19': 101 })],
+    });
+    expect(findOverallocations(p).map((o) => [o.severity, o.from])).toEqual([
+      ['stretch', '2026-10-05'],
+      ['over', '2026-10-12'],
+      ['stretch', '2026-10-19'],
+    ]);
   });
 
   it('respects the configured threshold', () => {
     const p = plan({
-      settings: { overallocationThreshold: 80 },
-      assignments: [alloc('a', 'p1', { '2026-10-05': 90 })],
+      settings: { overallocationThreshold: 80, criticalThreshold: 120 },
+      assignments: [alloc('a', 'p1', { '2026-10-05': 90, '2026-10-12': 130 })],
     });
-    expect(findOverallocations(p)).toHaveLength(1);
+    expect(findOverallocations(p).map((o) => o.severity)).toEqual(['stretch', 'over']);
   });
 });
 
@@ -79,7 +92,7 @@ describe('presales vs pipeline delivery', () => {
       assignments: [alloc('a', 'won', { [PRE]: 80 }), alloc('b', 'pipe', { [PRE]: 20 }), alloc('c', 'lost', { [PRE]: 10 })],
     });
     expect(findOverallocations(p)).toEqual([
-      expect.objectContaining({ severity: 'over', peak: 110, projectIds: ['won', 'pipe', 'lost'] }),
+      expect.objectContaining({ severity: 'stretch', peak: 110, projectIds: ['won', 'pipe', 'lost'] }),
     ]);
   });
 
@@ -108,7 +121,7 @@ describe('presales vs pipeline delivery', () => {
       assignments: [alloc('a', 'won', { [PRE]: 80, [START]: 80 }), alloc('b', 'pipe', { [PRE]: 50, [START]: 50 })],
     });
     expect(findOverallocations(p).map((o) => [o.severity, o.from, o.peak])).toEqual([
-      ['over', PRE, 130],
+      ['stretch', PRE, 130],
       ['risk', START, 130],
     ]);
   });
@@ -122,7 +135,7 @@ describe('presales vs pipeline delivery', () => {
       ],
     });
     expect(findOverallocations(p).map((o) => [o.severity, o.from, o.to])).toEqual([
-      ['over', '2026-10-05', '2026-10-05'],
+      ['stretch', '2026-10-05', '2026-10-05'],
       ['risk', '2026-10-12', '2026-10-19'],
     ]);
   });
@@ -138,9 +151,13 @@ describe('presales vs pipeline delivery', () => {
     });
     const loads = splitLoads(p);
     const weeks = ['2026-10-05', '2026-10-12'];
-    expect(assignmentFlagWeeks(p.assignments[0], weeks, loads, 100)).toEqual({ over: ['2026-10-05'], risk: ['2026-10-12'] });
-    expect(assignmentFlagWeeks(p.assignments[1], weeks, loads, 100)).toEqual({ over: [], risk: ['2026-10-12'] });
-    expect(assignmentFlagWeeks(p.assignments[2], weeks, loads, 100)).toEqual({ over: [], risk: [] });
+    expect(assignmentFlagWeeks(p.assignments[0], weeks, loads, p.settings)).toEqual({
+      over: [],
+      stretch: ['2026-10-05'],
+      risk: ['2026-10-12'],
+    });
+    expect(assignmentFlagWeeks(p.assignments[1], weeks, loads, p.settings)).toEqual({ over: [], stretch: [], risk: ['2026-10-12'] });
+    expect(assignmentFlagWeeks(p.assignments[2], weeks, loads, p.settings)).toEqual({ over: [], stretch: [], risk: [] });
   });
 });
 

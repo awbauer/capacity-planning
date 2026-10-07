@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { STATUS_LABELS } from '../domain/labels';
-import { severity, weekClass, weekKind, type Severity } from '../domain/load';
+import { severity, weekClass, weekKind, worse, type Severity } from '../domain/load';
 import { CLICK_STEPS } from '../domain/steps';
 import type { Project, Resource, WeekKey } from '../domain/types';
 import { addWeeks, currentWeek, formatWeekRange, normalizeWeek, weeksBetween } from '../domain/weeks';
@@ -56,7 +56,6 @@ export function AddAssignmentDialog({ projectId, resourceId, onClose }: Props) {
   const plan = usePlan();
   const d = useDerived();
   const addAssignment = usePlanStore((s) => s.addAssignment);
-  const threshold = plan.settings.overallocationThreshold;
 
   const [picked, setPicked] = useState<string[]>([]);
   const [query, setQuery] = useState('');
@@ -101,12 +100,11 @@ export function AddAssignmentDialog({ projectId, resourceId, onClose }: Props) {
         else if (cls === 'tentative') t += delta;
       }
       after = Math.max(after, c + t);
-      const sev = severity(c, t, threshold);
-      if (sev === 'over' || (sev === 'risk' && !worst)) worst = sev;
+      worst = worse(worst, severity(c, t, plan.settings));
     }
     return { now, after, worst };
   };
-  const loadClass = (worst: Severity | null) => (worst === 'over' ? 'load load-over' : worst === 'risk' ? 'load load-risk' : 'load');
+  const loadClass = (worst: Severity | null) => (worst ? `load load-${worst}` : 'load');
 
   const q = query.trim().toLowerCase();
   const title = fixedProject
@@ -190,6 +188,7 @@ export function AddAssignmentDialog({ projectId, resourceId, onClose }: Props) {
     if (sim.worst) warnings.push({ name: fixedResource.name, after: sim.after, worst: sim.worst });
   }
   const over = warnings.filter((w) => w.worst === 'over');
+  const stretch = warnings.filter((w) => w.worst === 'stretch');
   const risk = warnings.filter((w) => w.worst === 'risk');
   const describe = (ws: typeof warnings) => ws.map((w) => `${w.name} (${w.after}%)`).join(', ');
 
@@ -226,7 +225,8 @@ export function AddAssignmentDialog({ projectId, resourceId, onClose }: Props) {
       footer={
         <>
           {over.length > 0 && <span className="warn-text danger-text">⚠ Overallocated: {describe(over)}</span>}
-          {over.length === 0 && risk.length > 0 && (
+          {over.length === 0 && stretch.length > 0 && <span className="warn-text stretch-text">Stretched: {describe(stretch)}</span>}
+          {over.length === 0 && stretch.length === 0 && risk.length > 0 && (
             <span className="warn-text">At risk if pipeline work is won: {describe(risk)}</span>
           )}
           <button type="button" className="btn" onClick={onClose}>

@@ -73,7 +73,8 @@ export function App() {
             <span className="legend-keys">
               <span className="swatch swatch-presales" /> presales
               <span className="swatch swatch-edge" /> workstream start / end
-              <span className="swatch swatch-over" /> overallocated
+              <span className="swatch swatch-over" /> overallocated (150%+)
+              <span className="swatch swatch-stretch" /> stretched (101–149%)
               <span className="swatch swatch-risk" /> at risk if pipeline wins
               <span className="swatch swatch-tentative" /> tentative (pipeline delivery)
               <span className="swatch swatch-outside" /> outside workstream dates

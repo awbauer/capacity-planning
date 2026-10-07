@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Derived } from '../domain/derive';
 import { assignmentFlagWeeks } from '../domain/conflicts';
-import { weekKind } from '../domain/load';
+import { weekKind, type Severity } from '../domain/load';
 import type { Project } from '../domain/types';
 import type { Bucket } from '../domain/weeks';
 import { usePlan, usePlanStore } from '../store/planStore';
@@ -67,12 +67,14 @@ export function ProjectView({ buckets }: Props) {
         (d.resourcesById.get(a.resourceId)?.name ?? '').localeCompare(d.resourcesById.get(b.resourceId)?.name ?? ''),
     );
     const flagsByAssignment = new Map(
-      assignments.map((a) => [a.id, assignmentFlagWeeks(a, visibleWeeks, d.loads, plan.settings.overallocationThreshold)]),
+      assignments.map((a) => [a.id, assignmentFlagWeeks(a, visibleWeeks, d.loads, plan.settings)]),
     );
-    const flagged = (sev: 'over' | 'risk') =>
+    const flagged = (sev: Severity) =>
       new Set(assignments.filter((a) => flagsByAssignment.get(a.id)![sev].length > 0).map((a) => a.resourceId));
+    // Each person is counted once, at their worst level.
     const overPeople = flagged('over');
-    const riskPeople = [...flagged('risk')].filter((id) => !overPeople.has(id));
+    const stretchPeople = [...flagged('stretch')].filter((id) => !overPeople.has(id));
+    const riskPeople = [...flagged('risk')].filter((id) => !overPeople.has(id) && !stretchPeople.includes(id));
     const uncovered = d.uncoveredByProject.get(p.id) ?? [];
     const seller = p.sellerId ? d.sellersById.get(p.sellerId) : undefined;
     const totals = d.projectLoad.get(p.id);
@@ -107,11 +109,20 @@ export function ProjectView({ buckets }: Props) {
               </span>
               <TagChips tagIds={p.tagIds} tagsById={d.tagsById} />
             </div>
-            {(overPeople.size > 0 || riskPeople.length > 0 || uncovered.length > 0 || assignments.length === 0) && (
+            {(overPeople.size > 0 ||
+              stretchPeople.length > 0 ||
+              riskPeople.length > 0 ||
+              uncovered.length > 0 ||
+              assignments.length === 0) && (
               <div className="row-badges">
                 {overPeople.size > 0 && (
-                  <span className="badge badge-danger" title="People on this workstream whose committed work is over capacity in the visible range">
+                  <span className="badge badge-danger" title={`People on this workstream with committed work above ${plan.settings.criticalThreshold}% in the visible range`}>
                     ⚠ {overPeople.size} overallocated
+                  </span>
+                )}
+                {stretchPeople.length > 0 && (
+                  <span className="badge badge-stretch" title={`People on this workstream with committed work above ${plan.settings.overallocationThreshold}% in the visible range`}>
+                    {stretchPeople.length} stretched
                   </span>
                 )}
                 {riskPeople.length > 0 && (
@@ -135,16 +146,22 @@ export function ProjectView({ buckets }: Props) {
       ),
       summary: (b) => {
         const avg = b.weeks.reduce((s, w) => s + (totals?.get(w) ?? 0), 0) / b.weeks.length;
-        const inBucket = (sev: 'over' | 'risk') =>
+        const inBucket = (sev: Severity) =>
           assignments.some((a) => flagsByAssignment.get(a.id)![sev].some((w) => b.weeks.includes(w)));
-        const over = inBucket('over');
-        const risk = !over && inBucket('risk');
-        const note = over ? ' · someone is overallocated' : risk ? ' · someone is at risk if pipeline work is won' : '';
+        const worst: Severity | null = inBucket('over') ? 'over' : inBucket('stretch') ? 'stretch' : inBucket('risk') ? 'risk' : null;
+        const note =
+          worst === 'over'
+            ? ' · someone is overallocated'
+            : worst === 'stretch'
+              ? ' · someone is stretched'
+              : worst === 'risk'
+                ? ' · someone is at risk if pipeline work is won'
+                : '';
         return {
           text: avg ? (avg / 100).toFixed(1) : '',
           className: [
             'fte',
-            over ? 'has-over' : risk ? 'has-risk' : '',
+            worst ? `has-${worst}` : '',
             assignments.some((a) => b.weeks.some((w) => a.weekly[w] && weekKind(p, w) === 'presales'))
               ? 'has-presales'
               : '',
@@ -160,8 +177,7 @@ export function ProjectView({ buckets }: Props) {
       if (!r) continue;
       const mismatch = d.mismatchedAssignmentIds.has(a.id);
       const flags = flagsByAssignment.get(a.id)!;
-      const over = flags.over.length > 0;
-      const risk = !over && flags.risk.length > 0;
+      const rowWorst: Severity | null = flags.over.length ? 'over' : flags.stretch.length ? 'stretch' : flags.risk.length ? 'risk' : null;
       rows.push({
         key: `a:${a.id}`,
         depth: 1,
@@ -174,7 +190,7 @@ export function ProjectView({ buckets }: Props) {
                 {r.name}
                 {r.role && <span className="muted small"> · {r.role}</span>}
               </div>
-              <AssignmentBadges over={over} risk={risk} mismatch={mismatch} />
+              <AssignmentBadges worst={rowWorst} mismatch={mismatch} />
             </div>
             <button
               type="button"
