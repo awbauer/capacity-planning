@@ -40,10 +40,17 @@ function rangeNote(project: Project, weeks: WeekKey[]): string {
   return parts.join(' · ');
 }
 
+interface Addition {
+  project: Project;
+  from: WeekKey;
+  to: WeekKey;
+}
+
 /**
- * Puts a person on a project and fills a % over a date range in one step.
- * Opened from a project (pick a person) or from a person (pick a project).
- * Candidates are ranked by matching capabilities, then by free capacity.
+ * Puts people on workstreams and fills a % over a date range in one step.
+ * Opened from a workstream (tick one or more people) or from a person (tick
+ * one or more workstreams). Candidates are ranked by matching capabilities,
+ * then by free capacity.
  */
 export function AddAssignmentDialog({ projectId, resourceId, onClose }: Props) {
   const plan = usePlan();
@@ -51,44 +58,48 @@ export function AddAssignmentDialog({ projectId, resourceId, onClose }: Props) {
   const addAssignment = usePlanStore((s) => s.addAssignment);
   const threshold = plan.settings.overallocationThreshold;
 
-  const [pickedId, setPickedId] = useState<string | null>(null);
+  const [picked, setPicked] = useState<string[]>([]);
   const [query, setQuery] = useState('');
   const [percent, setPercent] = useState(50);
+  // null = use each workstream's own default dates.
   const [range, setRange] = useState<{ from: WeekKey; to: WeekKey } | null>(null);
 
-  const project: Project | undefined = projectId
-    ? d.projectsById.get(projectId)
-    : pickedId
-      ? d.projectsById.get(pickedId)
-      : undefined;
-  const resource: Resource | undefined = resourceId
-    ? d.resourcesById.get(resourceId)
-    : pickedId
-      ? d.resourcesById.get(pickedId)
-      : undefined;
+  const fixedProject = projectId ? d.projectsById.get(projectId) : undefined;
+  const fixedResource = resourceId ? d.resourcesById.get(resourceId) : undefined;
+  const pickedProjects = fixedProject ? [] : picked.flatMap((id) => d.projectsById.get(id) ?? []);
+  const pickedResources = fixedResource ? [] : picked.flatMap((id) => d.resourcesById.get(id) ?? []);
 
-  const { from, to } = range ?? defaultRange(project);
-  const weeks = weeksBetween(from, to);
+  const rangeFor = (p: Project) => range ?? defaultRange(p);
+  // The date inputs show the shared range, or the first ticked workstream's own dates.
+  const shown = range ?? defaultRange(fixedProject ?? pickedProjects[0]);
+  const shownWeeks = weeksBetween(shown.from, shown.to);
+
+  const toggle = (id: string) =>
+    setPicked((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]));
 
   /**
-   * Peak total load (committed + tentative) over the chosen weeks, now and
-   * after this change, plus the worst severity it would cause.
+   * Peak total load (committed + tentative) for a person over the weeks being
+   * filled, now and after these additions, plus the worst severity caused.
    */
-  const peaks = (rid: string, p: Project) => {
+  const simulate = (rid: string, additions: Addition[]) => {
     const committed = d.loads.committed.get(rid);
     const tentative = d.loads.tentative.get(rid);
-    const existing = d.assignmentsByProject.get(p.id)?.find((a) => a.resourceId === rid);
+    const allWeeks = [...new Set(additions.flatMap((a) => weeksBetween(a.from, a.to)))].sort();
     let now = 0;
     let after = 0;
     let worst: Severity | null = null;
-    for (const w of weeks) {
+    for (const w of allWeeks) {
       let c = committed?.get(w) ?? 0;
       let t = tentative?.get(w) ?? 0;
       now = Math.max(now, c + t);
-      const delta = percent - (existing?.weekly[w] ?? 0);
-      const cls = weekClass(p, w);
-      if (cls === 'committed') c += delta;
-      else if (cls === 'tentative') t += delta;
+      for (const add of additions) {
+        if (w < add.from || w > add.to) continue;
+        const existing = d.assignmentsByProject.get(add.project.id)?.find((a) => a.resourceId === rid);
+        const delta = percent - (existing?.weekly[w] ?? 0);
+        const cls = weekClass(add.project, w);
+        if (cls === 'committed') c += delta;
+        else if (cls === 'tentative') t += delta;
+      }
       after = Math.max(after, c + t);
       const sev = severity(c, t, threshold);
       if (sev === 'over' || (sev === 'risk' && !worst)) worst = sev;
@@ -98,22 +109,31 @@ export function AddAssignmentDialog({ projectId, resourceId, onClose }: Props) {
   const loadClass = (worst: Severity | null) => (worst === 'over' ? 'load load-over' : worst === 'risk' ? 'load load-risk' : 'load');
 
   const q = query.trim().toLowerCase();
-  const title = projectId ? `Add person to ${project?.name ?? 'workstream'}` : `Assign ${resource?.name ?? 'person'} to a workstream`;
+  const title = fixedProject
+    ? `Add people to ${fixedProject.name}`
+    : `Add ${fixedResource?.name ?? 'person'} to workstreams`;
+
+  // Every (person, workstream) pair that Save will create, with its dates.
+  const pairs: { resource: Resource; addition: Addition }[] = fixedProject
+    ? pickedResources.map((r) => ({ resource: r, addition: { project: fixedProject, ...rangeFor(fixedProject) } }))
+    : fixedResource
+      ? pickedProjects.map((p) => ({ resource: fixedResource, addition: { project: p, ...rangeFor(p) } }))
+      : [];
 
   let list: ReactNode;
-  if (projectId && project) {
+  if (fixedProject) {
+    const project = fixedProject;
     const need = new Set(project.tagIds);
-    const onProject = new Set(
-      (d.assignmentsByProject.get(project.id) ?? []).map((a) => a.resourceId),
-    );
+    const onProject = new Set((d.assignmentsByProject.get(project.id) ?? []).map((a) => a.resourceId));
+    const addition = { project, ...rangeFor(project) };
     const candidates = plan.resources
       .filter((r) => !q || r.name.toLowerCase().includes(q) || (r.role ?? '').toLowerCase().includes(q))
-      .map((r) => ({ r, matches: r.tagIds.filter((t) => need.has(t)).length, ...peaks(r.id, project) }))
+      .map((r) => ({ r, matches: r.tagIds.filter((t) => need.has(t)).length, ...simulate(r.id, [addition]) }))
       .sort((a, b) => b.matches - a.matches || a.now - b.now || a.r.name.localeCompare(b.r.name));
     list = candidates.map(({ r, matches, now, after, worst }) => (
       <li key={r.id}>
-        <label className={pickedId === r.id ? 'candidate picked' : 'candidate'}>
-          <input type="radio" name="candidate" checked={pickedId === r.id} onChange={() => setPickedId(r.id)} />
+        <label className={picked.includes(r.id) ? 'candidate picked' : 'candidate'}>
+          <input type="checkbox" checked={picked.includes(r.id)} onChange={() => toggle(r.id)} />
           <span className="candidate-main">
             <span className="candidate-name">
               {r.name}
@@ -129,29 +149,23 @@ export function AddAssignmentDialog({ projectId, resourceId, onClose }: Props) {
         </label>
       </li>
     ));
-  } else if (resourceId && resource) {
-    const has = new Set(resource.tagIds);
+  } else if (fixedResource) {
+    const has = new Set(fixedResource.tagIds);
+    const onIt = new Set((d.assignmentsByResource.get(fixedResource.id) ?? []).map((a) => a.projectId));
     const candidates = plan.projects
       .filter((p) => !q || p.name.toLowerCase().includes(q) || (p.client ?? '').toLowerCase().includes(q))
       .map((p) => ({ p, matches: p.tagIds.filter((t) => has.has(t)).length }))
       .sort((a, b) => b.matches - a.matches || (a.p.startWeek ?? '').localeCompare(b.p.startWeek ?? ''));
     list = candidates.map(({ p, matches }) => (
       <li key={p.id}>
-        <label className={pickedId === p.id ? 'candidate picked' : 'candidate'}>
-          <input
-            type="radio"
-            name="candidate"
-            checked={pickedId === p.id}
-            onChange={() => {
-              setPickedId(p.id);
-              setRange(null);
-            }}
-          />
+        <label className={picked.includes(p.id) ? 'candidate picked' : 'candidate'}>
+          <input type="checkbox" checked={picked.includes(p.id)} onChange={() => toggle(p.id)} />
           <span className="candidate-main">
             <span className="candidate-name">
               {p.name}
               {p.client && <span className="muted small"> · {p.client}</span>}
               <span className={`status-text status-${p.status}`}> · {STATUS_LABELS[p.status]}</span>
+              {onIt.has(p.id) && <span className="badge">Already on it</span>}
               {p.tagIds.length > 0 && matches === 0 && <span className="badge badge-warn">No matching skill</span>}
             </span>
             <TagChips tagIds={p.tagIds} tagsById={d.tagsById} highlight={has} />
@@ -164,19 +178,45 @@ export function AddAssignmentDialog({ projectId, resourceId, onClose }: Props) {
     ));
   }
 
-  const selectedPeaks = resource && project ? peaks(resource.id, project) : null;
-  const canSave = !!resource && !!project && weeks.length > 0;
+  // Warnings: per person when adding several people; combined when adding one person to several workstreams.
+  const warnings: { name: string; after: number; worst: Severity }[] = [];
+  if (fixedProject) {
+    for (const { resource, addition } of pairs) {
+      const sim = simulate(resource.id, [addition]);
+      if (sim.worst) warnings.push({ name: resource.name, after: sim.after, worst: sim.worst });
+    }
+  } else if (fixedResource && pairs.length) {
+    const sim = simulate(fixedResource.id, pairs.map((p) => p.addition));
+    if (sim.worst) warnings.push({ name: fixedResource.name, after: sim.after, worst: sim.worst });
+  }
+  const over = warnings.filter((w) => w.worst === 'over');
+  const risk = warnings.filter((w) => w.worst === 'risk');
+  const describe = (ws: typeof warnings) => ws.map((w) => `${w.name} (${w.after}%)`).join(', ');
+
+  const canSave = pairs.length > 0 && pairs.every((p) => p.addition.from <= p.addition.to);
 
   const save = () => {
-    if (!resource || !project) return;
-    addAssignment(project.id, resource.id, percent > 0 ? { percent, from, to } : undefined);
+    for (const { resource, addition } of pairs) {
+      addAssignment(
+        addition.project.id,
+        resource.id,
+        percent > 0 ? { percent, from: addition.from, to: addition.to } : undefined,
+      );
+    }
     onClose();
   };
 
   const setDate = (which: 'from' | 'to', value: string) => {
     if (!value) return;
-    setRange({ from, to, [which]: normalizeWeek(value) });
+    setRange({ ...shown, [which]: normalizeWeek(value) });
   };
+
+  const count = pairs.length;
+  const saveLabel = fixedProject
+    ? `Add ${count || ''} ${count === 1 ? 'person' : 'people'}`
+    : `Add to ${count || ''} workstream${count === 1 ? '' : 's'}`;
+  const perWorkstreamDates = !fixedProject && !range && pickedProjects.length > 1;
+  const noteProject = fixedProject ?? (pickedProjects.length === 1 ? pickedProjects[0] : undefined);
 
   return (
     <Modal
@@ -185,21 +225,16 @@ export function AddAssignmentDialog({ projectId, resourceId, onClose }: Props) {
       wide
       footer={
         <>
-          {selectedPeaks?.worst === 'over' && (
-            <span className="warn-text danger-text">
-              ⚠ {resource!.name} will be overallocated (peak {selectedPeaks.after}%) in this range
-            </span>
-          )}
-          {selectedPeaks?.worst === 'risk' && (
-            <span className="warn-text">
-              {resource!.name} will be at risk (peak {selectedPeaks.after}% if pipeline work is won)
-            </span>
+          {over.length > 0 && <span className="warn-text danger-text">⚠ Overallocated: {describe(over)}</span>}
+          {over.length === 0 && risk.length > 0 && (
+            <span className="warn-text">At risk if pipeline work is won: {describe(risk)}</span>
           )}
           <button type="button" className="btn" onClick={onClose}>
             Cancel
           </button>
           <button type="button" className="btn btn-primary" disabled={!canSave} onClick={save}>
-            Add{percent > 0 ? ` at ${percent}%` : ''}
+            {saveLabel.replace(/\s+/g, ' ')}
+            {percent > 0 ? ` at ${percent}%` : ''}
           </button>
         </>
       }
@@ -217,19 +252,23 @@ export function AddAssignmentDialog({ projectId, resourceId, onClose }: Props) {
         </div>
         <label>
           From week of
-          <input type="date" value={from} onChange={(e) => setDate('from', e.target.value)} />
+          <input type="date" value={shown.from} onChange={(e) => setDate('from', e.target.value)} />
         </label>
         <label>
           Through week of
-          <input type="date" value={to} onChange={(e) => setDate('to', e.target.value)} />
+          <input type="date" value={shown.to} onChange={(e) => setDate('to', e.target.value)} />
         </label>
-        <span className="muted small form-hint">{weeks.length} week{weeks.length === 1 ? '' : 's'}</span>
+        <span className="muted small form-hint">
+          {perWorkstreamDates
+            ? 'Each workstream uses its own dates unless you change these'
+            : `${shownWeeks.length} week${shownWeeks.length === 1 ? '' : 's'}`}
+        </span>
       </div>
-      {project && <p className="muted small form-note">{rangeNote(project, weeks)}</p>}
+      {noteProject && <p className="muted small form-note">{rangeNote(noteProject, weeksBetween(rangeFor(noteProject).from, rangeFor(noteProject).to))}</p>}
       <input
         type="search"
         className="search"
-        placeholder={projectId ? 'Filter people…' : 'Filter workstreams…'}
+        placeholder={fixedProject ? 'Filter people…' : 'Filter workstreams…'}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         autoFocus

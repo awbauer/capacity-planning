@@ -26,6 +26,7 @@ interface UIState {
   /** Explicit expand/collapse choices; rows without one use the view's default. */
   expanded: Record<RowKey, boolean>;
   showConflicts: boolean;
+  showHelp: boolean;
   cellStyle: CellStyle;
   /** Row to scroll to and highlight once it renders. */
   focusRow: RowKey | null;
@@ -40,6 +41,7 @@ interface UIState {
   setExpanded: (key: RowKey, expanded: boolean) => void;
   setAllExpanded: (keys: RowKey[], expanded: boolean) => void;
   toggleConflicts: () => void;
+  setShowHelp: (show: boolean) => void;
   setCellStyle: (style: CellStyle) => void;
   jumpTo: (view: View, row: RowKey, week?: WeekKey) => void;
   clearFocusRow: () => void;
@@ -58,6 +60,7 @@ export const useUIStore = create<UIState>()(
       filters: { text: '', tagId: null, sellerId: null, status: null },
       expanded: {},
       showConflicts: true,
+      showHelp: false,
       cellStyle: 'pie',
       focusRow: null,
       lastExportedAt: null,
@@ -74,6 +77,7 @@ export const useUIStore = create<UIState>()(
           expanded: { ...s.expanded, ...Object.fromEntries(keys.map((k) => [k, expanded])) },
         })),
       toggleConflicts: () => set((s) => ({ showConflicts: !s.showConflicts })),
+      setShowHelp: (showHelp) => set({ showHelp }),
       setCellStyle: (cellStyle) => set({ cellStyle }),
       jumpTo: (view, row, week) =>
         set((s) => ({
