@@ -1516,3 +1516,99 @@ kbd {
 .grid tr.group-row + tr.resource-row td {
   border-top: none;
 }
+
+/* ---------- Compact rows ---------- */
+
+.grid th.label {
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+
+.cell {
+  height: 26px;
+}
+
+.pie {
+  width: 16px;
+  height: 16px;
+}
+
+.row-label {
+  align-items: center;
+}
+
+.row-main {
+  gap: 1px;
+}
+
+/* Name line: the name truncates, badges after it stay visible. */
+.row-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.row-title > .row-name,
+.row-title > .link {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* Meta line stays one line: chips shrink and clip, badges stay whole. */
+.row-meta {
+  flex-wrap: nowrap;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.row-meta > *,
+.row-title > .row-badges {
+  flex-shrink: 0;
+}
+
+.row-meta > .chips {
+  flex-wrap: nowrap;
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.row-badges {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  gap: 3px;
+}
+
+.chip {
+  font-size: 10px;
+  line-height: 15px;
+  padding: 0 5px;
+}
+
+.badge {
+  font-size: 10px;
+  line-height: 15px;
+  padding: 0 4px;
+}
+
+.status-select.compact {
+  font-size: 10px;
+  padding: 0 1px;
+}
+
+.row-actions {
+  flex-direction: row;
+  gap: 3px;
+}
+
+.grid .btn-small {
+  padding: 1px 6px;
+  font-size: 11px;
+}
+
+.twisty {
+  align-self: center;
+}

@@ -35,7 +35,7 @@ interface AssignmentBadgesProps {
 export function AssignmentBadges({ worst, mismatch }: AssignmentBadgesProps) {
   if (!worst && !mismatch) return null;
   return (
-    <div className="row-badges">
+    <span className="row-badges">
       {worst === 'over' && <span className="badge badge-danger">⚠ Overallocated</span>}
       {worst === 'stretch' && <span className="badge badge-stretch">Stretched</span>}
       {worst === 'risk' && (
@@ -48,6 +48,6 @@ export function AssignmentBadges({ worst, mismatch }: AssignmentBadgesProps) {
           Skill mismatch
         </span>
       )}
-    </div>
+    </span>
   );
 }
