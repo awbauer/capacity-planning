@@ -4,6 +4,9 @@ A browser-based planner for allocating people (resources) to workstreams by % pe
 
 - **Workstreams view**: one row per workstream, expandable to the people on it. Double-click a weekly cell to cycle 0 → 25 → 50 → 100%. Badges flag overallocated people, skill mismatches and capabilities nobody on the workstream has.
 - **Resources view**: one row per person, showing their total load per week as a heat map (red means over the threshold). Expand a person to edit their allocations workstream by workstream.
+  - People are grouped by career level: D, SM, M, SA, A, then anyone without a level. Each group can be collapsed.
+  - A group's row shows its people's average % per week, plus `+N` for pipeline work. **Levels only** collapses the view to one row per level.
+  - Set levels under Manage → Resources.
 - **Zoom**: Week, Month or Quarter. In month and quarter view a cell shows the *average* for the period, and is flagged red if *any* week in it is over capacity. Typing into an aggregated cell sets every week in that period.
 - **Conflicts panel**: lists current and upcoming overallocations, at-risk weeks and skill gaps. Click an item to jump to the row.
 - **Presales vs. delivery, pipeline vs. won**:

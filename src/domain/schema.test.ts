@@ -53,4 +53,12 @@ describe('parsePlan', () => {
     plan.assignments[0].weekly = { '2026-10-05': 60, '2026-10-12': 10 };
     expect(parsePlan(plan).assignments[0].weekly).toEqual({ '2026-10-05': 50 });
   });
+
+  it('accepts known career levels and rejects others', () => {
+    const plan = createSamplePlan('2026-10-05');
+    expect(parsePlan(plan).resources.find((r) => r.id === 'res-alex')?.level).toBe('SM');
+    const bad = JSON.parse(JSON.stringify(plan));
+    bad.resources[0].level = 'VP';
+    expect(() => parsePlan(bad)).toThrow(/level/);
+  });
 });

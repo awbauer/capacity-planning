@@ -46,14 +46,14 @@ export function createSamplePlan(today: WeekKey = currentWeek()): PlanData {
       { id: 'seller-marcus', name: 'Marcus Chen' },
     ],
     resources: [
-      { id: 'res-alex', name: 'Alex Rivera', role: 'Solution Architect', tagIds: ['tag-dc', 'tag-af'] },
-      { id: 'res-sam', name: 'Sam Patel', role: 'Data Cloud Consultant', tagIds: ['tag-dc', 'tag-mule'] },
-      { id: 'res-taylor', name: 'Taylor Brooks', role: 'Marketing Cloud Developer', tagIds: ['tag-mc'] },
-      { id: 'res-morgan', name: 'Morgan Kim', role: 'Marketing Strategist', tagIds: ['tag-mc', 'tag-dc'] },
-      { id: 'res-casey', name: 'Casey Nguyen', role: 'Sales Cloud Consultant', tagIds: ['tag-sales', 'tag-service'] },
-      { id: 'res-jamie', name: 'Jamie Ortiz', role: 'Service Cloud Developer', tagIds: ['tag-service', 'tag-af'] },
-      { id: 'res-riley', name: 'Riley Thompson', role: 'Integration Engineer', tagIds: ['tag-mule'] },
-      { id: 'res-drew', name: 'Drew Okafor', role: 'Analytics Consultant', tagIds: ['tag-tableau', 'tag-dc'] },
+      { id: 'res-alex', level: 'SM', name: 'Alex Rivera', role: 'Solution Architect', tagIds: ['tag-dc', 'tag-af'] },
+      { id: 'res-sam', level: 'SA', name: 'Sam Patel', role: 'Data Cloud Consultant', tagIds: ['tag-dc', 'tag-mule'] },
+      { id: 'res-taylor', level: 'A', name: 'Taylor Brooks', role: 'Marketing Cloud Developer', tagIds: ['tag-mc'] },
+      { id: 'res-morgan', level: 'M', name: 'Morgan Kim', role: 'Marketing Strategist', tagIds: ['tag-mc', 'tag-dc'] },
+      { id: 'res-casey', level: 'SA', name: 'Casey Nguyen', role: 'Sales Cloud Consultant', tagIds: ['tag-sales', 'tag-service'] },
+      { id: 'res-jamie', level: 'A', name: 'Jamie Ortiz', role: 'Service Cloud Developer', tagIds: ['tag-service', 'tag-af'] },
+      { id: 'res-riley', level: 'SA', name: 'Riley Thompson', role: 'Integration Engineer', tagIds: ['tag-mule'] },
+      { id: 'res-drew', level: 'M', name: 'Drew Okafor', role: 'Analytics Consultant', tagIds: ['tag-tableau', 'tag-dc'] },
     ],
     projects: [
       {

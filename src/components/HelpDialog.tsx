@@ -81,6 +81,8 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
             { what: 'Take a person off a workstream', how: <><b>×</b> on their row</> },
             { what: 'Expand or collapse a row', how: <><b>▸</b> / <b>▾</b>, or Expand / Collapse in the corner</> },
             { what: 'Jump to a conflict', how: 'Click it in the Conflicts panel' },
+            { what: 'See capacity by career level (D, SM, M, SA, A)', how: <>Resources view, <b>Levels only</b>: each level shows its people’s average %</> },
+            { what: 'Set someone’s career level', how: <><b>Manage</b> → Resources → Level</> },
             { what: 'Add people, workstreams, capabilities, sellers', how: <><b>Manage</b> tab, or type a new capability name in any picker</> },
           ]}
         />

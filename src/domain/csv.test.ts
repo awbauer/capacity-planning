@@ -48,11 +48,11 @@ describe('csv', () => {
   it('writes every allocated week of every workstream as one long table', () => {
     const plan = createSamplePlan('2026-10-05');
     const lines = parse(allWorkstreamsCsv(plan));
-    expect(lines[0]).toBe('Workstream,Client,Seller,Status,Person,Role,Week of,Phase,Allocation %');
+    expect(lines[0]).toBe('Workstream,Client,Seller,Status,Person,Level,Role,Week of,Phase,Allocation %');
     const total = plan.assignments.reduce((n, a) => n + Object.values(a.weekly).filter(Boolean).length, 0);
     expect(lines).toHaveLength(total + 1);
     expect(lines).toContain(
-      'Agentforce Service Pilot,Contoso,Marcus Chen,Pipeline,Alex Rivera,Solution Architect,2026-10-05,Presales,25',
+      'Agentforce Service Pilot,Contoso,Marcus Chen,Pipeline,Alex Rivera,SM,Solution Architect,2026-10-05,Presales,25',
     );
   });
 });

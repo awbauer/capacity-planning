@@ -4,7 +4,7 @@ import { assignmentFlagWeeks } from '../domain/conflicts';
 import type { Derived } from '../domain/derive';
 import { STATUS_LABELS } from '../domain/labels';
 import { severity } from '../domain/load';
-import type { Resource } from '../domain/types';
+import { CAREER_LEVELS, type CareerLevel, type Resource } from '../domain/types';
 import type { Bucket } from '../domain/weeks';
 import { usePlan, usePlanStore } from '../store/planStore';
 import { isExpanded, useUIStore, type Filters } from '../store/uiStore';
@@ -48,7 +48,7 @@ export function ResourceView({ buckets }: Props) {
     .sort((a, b) => a.name.localeCompare(b.name));
 
   const rows: GridRow[] = [];
-  for (const r of resources) {
+  const pushResource = (r: Resource) => {
     const key = `r:${r.id}`;
     const open = isExpanded(expanded, key);
     const committed = totalsGetter(d.loads.committed.get(r.id));
@@ -82,6 +82,7 @@ export function ResourceView({ buckets }: Props) {
           <div className="row-main">
             <div className="row-title">
               {r.name}
+              {r.level && <span className="level-badge">{r.level}</span>}
               {r.role && <span className="muted small"> · {r.role}</span>}
             </div>
             <div className="row-meta">
@@ -139,7 +140,7 @@ export function ResourceView({ buckets }: Props) {
       },
     });
 
-    if (!open) continue;
+    if (!open) return;
     for (const a of assignments) {
       const p = d.projectsById.get(a.projectId);
       if (!p) continue;
@@ -181,9 +182,62 @@ export function ResourceView({ buckets }: Props) {
         ),
       });
     }
+  };
+
+  // Group by career level (most senior first); people without a level go last.
+  const groups: { level: CareerLevel | undefined; people: Resource[] }[] = [...CAREER_LEVELS, undefined]
+    .map((level) => ({ level, people: resources.filter((r) => r.level === level) }))
+    .filter((g) => g.people.length > 0);
+  for (const { level, people } of groups) {
+    const key = `g:${level ?? 'none'}`;
+    const open = isExpanded(expanded, key);
+    const committedOf = (w: string) => people.reduce((n, r) => n + (d.loads.committed.get(r.id)?.get(w) ?? 0), 0);
+    const tentativeOf = (w: string) => people.reduce((n, r) => n + (d.loads.tentative.get(r.id)?.get(w) ?? 0), 0);
+    rows.push({
+      key,
+      depth: 0,
+      className: 'group-row',
+      label: (
+        <div className="row-label">
+          <button
+            type="button"
+            className="twisty"
+            aria-expanded={open}
+            aria-label={open ? 'Collapse' : 'Expand'}
+            onClick={() => setExpanded(key, !open)}
+          >
+            {open ? '▾' : '▸'}
+          </button>
+          <div className="row-main">
+            <div className="row-title">
+              <strong>{level ?? 'No level'}</strong>{' '}
+              <span className="muted small">
+                · {people.length} {people.length === 1 ? 'person' : 'people'}
+              </span>
+            </div>
+          </div>
+        </div>
+      ),
+      summary: (b) => {
+        // Average utilisation of the level's people (%), so groups of any size compare directly.
+        const c = bucketStats(committedOf, b.weeks).avg / 100;
+        const t = bucketStats(tentativeOf, b.weeks).avg / 100;
+        const util = (c / people.length) * 100;
+        const extra = (t / people.length) * 100;
+        const ppl = `${people.length} ${people.length === 1 ? 'person' : 'people'}`;
+        return {
+          text: util ? String(Math.round(util)) : '',
+          extra: extra ? `+${Math.round(extra)}` : undefined,
+          className: util > plan.settings.overallocationThreshold ? 'group-sum over-capacity' : 'group-sum',
+          title: `Average ${Math.round(util)}% committed: ${c.toFixed(2)} FTE across ${ppl}${t ? ` · +${t.toFixed(2)} FTE pipeline` : ''}`,
+        };
+      },
+    });
+    if (open) people.forEach(pushResource);
   }
 
   const resourceKeys = resources.map((r) => `r:${r.id}`);
+  const groupKeys = groups.map((g) => `g:${g.level ?? 'none'}`);
 
   return (
     <>
@@ -193,13 +247,16 @@ export function ResourceView({ buckets }: Props) {
         rows={rows}
         corner={
           <div className="corner-content">
-            <strong>Resources</strong> <span className="muted">({resources.length}) · total % per week</span>
+            <strong>Resources</strong> <span className="muted">({resources.length}) · % per week (levels: average)</span>
             <div className="corner-actions">
-              <button type="button" className="btn btn-small" onClick={() => setAllExpanded(resourceKeys, true)}>
+              <button type="button" className="btn btn-small" onClick={() => setAllExpanded([...groupKeys, ...resourceKeys], true)}>
                 Expand
               </button>
               <button type="button" className="btn btn-small" onClick={() => setAllExpanded(resourceKeys, false)}>
                 Collapse
+              </button>
+              <button type="button" className="btn btn-small" onClick={() => setAllExpanded(groupKeys, false)}>
+                Levels only
               </button>
             </div>
           </div>

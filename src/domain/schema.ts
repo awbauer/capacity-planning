@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { Assignment, PlanData } from './types';
+import { CAREER_LEVELS, type Assignment, type PlanData } from './types';
 import { snapWeekly } from './steps';
 import { normalizeWeek } from './weeks';
 
@@ -13,7 +13,13 @@ const planSchema = z.object({
   tags: z.array(z.object({ id, name: z.string().min(1), color: z.string() })),
   sellers: z.array(z.object({ id, name: z.string().min(1), email: z.string().optional() })),
   resources: z.array(
-    z.object({ id, name: z.string().min(1), role: z.string().optional(), tagIds: z.array(id) }),
+    z.object({
+      id,
+      name: z.string().min(1),
+      role: z.string().optional(),
+      level: z.enum(CAREER_LEVELS).optional(),
+      tagIds: z.array(id),
+    }),
   ),
   projects: z.array(
     z.object({

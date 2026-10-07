@@ -135,7 +135,8 @@ export function AddAssignmentDialog({ projectId, resourceId, onClose }: Props) {
           <span className="candidate-main">
             <span className="candidate-name">
               {r.name}
-              {r.role && <span className="muted small"> · {r.role}</span>}
+              {r.level && <span className="level-badge">{r.level}</span>}
+                {r.role && <span className="muted small"> · {r.role}</span>}
               {onProject.has(r.id) && <span className="badge">Already on it</span>}
               {need.size > 0 && matches === 0 && <span className="badge badge-warn">No matching skill</span>}
             </span>
