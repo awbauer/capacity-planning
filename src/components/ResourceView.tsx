@@ -58,8 +58,7 @@ export function ResourceView({ buckets }: Props) {
     const riskCount = visibleWeeks.filter((w) => sevOf(w) === 'risk').length;
     const assignments = [...(d.assignmentsByResource.get(r.id) ?? [])].sort(
       (a, b) =>
-        (d.projectsById.get(a.projectId)?.name ?? '').localeCompare(d.projectsById.get(b.projectId)?.name ?? '') ||
-        a.kind.localeCompare(b.kind),
+        (d.projectsById.get(a.projectId)?.name ?? '').localeCompare(d.projectsById.get(b.projectId)?.name ?? ''),
     );
 
     const projectCount = new Set(assignments.map((a) => a.projectId)).size;
@@ -153,8 +152,6 @@ export function ResourceView({ buckets }: Props) {
                 <span className={`status-text status-${p.status}`}> · {STATUS_LABELS[p.status]}</span>
               </div>
               <AssignmentBadges
-                assignment={a}
-                cls={d.loads.classOf.get(a.id)}
                 over={over}
                 risk={!over && flags.risk.length > 0}
                 mismatch={mismatch}
@@ -167,7 +164,7 @@ export function ResourceView({ buckets }: Props) {
               title="Remove from workstream"
               onClick={() => {
                 const weeks = Object.keys(a.weekly).length;
-                if (weeks === 0 || window.confirm(`Remove ${r.name}'s ${a.kind} row from ${p.name}? This clears ${weeks} week(s) of allocation (undo with Ctrl+Z).`)) {
+                if (weeks === 0 || window.confirm(`Remove ${r.name} from ${p.name}? This clears ${weeks} week(s) of allocation (undo with Ctrl+Z).`)) {
                   removeAssignment(a.id);
                 }
               }}

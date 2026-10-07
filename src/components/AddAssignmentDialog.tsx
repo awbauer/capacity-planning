@@ -1,8 +1,8 @@
 import { useState, type ReactNode } from 'react';
 import { STATUS_LABELS } from '../domain/labels';
-import { classify, severity, type Severity } from '../domain/load';
+import { severity, weekClass, weekKind, type Severity } from '../domain/load';
 import { CLICK_STEPS } from '../domain/steps';
-import type { AllocationKind, Project, Resource, WeekKey } from '../domain/types';
+import type { Project, Resource, WeekKey } from '../domain/types';
 import { addWeeks, currentWeek, formatWeekRange, normalizeWeek, weeksBetween } from '../domain/weeks';
 import { usePlan, usePlanStore } from '../store/planStore';
 import { useDerived } from '../store/useDerived';
@@ -11,9 +11,33 @@ import { Modal } from './Modal';
 
 type Props = { onClose: () => void } & ({ projectId: string; resourceId?: never } | { resourceId: string; projectId?: never });
 
+/**
+ * Pipeline workstreams that haven't started default to the presales period
+ * (now until the start date); everything else to the workstream's dates.
+ */
 function defaultRange(project: Project | undefined): { from: WeekKey; to: WeekKey } {
-  const from = project?.startWeek ?? currentWeek();
+  const now = currentWeek();
+  if (project?.status === 'pipeline' && project.startWeek && project.startWeek > now) {
+    return { from: now, to: addWeeks(project.startWeek, -1) };
+  }
+  const from = project?.startWeek ?? now;
   return { from, to: project?.endWeek && project.endWeek >= from ? project.endWeek : addWeeks(from, 11) };
+}
+
+/** Explains how the chosen weeks will count: presales before the start date, delivery from it. */
+function rangeNote(project: Project, weeks: WeekKey[]): string {
+  const presales = weeks.filter((w) => weekKind(project, w) === 'presales').length;
+  const delivery = weeks.length - presales;
+  const deliveryCounts =
+    project.status === 'won'
+      ? 'counted'
+      : project.status === 'pipeline'
+        ? 'tentative until the workstream is won'
+        : 'not counted (workstream lost)';
+  const parts: string[] = [];
+  if (presales) parts.push(`${presales} presales week${presales === 1 ? '' : 's'} before the start date (always counted)`);
+  if (delivery) parts.push(`${delivery} delivery week${delivery === 1 ? '' : 's'} (${deliveryCounts})`);
+  return parts.join(' · ');
 }
 
 /**
@@ -31,7 +55,6 @@ export function AddAssignmentDialog({ projectId, resourceId, onClose }: Props) {
   const [query, setQuery] = useState('');
   const [percent, setPercent] = useState(50);
   const [range, setRange] = useState<{ from: WeekKey; to: WeekKey } | null>(null);
-  const [kindChoice, setKindChoice] = useState<AllocationKind | null>(null);
 
   const project: Project | undefined = projectId
     ? d.projectsById.get(projectId)
@@ -46,8 +69,6 @@ export function AddAssignmentDialog({ projectId, resourceId, onClose }: Props) {
 
   const { from, to } = range ?? defaultRange(project);
   const weeks = weeksBetween(from, to);
-  // Pipeline deals default to presales effort; won projects to delivery.
-  const kind: AllocationKind = kindChoice ?? (project?.status === 'pipeline' ? 'presales' : 'delivery');
 
   /**
    * Peak total load (committed + tentative) over the chosen weeks, now and
@@ -56,8 +77,7 @@ export function AddAssignmentDialog({ projectId, resourceId, onClose }: Props) {
   const peaks = (rid: string, p: Project) => {
     const committed = d.loads.committed.get(rid);
     const tentative = d.loads.tentative.get(rid);
-    const cls = classify(kind, p.status);
-    const existing = d.assignmentsByProject.get(p.id)?.find((a) => a.resourceId === rid && a.kind === kind);
+    const existing = d.assignmentsByProject.get(p.id)?.find((a) => a.resourceId === rid);
     let now = 0;
     let after = 0;
     let worst: Severity | null = null;
@@ -66,6 +86,7 @@ export function AddAssignmentDialog({ projectId, resourceId, onClose }: Props) {
       let t = tentative?.get(w) ?? 0;
       now = Math.max(now, c + t);
       const delta = percent - (existing?.weekly[w] ?? 0);
+      const cls = weekClass(p, w);
       if (cls === 'committed') c += delta;
       else if (cls === 'tentative') t += delta;
       after = Math.max(after, c + t);
@@ -83,7 +104,7 @@ export function AddAssignmentDialog({ projectId, resourceId, onClose }: Props) {
   if (projectId && project) {
     const need = new Set(project.tagIds);
     const onProject = new Set(
-      (d.assignmentsByProject.get(project.id) ?? []).filter((a) => a.kind === kind).map((a) => a.resourceId),
+      (d.assignmentsByProject.get(project.id) ?? []).map((a) => a.resourceId),
     );
     const candidates = plan.resources
       .filter((r) => !q || r.name.toLowerCase().includes(q) || (r.role ?? '').toLowerCase().includes(q))
@@ -97,7 +118,7 @@ export function AddAssignmentDialog({ projectId, resourceId, onClose }: Props) {
             <span className="candidate-name">
               {r.name}
               {r.role && <span className="muted small"> · {r.role}</span>}
-              {onProject.has(r.id) && <span className="badge">Has {kind} row</span>}
+              {onProject.has(r.id) && <span className="badge">Already on it</span>}
               {need.size > 0 && matches === 0 && <span className="badge badge-warn">No matching skill</span>}
             </span>
             <TagChips tagIds={r.tagIds} tagsById={d.tagsById} highlight={need.size ? need : undefined} />
@@ -124,7 +145,6 @@ export function AddAssignmentDialog({ projectId, resourceId, onClose }: Props) {
             onChange={() => {
               setPickedId(p.id);
               setRange(null);
-              setKindChoice(null);
             }}
           />
           <span className="candidate-main">
@@ -149,7 +169,7 @@ export function AddAssignmentDialog({ projectId, resourceId, onClose }: Props) {
 
   const save = () => {
     if (!resource || !project) return;
-    addAssignment(project.id, resource.id, kind, percent > 0 ? { percent, from, to } : undefined);
+    addAssignment(project.id, resource.id, percent > 0 ? { percent, from, to } : undefined);
     onClose();
   };
 
@@ -186,16 +206,6 @@ export function AddAssignmentDialog({ projectId, resourceId, onClose }: Props) {
     >
       <div className="form-row">
         <div className="label-like">
-          Type of work
-          <div className="segmented" role="group" aria-label="Type of work">
-            {(['presales', 'delivery'] as const).map((k) => (
-              <button key={k} type="button" aria-pressed={kind === k} onClick={() => setKindChoice(k)}>
-                {k === 'presales' ? 'Presales' : 'Delivery'}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="label-like">
           Allocation
           <div className="segmented" role="group" aria-label="Allocation">
             {CLICK_STEPS.filter((v) => v > 0).map((v) => (
@@ -215,17 +225,7 @@ export function AddAssignmentDialog({ projectId, resourceId, onClose }: Props) {
         </label>
         <span className="muted small form-hint">{weeks.length} week{weeks.length === 1 ? '' : 's'}</span>
       </div>
-      {project && (
-        <p className="muted small form-note">
-          {kind === 'presales'
-            ? 'Presales time counts toward load whether or not the deal is won.'
-            : project.status === 'won'
-              ? 'Delivery on a won workstream counts toward load.'
-              : project.status === 'pipeline'
-                ? 'Delivery on a pipeline workstream is tentative: it shows as “at risk”, not overallocated, until it is won.'
-                : 'Delivery on a lost workstream is not counted.'}
-        </p>
-      )}
+      {project && <p className="muted small form-note">{rangeNote(project, weeks)}</p>}
       <input
         type="search"
         className="search"

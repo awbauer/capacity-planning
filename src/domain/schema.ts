@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { PlanData } from './types';
+import type { Assignment, PlanData } from './types';
 import { snapWeekly } from './steps';
 import { normalizeWeek } from './weeks';
 
@@ -8,8 +8,8 @@ const isMonday = (k: string) => /^\d{4}-\d{2}-\d{2}$/.test(k) && normalizeWeek(k
 const weekKey = z.string().refine(isMonday, 'weeks must be Mondays in yyyy-MM-dd format');
 
 const planSchema = z.object({
-  // Version 1 files predate project status and allocation kind; defaults upgrade them.
-  version: z.union([z.literal(1), z.literal(2)]),
+  // v1 predates workstream status; v2 had separate presales/delivery rows. Both are upgraded.
+  version: z.union([z.literal(1), z.literal(2), z.literal(3)]),
   tags: z.array(z.object({ id, name: z.string().min(1), color: z.string() })),
   sellers: z.array(z.object({ id, name: z.string().min(1), email: z.string().optional() })),
   resources: z.array(
@@ -33,7 +33,7 @@ const planSchema = z.object({
       id,
       projectId: id,
       resourceId: id,
-      kind: z.enum(['presales', 'delivery']).default('delivery'),
+      kind: z.enum(['presales', 'delivery']).optional(),
       weekly: z.record(z.string(), z.number().min(0)),
     }),
   ),
@@ -49,8 +49,8 @@ export function parsePlan(input: unknown): PlanData {
   }
   const plan: PlanData = {
     ...result.data,
-    version: 2,
-    assignments: result.data.assignments.map((a) => ({ ...a, weekly: snapWeekly(a.weekly) })),
+    version: 3,
+    assignments: mergeAssignments(result.data.assignments),
   };
   const tagIds = new Set(plan.tags.map((t) => t.id));
   const sellerIds = new Set(plan.sellers.map((s) => s.id));
@@ -74,32 +74,41 @@ export function parsePlan(input: unknown): PlanData {
     if (!projectIds.has(a.projectId)) missing('workstream', a.projectId, `assignment ${a.id}`);
     if (!resourceIds.has(a.resourceId)) missing('resource', a.resourceId, `assignment ${a.id}`);
   }
-  const seen = new Set<string>();
-  for (const a of plan.assignments) {
-    const key = `${a.projectId}|${a.resourceId}|${a.kind}`;
-    if (seen.has(key)) {
-      throw new Error(`Invalid plan file: duplicate ${a.kind} assignment ${a.id} for the same person and workstream`);
-    }
-    seen.add(key);
-  }
   return plan;
+}
+
+type StoredAssignment = Omit<Assignment, 'weekly'> & { weekly?: Record<string, number>; kind?: string };
+
+/**
+ * One row per person per workstream. Older data could have separate presales
+ * and delivery rows; their weeks are added together, then every week is
+ * snapped to 0/25/50/100.
+ */
+export function mergeAssignments(list: StoredAssignment[]): Assignment[] {
+  const byKey = new Map<string, Assignment>();
+  for (const a of list) {
+    const key = `${a.projectId}|${a.resourceId}`;
+    const prev = byKey.get(key);
+    if (!prev) {
+      byKey.set(key, { id: a.id, projectId: a.projectId, resourceId: a.resourceId, weekly: { ...a.weekly } });
+      continue;
+    }
+    for (const [w, v] of Object.entries(a.weekly ?? {})) prev.weekly[w] = (prev.weekly[w] ?? 0) + v;
+  }
+  return [...byKey.values()].map((a) => ({ ...a, weekly: snapWeekly(a.weekly) }));
 }
 
 /**
  * Best-effort upgrade of data saved by an older version of the app (no
  * validation, so a slightly malformed save isn't thrown away). Fills in
- * status/kind and snaps weekly values to 0/25/50/100.
+ * workstream status, merges presales/delivery rows and snaps weekly values.
  */
 export function upgradePlan(raw: unknown): PlanData {
   const plan = raw as PlanData;
   return {
     ...plan,
-    version: 2,
+    version: 3,
     projects: (plan.projects ?? []).map((p) => ({ ...p, status: p.status ?? 'won' })),
-    assignments: (plan.assignments ?? []).map((a) => ({
-      ...a,
-      kind: a.kind ?? 'delivery',
-      weekly: snapWeekly(a.weekly ?? {}),
-    })),
+    assignments: mergeAssignments(plan.assignments ?? []),
   };
 }

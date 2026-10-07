@@ -24,27 +24,28 @@ describe('parsePlan', () => {
     expect(() => parsePlan({ hello: 'world' })).toThrow(/Invalid plan file/);
   });
 
-  it('upgrades version 1 files: projects become won, allocations delivery', () => {
+  it('upgrades version 1 files: workstreams become won', () => {
     const plan = createSamplePlan('2026-10-05');
     const v1 = JSON.parse(JSON.stringify({ ...plan, version: 1 }));
     for (const p of v1.projects) delete p.status;
-    for (const a of v1.assignments) delete a.kind;
-    // v1 had one row per person per project, so drop the sample's extra presales rows.
-    v1.assignments = v1.assignments.filter(
-      (a: { id: string }, i: number, all: { projectId: string; resourceId: string }[]) =>
-        all.findIndex((b) => b.projectId === all[i].projectId && b.resourceId === all[i].resourceId) === i && a.id,
-    );
     const parsed = parsePlan(v1);
-    expect(parsed.version).toBe(2);
+    expect(parsed.version).toBe(3);
     expect(parsed.projects.every((p) => p.status === 'won')).toBe(true);
-    expect(parsed.assignments.every((a) => a.kind === 'delivery')).toBe(true);
     expect(upgradePlan(v1)).toEqual(parsed);
   });
 
-  it('rejects duplicate rows of the same kind', () => {
+  it('merges version 2 presales/delivery rows into one row per person', () => {
     const plan = createSamplePlan('2026-10-05');
-    plan.assignments.push({ ...plan.assignments[0], id: 'dup' });
-    expect(() => parsePlan(plan)).toThrow(/duplicate/);
+    const base = plan.assignments[0];
+    const v2 = JSON.parse(JSON.stringify({ ...plan, version: 2 }));
+    v2.assignments[0] = { ...base, kind: 'delivery', weekly: { '2026-10-05': 50, '2026-10-12': 50 } };
+    v2.assignments.push({ ...base, id: 'dup', kind: 'presales', weekly: { '2026-10-05': 25, '2026-09-28': 25 } });
+    const parsed = parsePlan(v2);
+    const rows = parsed.assignments.filter((a) => a.projectId === base.projectId && a.resourceId === base.resourceId);
+    expect(rows).toHaveLength(1);
+    // 50 + 25 = 75 rounds up to 100.
+    expect(rows[0].weekly).toEqual({ '2026-09-28': 25, '2026-10-05': 100, '2026-10-12': 50 });
+    expect('kind' in rows[0]).toBe(false);
   });
 
   it('rounds imported weekly values to 0/25/50/100', () => {

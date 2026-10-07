@@ -793,22 +793,6 @@ button:focus-visible {
   color: var(--danger);
 }
 
-.kind {
-  font-size: 11px;
-  line-height: 17px;
-  padding: 0 6px;
-  border-radius: 4px;
-  cursor: pointer;
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
-}
-
-.kind-presales {
-  background: var(--accent-soft);
-  border-color: transparent;
-  color: var(--accent);
-}
-
 .status-select {
   font-size: 12px;
   font-weight: 600;

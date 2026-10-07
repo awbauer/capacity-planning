@@ -56,8 +56,8 @@ export function App() {
           </main>
           <footer className="legend">
             <span>
-              Click a cell to cycle 0 → 25 → 50 → 100%. Drag or Shift+click to select a range, then press Space
-              to cycle it (or type 25, 50 or 100). Delete clears.
+              Double-click a cell to cycle 0 → 25 → 50 → 100%. Click, drag or Shift+click to select; press Space
+              to cycle the selection (or type 25, 50 or 100). Delete clears.
               {zoom !== 'week' && ' In month/quarter view, typing sets every week in the period.'}
             </span>
             <span className="legend-keys">

@@ -1,4 +1,5 @@
-import type { AllocationKind, Assignment, PlanData, WeekKey } from './types';
+import { mergeAssignments } from './schema';
+import type { Assignment, PlanData, WeekKey } from './types';
 import { addWeeks, currentWeek, weeksBetween } from './weeks';
 
 /**
@@ -20,17 +21,15 @@ export function createSamplePlan(today: WeekKey = currentWeek()): PlanData {
     percent: number,
     from: number,
     to: number,
-    kind: AllocationKind = 'delivery',
   ): Assignment => ({
     id: `sample-a${++n}`,
     projectId,
     resourceId,
-    kind,
     weekly: Object.fromEntries(weeksBetween(w(from), w(to)).map((k) => [k, percent])),
   });
 
   return {
-    version: 2,
+    version: 3,
     settings: { overallocationThreshold: 100 },
     tags: [
       { id: 'tag-dc', name: 'Data Cloud', color: '#2563eb' },
@@ -118,7 +117,8 @@ export function createSamplePlan(today: WeekKey = currentWeek()): PlanData {
         endWeek: w(10),
       },
     ],
-    assignments: [
+    // Rows for the same person and workstream (e.g. presales then delivery) merge into one.
+    assignments: mergeAssignments([
       assign('proj-acme', 'res-alex', 50, -2, 14),
       assign('proj-acme', 'res-sam', 100, 0, 10),
       assign('proj-acme', 'res-riley', 50, 2, 8),
@@ -131,17 +131,17 @@ export function createSamplePlan(today: WeekKey = currentWeek()): PlanData {
       assign('proj-globex', 'res-riley', 25, 1, 10),
       assign('proj-initech', 'res-drew', 100, 10, 24),
       assign('proj-initech', 'res-sam', 50, 8, 14),
-      assign('proj-contoso', 'res-alex', 25, 0, 3, 'presales'),
-      assign('proj-contoso', 'res-jamie', 25, 0, 3, 'presales'),
-      assign('proj-fabrikam', 'res-morgan', 25, -4, -1, 'presales'),
+      assign('proj-contoso', 'res-alex', 25, 0, 3),
+      assign('proj-contoso', 'res-jamie', 25, 0, 3),
+      assign('proj-fabrikam', 'res-morgan', 25, -4, -1),
       assign('proj-fabrikam', 'res-morgan', 50, 2, 10),
-    ],
+    ]),
   };
 }
 
 export function createEmptyPlan(): PlanData {
   return {
-    version: 2,
+    version: 3,
     settings: { overallocationThreshold: 100 },
     tags: [],
     sellers: [],
