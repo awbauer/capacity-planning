@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createSamplePlan } from '../domain/sampleData';
+import { createEmptyPlan, createSamplePlan } from '../domain/sampleData';
+import { parsePlan } from '../domain/schema';
 import { redo, undo, usePlanStore } from './planStore';
 
 const store = () => usePlanStore.getState();
@@ -8,6 +9,24 @@ describe('planStore', () => {
   beforeEach(() => {
     store().importPlan(createSamplePlan('2026-10-05'));
     usePlanStore.temporal.getState().clear();
+  });
+
+  it('starts with a valid blank plan', () => {
+    const initial = usePlanStore.getInitialState().plan;
+    expect(initial).toEqual(createEmptyPlan());
+    expect(parsePlan(initial)).toEqual(initial);
+  });
+
+  it('loads the sample plan on demand and can undo back to blank', () => {
+    store().clearAll();
+    usePlanStore.temporal.getState().clear();
+    store().resetToSample();
+    expect(store().plan.resources.length).toBeGreaterThan(0);
+    expect(store().plan.projects.length).toBeGreaterThan(0);
+    expect(store().plan.assignments.length).toBeGreaterThan(0);
+    expect(parsePlan(store().plan)).toEqual(store().plan);
+    undo();
+    expect(store().plan).toEqual(createEmptyPlan());
   });
 
   it('removes a deleted tag from resources and projects', () => {
