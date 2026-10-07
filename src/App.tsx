@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { ConflictsPanel } from './components/ConflictsPanel';
+import { HelpDialog } from './components/HelpDialog';
 import { ManagePage } from './components/manage/ManagePage';
 import { ProjectView } from './components/ProjectView';
 import { ResourceView } from './components/ResourceView';
@@ -20,11 +21,19 @@ export function App() {
   const zoom = useUIStore((s) => s.zoom);
   const anchor = useUIStore((s) => s.anchor);
   const showConflicts = useUIStore((s) => s.showConflicts);
+  const showHelp = useUIStore((s) => s.showHelp);
+  const setShowHelp = useUIStore((s) => s.setShowHelp);
   const buckets = useMemo(() => makeBuckets(zoom, anchor), [zoom, anchor]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey) || isTextInput(e.target)) return;
+      if (isTextInput(e.target)) return;
+      if (e.key === '?' && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        useUIStore.getState().setShowHelp(true);
+        return;
+      }
+      if (!(e.metaKey || e.ctrlKey)) return;
       const key = e.key.toLowerCase();
       if (key === 'z') {
         e.preventDefault();
@@ -56,14 +65,16 @@ export function App() {
           </main>
           <footer className="legend">
             <span>
-              Double-click a cell to cycle 0 → 25 → 50 → 100%. Click, drag or Shift+click to select; press Space
-              to cycle the selection (or type 25, 50 or 100). Delete clears.
-              {zoom !== 'week' && ' In month/quarter view, typing sets every week in the period.'}
+              Double-click a cell to cycle 0 → 25 → 50 → 100%.{' '}
+              <button type="button" className="link-inline" onClick={() => setShowHelp(true)}>
+                All shortcuts (?)
+              </button>
             </span>
             <span className="legend-keys">
               <span className="swatch swatch-presales" /> presales
               <span className="swatch swatch-edge" /> workstream start / end
-              <span className="swatch swatch-over" /> overallocated
+              <span className="swatch swatch-over" /> overallocated (150%+)
+              <span className="swatch swatch-stretch" /> stretched (101–149%)
               <span className="swatch swatch-risk" /> at risk if pipeline wins
               <span className="swatch swatch-tentative" /> tentative (pipeline delivery)
               <span className="swatch swatch-outside" /> outside workstream dates
@@ -72,6 +83,7 @@ export function App() {
           </footer>
         </>
       )}
+      {showHelp && <HelpDialog onClose={() => setShowHelp(false)} />}
     </div>
   );
 }

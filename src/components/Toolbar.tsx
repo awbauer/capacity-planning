@@ -95,6 +95,9 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
           {ui.lastExportedAt ? `Exported ${relative(ui.lastExportedAt)}` : 'Never exported'}
           {dirty && ' · unsaved changes'}
         </span>
+        <button type="button" className="btn" onClick={() => ui.setShowHelp(true)} title="Interactions and shortcuts (?)">
+          ? Help
+        </button>
         <button type="button" className="btn" onClick={exportPlan}>
           Export
         </button>

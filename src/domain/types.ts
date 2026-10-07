@@ -59,8 +59,10 @@ export interface Assignment {
 }
 
 export interface PlanSettings {
-  /** A resource whose committed weekly total exceeds this % is overallocated. */
+  /** Committed weekly load above this % is flagged yellow ("stretched"). */
   overallocationThreshold: number;
+  /** Committed weekly load above this % is flagged red ("overallocated"). */
+  criticalThreshold: number;
 }
 
 export interface PlanData {

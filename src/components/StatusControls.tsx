@@ -1,5 +1,6 @@
 import type { ProjectStatus } from '../domain/types';
 import { STATUS_LABELS } from '../domain/labels';
+import type { Severity } from '../domain/load';
 
 
 interface StatusSelectProps {
@@ -26,18 +27,18 @@ export function StatusSelect({ value, onChange, compact }: StatusSelectProps) {
 }
 
 interface AssignmentBadgesProps {
-  over: boolean;
-  risk: boolean;
+  worst: Severity | null;
   mismatch: boolean;
 }
 
 /** Warnings shown under an allocation row's name. */
-export function AssignmentBadges({ over, risk, mismatch }: AssignmentBadgesProps) {
-  if (!over && !risk && !mismatch) return null;
+export function AssignmentBadges({ worst, mismatch }: AssignmentBadgesProps) {
+  if (!worst && !mismatch) return null;
   return (
     <div className="row-badges">
-      {over && <span className="badge badge-danger">⚠ Overallocated</span>}
-      {risk && (
+      {worst === 'over' && <span className="badge badge-danger">⚠ Overallocated</span>}
+      {worst === 'stretch' && <span className="badge badge-stretch">Stretched</span>}
+      {worst === 'risk' && (
         <span className="badge badge-risk" title="Over capacity only if pipeline work is won">
           At risk
         </span>

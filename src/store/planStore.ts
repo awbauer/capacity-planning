@@ -9,6 +9,7 @@ import type {
   Assignment,
   CapabilityTag,
   PlanData,
+  PlanSettings,
   Project,
   Resource,
   Seller,
@@ -53,7 +54,7 @@ interface PlanActions {
   /** Applies all edits as a single undo step. */
   setAllocations: (edits: AllocationEdit[]) => void;
 
-  setThreshold: (percent: number) => void;
+  setThresholds: (patch: Partial<PlanSettings>) => void;
   importPlan: (plan: PlanData) => void;
   resetToSample: () => void;
   clearAll: () => void;
@@ -193,10 +194,13 @@ export const usePlanStore = create<PlanState>()(
             }));
           },
 
-          setThreshold: (percent) =>
+          setThresholds: (patch) =>
             update((p) => ({
               ...p,
-              settings: { ...p.settings, overallocationThreshold: Math.max(1, Math.round(percent)) },
+              settings: {
+                ...p.settings,
+                ...Object.fromEntries(Object.entries(patch).map(([k, v]) => [k, Math.max(1, Math.round(v))])),
+              },
             })),
           importPlan: (plan) => set({ plan }),
           resetToSample: () => set({ plan: createSamplePlan() }),
@@ -213,7 +217,8 @@ export const usePlanStore = create<PlanState>()(
       name: 'capacity-plan:v1',
       // v2: workstream status + allocation kind. v3: weekly values snapped to 0/25/50/100.
       // v4: one row per person per workstream (presales/delivery come from the start date).
-      version: 4,
+      // v5: separate yellow/red thresholds (criticalThreshold).
+      version: 5,
       partialize: (s) => ({ plan: s.plan }),
       migrate: (persisted) => {
         const state = persisted as { plan: PlanData };

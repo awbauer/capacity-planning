@@ -1,0 +1,112 @@
+import type { ReactNode } from 'react';
+import { Modal } from './Modal';
+
+const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
+const MOD = isMac ? '⌘' : 'Ctrl';
+
+function Keys({ keys }: { keys: string[] }) {
+  return (
+    <span className="keys">
+      {keys.map((k, i) => (
+        <span key={i}>
+          {i > 0 && <span className="keys-plus">+</span>}
+          <kbd>{k}</kbd>
+        </span>
+      ))}
+    </span>
+  );
+}
+
+interface Row {
+  what: ReactNode;
+  how: ReactNode;
+}
+
+function Section({ title, rows }: { title: string; rows: Row[] }) {
+  return (
+    <section className="help-section">
+      <h3>{title}</h3>
+      <dl>
+        {rows.map(({ what, how }, i) => (
+          <div key={i} className="help-row">
+            <dt>{how}</dt>
+            <dd>{what}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}
+
+/** Reference for every interaction and keyboard shortcut. Opened with the Help button or "?". */
+export function HelpDialog({ onClose }: { onClose: () => void }) {
+  return (
+    <Modal title="Help: interactions & shortcuts" onClose={onClose} wide>
+      <div className="help">
+        <Section
+          title="Allocation cells"
+          rows={[
+            { what: 'Cycle a week 0 → 25 → 50 → 100 → 0', how: 'Double-click a cell' },
+            { what: 'Select a cell (doesn’t change it)', how: 'Click' },
+            { what: 'Select a range', how: <>Drag, or click then <Keys keys={['Shift']} /> + click</> },
+            { what: 'Cycle the whole selection', how: <Keys keys={['Space']} /> },
+            { what: 'Set the selection to a value', how: <>Type <kbd>25</kbd>, <kbd>50</kbd> or <kbd>100</kbd>, then <Keys keys={['Enter']} /></> },
+            { what: 'Edit the focused cell', how: <><Keys keys={['Enter']} /> or <Keys keys={['F2']} /></> },
+            { what: 'Clear the selection', how: <><Keys keys={['Delete']} /> or <Keys keys={['Backspace']} /></> },
+            { what: 'Move', how: <>Arrow keys · <Keys keys={['Tab']} /> / <Keys keys={['Shift', 'Tab']} /></> },
+            { what: 'Extend the selection', how: <Keys keys={['Shift', 'Arrow']} /> },
+            { what: 'Cancel an edit / clear the selection', how: <Keys keys={['Esc']} /> },
+          ]}
+        />
+        <p className="muted small">
+          Each week is 0, 25, 50 or 100%; other typed values round to the nearest step. In Month and Quarter view a
+          cell shows the average for the period, and changing it sets every week in that period.
+        </p>
+        <Section
+          title="Everywhere"
+          rows={[
+            { what: 'Undo', how: <Keys keys={[MOD, 'Z']} /> },
+            { what: 'Redo', how: <><Keys keys={[MOD, 'Shift', 'Z']} /> or <Keys keys={[MOD, 'Y']} /></> },
+            { what: 'Open this help', how: <Keys keys={['?']} /> },
+            { what: 'Close a dialog', how: <Keys keys={['Esc']} /> },
+          ]}
+        />
+        <Section
+          title="Workstreams and people"
+          rows={[
+            { what: 'Add people to a workstream', how: <><b>+ Person</b> on the workstream row (tick several)</> },
+            { what: 'Add a person to workstreams', how: <><b>+ Workstream</b> on the person’s row (tick several)</> },
+            { what: 'Edit a workstream (dates, seller, capabilities)', how: 'Click its name' },
+            { what: 'Change a workstream’s status', how: 'Pipeline / Won / Lost dropdown on its row' },
+            { what: 'Take a person off a workstream', how: <><b>×</b> on their row</> },
+            { what: 'Expand or collapse a row', how: <><b>▸</b> / <b>▾</b>, or Expand / Collapse in the corner</> },
+            { what: 'Jump to a conflict', how: 'Click it in the Conflicts panel' },
+            { what: 'Add people, workstreams, capabilities, sellers', how: <><b>Manage</b> tab, or type a new capability name in any picker</> },
+          ]}
+        />
+        <Section
+          title="Presales, delivery and flags"
+          rows={[
+            { what: 'Presales: always counts toward load', how: 'Violet weeks, before the start date' },
+            { what: 'Delivery: counts once Won, tentative while Pipeline, ignored if Lost', how: 'Blue weeks, from the start date' },
+            { what: 'Tentative pipeline delivery', how: 'Dashed circle' },
+            { what: 'Overallocated: committed work of 150% or more', how: 'Red' },
+            { what: 'Stretched: committed work of 101–149%', how: 'Orange' },
+            { what: 'At risk: over 100% only if pipeline work is won', how: 'Yellow' },
+            { what: 'Workstream start and end', how: 'Vertical line, labelled on the workstream row' },
+            { what: 'Outside the workstream’s dates', how: 'Hatched' },
+          ]}
+        />
+        <Section
+          title="View and data"
+          rows={[
+            { what: 'Change the time scale', how: 'Week / Month / Quarter' },
+            { what: 'Show circles or numbers', how: '◑ / % toggle' },
+            { what: 'Move through time', how: <><b>◀</b> <b>Today</b> <b>▶</b></> },
+            { what: 'Back up or move your data (it lives only in this browser)', how: <><b>Export</b> / <b>Import</b></> },
+          ]}
+        />
+      </div>
+    </Modal>
+  );
+}

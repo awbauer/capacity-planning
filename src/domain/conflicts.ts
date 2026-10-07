@@ -8,7 +8,7 @@ export interface Overallocation {
   from: WeekKey;
   to: WeekKey;
   weeks: WeekKey[];
-  /** Highest committed load in the run (for 'over') or committed + tentative (for 'risk'). */
+  /** Highest committed load in the run ('over'/'stretch') or committed + tentative ('risk'). */
   peak: number;
   /** Projects with a counted, non-zero allocation in any of these weeks. */
   projectIds: string[];
@@ -27,7 +27,7 @@ export function isOver(total: number, threshold: number): boolean {
  * consecutive weeks with the same severity.
  */
 export function findOverallocations(plan: PlanData, loads: SplitLoads = splitLoads(plan)): Overallocation[] {
-  const threshold = plan.settings.overallocationThreshold;
+  const settings = plan.settings;
   const out: Overallocation[] = [];
   const resourceIds = new Set([...loads.committed.keys(), ...loads.tentative.keys()]);
 
@@ -56,7 +56,7 @@ export function findOverallocations(plan: PlanData, loads: SplitLoads = splitLoa
         from: run[0],
         to: run[run.length - 1],
         weeks: run,
-        peak: Math.max(...run.map((w) => (sev === 'over' ? c(w) : c(w) + t(w)))),
+        peak: Math.max(...run.map((w) => (sev === 'risk' ? c(w) + t(w) : c(w)))),
         projectIds: [...projectIds],
       });
       run = [];
@@ -64,7 +64,7 @@ export function findOverallocations(plan: PlanData, loads: SplitLoads = splitLoa
     };
 
     for (const w of weeks) {
-      const sev = severity(c(w), t(w), threshold);
+      const sev = severity(c(w), t(w), settings);
       const continues = sev !== null && sev === runSeverity && addWeeks(run[run.length - 1], 1) === w;
       if (!continues) flush();
       if (sev) {
@@ -80,19 +80,19 @@ export function findOverallocations(plan: PlanData, loads: SplitLoads = splitLoa
   );
 }
 
-/** Of the given weeks, those in which this assignment adds to an 'over' or 'risk' week. */
+/** Of the given weeks, those in which this assignment adds to a flagged week, by severity. */
 export function assignmentFlagWeeks(
   a: Assignment,
   weeks: WeekKey[],
   loads: SplitLoads,
-  threshold: number,
+  settings: PlanData['settings'],
 ): Record<Severity, WeekKey[]> {
-  const flags: Record<Severity, WeekKey[]> = { over: [], risk: [] };
+  const flags: Record<Severity, WeekKey[]> = { over: [], stretch: [], risk: [] };
   const committed = loads.committed.get(a.resourceId);
   const tentative = loads.tentative.get(a.resourceId);
   for (const w of weeks) {
     if (!a.weekly[w] || loads.classAt(a, w) === 'excluded') continue;
-    const sev = severity(committed?.get(w) ?? 0, tentative?.get(w) ?? 0, threshold);
+    const sev = severity(committed?.get(w) ?? 0, tentative?.get(w) ?? 0, settings);
     if (sev) flags[sev].push(w);
   }
   return flags;

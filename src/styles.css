@@ -19,9 +19,12 @@
   --danger-strong: #f9b4ab;
   --warn: #93590a;
   --warn-bg: #fdf0d5;
-  --risk: #a15c00;
-  --risk-bg: #ffe8c2;
-  --risk-strong: #f5b860;
+  --risk: #8a6d00;
+  --risk-bg: #fdf6c3;
+  --risk-strong: #e8cf4a;
+  --stretch: #c2410c;
+  --stretch-bg: #ffe2cc;
+  --stretch-strong: #fb923c;
   --presales: #7c3aed;
   --presales-bg: #efe7fd;
   --edge: #0f766e;
@@ -52,9 +55,12 @@
     --danger-strong: #7a2a24;
     --warn: #f3c46b;
     --warn-bg: #3d2f12;
-    --risk: #ffb84d;
-    --risk-bg: #4a3010;
-    --risk-strong: #8a5a1c;
+    --risk: #f5d742;
+    --risk-bg: #3d3610;
+    --risk-strong: #8a7a1c;
+    --stretch: #fb923c;
+    --stretch-bg: #4a2410;
+    --stretch-strong: #9a4a1c;
     --presales: #a78bfa;
     --presales-bg: #2a2140;
     --edge: #2dd4bf;
@@ -1206,7 +1212,7 @@ button:focus-visible {
   --pie: var(--presales);
 }
 
-.cells-pie .cell.edit.filled:not(.over):not(.risk):not(.selected):not(.excluded) {
+.cells-pie .cell.edit.filled:not(.over):not(.stretch):not(.risk):not(.selected):not(.excluded) {
   background-color: transparent;
 }
 
@@ -1330,4 +1336,137 @@ button:focus-visible {
   border: none;
   border-radius: 0;
   background: var(--edge);
+}
+
+/* ---------- Help ---------- */
+
+.help {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.help-section h3 {
+  font-size: 13px;
+  margin: 0 0 6px;
+}
+
+.help dl {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.help-row {
+  display: grid;
+  grid-template-columns: minmax(200px, 2fr) 3fr;
+  gap: 12px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.help-row dt {
+  margin: 0;
+  color: var(--text);
+}
+
+.help-row dd {
+  margin: 0;
+  color: var(--muted);
+}
+
+.help p {
+  margin: 0;
+}
+
+kbd {
+  display: inline-block;
+  min-width: 20px;
+  padding: 0 5px;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  font: 600 11px/18px var(--font);
+  text-align: center;
+}
+
+.keys-plus {
+  margin: 0 2px;
+  color: var(--muted);
+}
+
+.link-inline {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+}
+
+/* ---------- Stretched (orange): committed load above capacity but not critical ---------- */
+
+.cell.stretch,
+.cell.edit.filled.stretch,
+.grid tr.depth-0 td.heat-stretch {
+  background-color: var(--stretch-bg);
+  color: var(--stretch);
+  font-weight: 600;
+}
+
+.cells-pie .cell.stretch {
+  --pie: var(--stretch);
+}
+
+.badge-stretch {
+  background: var(--stretch-bg);
+  border-color: var(--stretch-strong);
+  color: var(--stretch);
+}
+
+.pill-over {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.pill-stretch {
+  color: var(--stretch);
+  font-weight: 700;
+}
+
+.load-stretch {
+  color: var(--stretch);
+  font-weight: 600;
+}
+
+.load-risk {
+  color: var(--risk);
+  font-weight: 600;
+}
+
+.stretch-text {
+  color: var(--stretch);
+}
+
+.cell.fte.has-stretch::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--stretch-strong);
+}
+
+.swatch-stretch {
+  background: var(--stretch-bg);
+  border-color: var(--stretch-strong);
+}
+
+/* Selection stays visible over every conflict tint. */
+.grid .cell.edit.selected {
+  background-color: var(--sel);
 }

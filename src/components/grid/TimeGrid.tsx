@@ -97,7 +97,6 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
   const focusRow = useUIStore((s) => s.focusRow);
   const clearFocusRow = useUIStore((s) => s.clearFocusRow);
   const cellStyle = useUIStore((s) => s.cellStyle);
-  const threshold = plan.settings.overallocationThreshold;
   const thisWeek = currentWeek();
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -257,7 +256,7 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
         return `${d.projectsById.get(a.projectId)?.name ?? '?'} ${a.weekly[week]}% (${tag})`;
       });
     const head =
-      sev === 'over'
+      sev !== 'risk'
         ? `${resource?.name ?? 'Resource'} is at ${committed}% committed`
         : `${resource?.name ?? 'Resource'} would be at ${committed + tentative}% if pipeline work is won (${committed}% committed)`;
     return `${head} in the week of ${formatWeek(week)}: ${parts.join(', ')}`;
@@ -271,9 +270,9 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     const repWeek = b.weeks.find((w) => a.weekly[w]) ?? b.weeks[0];
     const kind = weekKind(d.projectsById.get(a.projectId), repWeek);
     const cls = d.loads.classAt(a, repWeek);
-    const flags = assignmentFlagWeeks(a, b.weeks, d.loads, threshold);
-    const flagWeek = flags.over[0] ?? flags.risk[0];
-    const flag: Severity | null = flags.over.length ? 'over' : flags.risk.length ? 'risk' : null;
+    const flags = assignmentFlagWeeks(a, b.weeks, d.loads, plan.settings);
+    const flag: Severity | null = flags.over.length ? 'over' : flags.stretch.length ? 'stretch' : flags.risk.length ? 'risk' : null;
+    const flagWeek = flag ? flags[flag][0] : undefined;
     const selected = inSelection(r, c);
     const isFocus = focus?.r === r && focus?.c === c;
     const classes = ['cell', 'edit', kind, ...rangeClasses(row.range, b, 'allocation')];
@@ -286,7 +285,7 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     if (st.avg > 0) classes.push('filled');
 
     let title: string | undefined;
-    if (flag) title = `This row: ${Math.round(st.avg)}%. ${loadTitle(a.resourceId, flagWeek, flag)}`;
+    if (flag && flagWeek) title = `This row: ${Math.round(st.avg)}%. ${loadTitle(a.resourceId, flagWeek, flag)}`;
     else if (cls === 'excluded' && st.avg > 0) title = 'Delivery on a lost workstream: not counted toward load.';
     else if (st.mixed) title = `Varies by week: avg ${Math.round(st.avg)}%, peak ${st.peak}%. Double-clicking or typing sets every week.`;
     else if (st.avg > 0) title = `${Math.round(st.avg)}%`;
