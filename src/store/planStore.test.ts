@@ -58,22 +58,18 @@ describe('planStore', () => {
   });
 
   it('adds an assignment with a filled range, reusing an existing row', () => {
-    const a = store().addAssignment('proj-acme', 'res-drew', 'delivery', { percent: 50, from: '2026-10-05', to: '2026-10-19' });
+    const a = store().addAssignment('proj-acme', 'res-drew', { percent: 50, from: '2026-10-05', to: '2026-10-19' });
     expect(Object.keys(a.weekly)).toEqual(['2026-10-05', '2026-10-12', '2026-10-19']);
-    const again = store().addAssignment('proj-acme', 'res-drew', 'delivery', { percent: 25, from: '2026-10-26', to: '2026-10-26' });
+    const again = store().addAssignment('proj-acme', 'res-drew', { percent: 25, from: '2026-10-26', to: '2026-10-26' });
     expect(again.id).toBe(a.id);
     expect(store().plan.assignments.filter((x) => x.resourceId === 'res-drew' && x.projectId === 'proj-acme')).toHaveLength(1);
     expect(again.weekly).toMatchObject({ '2026-10-05': 50, '2026-10-26': 25 });
   });
 
-  it('keeps presales and delivery as separate rows for the same person', () => {
-    const presales = store().addAssignment('proj-acme', 'res-drew', 'presales', { percent: 10, from: '2026-10-05', to: '2026-10-05' });
-    const delivery = store().addAssignment('proj-acme', 'res-drew', 'delivery', { percent: 50, from: '2026-10-05', to: '2026-10-05' });
-    expect(presales.id).not.toBe(delivery.id);
-    // Switching to a kind the person already has on this project is refused.
-    expect(store().setAssignmentKind(presales.id, 'delivery')).toBe(false);
-    store().removeAssignment(delivery.id);
-    expect(store().setAssignmentKind(presales.id, 'delivery')).toBe(true);
-    expect(store().plan.assignments.find((a) => a.id === presales.id)?.kind).toBe('delivery');
+  it('keeps one row per person per workstream', () => {
+    const contoso = store().plan.assignments.filter((a) => a.projectId === 'proj-contoso' && a.resourceId === 'res-alex');
+    expect(contoso).toHaveLength(1);
+    // The sample's presales weeks and delivery weeks for Alex on Contoso share that row.
+    expect(Object.values(contoso[0].weekly)).toEqual(expect.arrayContaining([25, 100]));
   });
 });

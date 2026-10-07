@@ -7,9 +7,8 @@ export type Zoom = 'week' | 'month' | 'quarter';
 export type ProjectStatus = 'pipeline' | 'won' | 'lost';
 
 /**
- * Presales effort is real time spent whatever the outcome, so it always
- * counts. Delivery effort counts once the project is won, is tentative while
- * it's in the pipeline, and drops out if it's lost.
+ * Presales vs delivery is not stored: it's decided per week by the
+ * workstream's start date (see weekKind in load.ts).
  */
 export type AllocationKind = 'presales' | 'delivery';
 
@@ -48,15 +47,14 @@ export interface Project {
 }
 
 /**
- * One resource on one project for one kind of work, with a % allocation per
- * week (absent week = 0). A person can have both a presales and a delivery
- * row on the same project.
+ * One resource on one workstream (stored as a project), with a % allocation
+ * per week (absent week = 0). There is at most one per person per workstream;
+ * weeks before the start date are presales, weeks from it delivery.
  */
 export interface Assignment {
   id: string;
   projectId: string;
   resourceId: string;
-  kind: AllocationKind;
   weekly: Record<WeekKey, number>;
 }
 
@@ -66,7 +64,7 @@ export interface PlanSettings {
 }
 
 export interface PlanData {
-  version: 2;
+  version: 3;
   tags: CapabilityTag[];
   sellers: Seller[];
   resources: Resource[];

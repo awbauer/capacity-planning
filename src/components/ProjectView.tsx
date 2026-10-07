@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Derived } from '../domain/derive';
 import { assignmentFlagWeeks } from '../domain/conflicts';
+import { weekKind } from '../domain/load';
 import type { Project } from '../domain/types';
 import type { Bucket } from '../domain/weeks';
 import { usePlan, usePlanStore } from '../store/planStore';
@@ -63,8 +64,7 @@ export function ProjectView({ buckets }: Props) {
     const open = isExpanded(expanded, key);
     const assignments = [...(d.assignmentsByProject.get(p.id) ?? [])].sort(
       (a, b) =>
-        (d.resourcesById.get(a.resourceId)?.name ?? '').localeCompare(d.resourcesById.get(b.resourceId)?.name ?? '') ||
-        a.kind.localeCompare(b.kind),
+        (d.resourcesById.get(a.resourceId)?.name ?? '').localeCompare(d.resourcesById.get(b.resourceId)?.name ?? ''),
     );
     const flagsByAssignment = new Map(
       assignments.map((a) => [a.id, assignmentFlagWeeks(a, visibleWeeks, d.loads, plan.settings.overallocationThreshold)]),
@@ -73,7 +73,6 @@ export function ProjectView({ buckets }: Props) {
       new Set(assignments.filter((a) => flagsByAssignment.get(a.id)![sev].length > 0).map((a) => a.resourceId));
     const overPeople = flagged('over');
     const riskPeople = [...flagged('risk')].filter((id) => !overPeople.has(id));
-    const presales = assignments.filter((a) => a.kind === 'presales');
     const uncovered = d.uncoveredByProject.get(p.id) ?? [];
     const seller = p.sellerId ? d.sellersById.get(p.sellerId) : undefined;
     const totals = d.projectLoad.get(p.id);
@@ -146,7 +145,9 @@ export function ProjectView({ buckets }: Props) {
           className: [
             'fte',
             over ? 'has-over' : risk ? 'has-risk' : '',
-            presales.some((a) => b.weeks.some((w) => a.weekly[w])) ? 'has-presales' : '',
+            assignments.some((a) => b.weeks.some((w) => a.weekly[w] && weekKind(p, w) === 'presales'))
+              ? 'has-presales'
+              : '',
           ].join(' '),
           title: avg ? `${(avg / 100).toFixed(2)} FTE${b.weeks.length > 1 ? ' (average)' : ''}${note}` : undefined,
         };
@@ -161,7 +162,6 @@ export function ProjectView({ buckets }: Props) {
       const flags = flagsByAssignment.get(a.id)!;
       const over = flags.over.length > 0;
       const risk = !over && flags.risk.length > 0;
-      const cls = d.loads.classOf.get(a.id);
       rows.push({
         key: `a:${a.id}`,
         depth: 1,
@@ -174,7 +174,7 @@ export function ProjectView({ buckets }: Props) {
                 {r.name}
                 {r.role && <span className="muted small"> · {r.role}</span>}
               </div>
-              <AssignmentBadges assignment={a} cls={cls} over={over} risk={risk} mismatch={mismatch} />
+              <AssignmentBadges over={over} risk={risk} mismatch={mismatch} />
             </div>
             <button
               type="button"
@@ -183,7 +183,7 @@ export function ProjectView({ buckets }: Props) {
               title="Remove from workstream"
               onClick={() => {
                 const weeks = Object.keys(a.weekly).length;
-                if (weeks === 0 || window.confirm(`Remove ${r.name}'s ${a.kind} row from ${p.name}? This clears ${weeks} week(s) of allocation (undo with Ctrl+Z).`)) {
+                if (weeks === 0 || window.confirm(`Remove ${r.name} from ${p.name}? This clears ${weeks} week(s) of allocation (undo with Ctrl+Z).`)) {
                   removeAssignment(a.id);
                 }
               }}

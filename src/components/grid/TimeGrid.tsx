@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { bucketStats } from '../../domain/aggregate';
 import { assignmentFlagWeeks } from '../../domain/conflicts';
-import type { Severity } from '../../domain/load';
+import { weekKind, type Severity } from '../../domain/load';
 import type { WeekKey, Zoom } from '../../domain/types';
 import { nextStep } from '../../domain/steps';
 import { currentWeek, formatWeek, type Bucket } from '../../domain/weeks';
@@ -55,14 +55,13 @@ interface Pos {
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
 /**
- * Classes showing where a cell sits relative to its project's dates.
+ * Classes showing where a cell sits relative to its workstream's dates.
  * - Start/end weeks get a vertical line ('edge-start' / 'edge-end').
- * - After the end, every row is shaded as outside the project.
- * - Before the start, delivery rows are shaded (delivery shouldn't happen yet),
- *   presales rows are not (that's when presales happens), and the project row
- *   gets a 'prestart' tint marking the presales window.
+ * - After the end, every row is shaded as outside the workstream.
+ * - Before the start is the presales period: not shaded, and the workstream
+ *   row is marked 'prestart'.
  */
-function rangeClasses(range: GridRow['range'], b: Bucket, kind: 'delivery' | 'presales' | 'summary'): string[] {
+function rangeClasses(range: GridRow['range'], b: Bucket, kind: 'allocation' | 'summary'): string[] {
   if (!range) return [];
   const out: string[] = [];
   const { start, end } = range;
@@ -70,7 +69,7 @@ function rangeClasses(range: GridRow['range'], b: Bucket, kind: 'delivery' | 'pr
   if (end && b.weeks.includes(end)) out.push('edge-end');
   const before = !!start && b.weeks.every((w) => w < start);
   const after = !!end && b.weeks.every((w) => w > end);
-  if (after || (before && kind === 'delivery')) out.push('outside');
+  if (after) out.push('outside');
   else if (before && kind === 'summary') out.push('prestart');
   return out;
 }
@@ -249,9 +248,15 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     const committed = d.loads.committed.get(resourceId)?.get(week) ?? 0;
     const tentative = d.loads.tentative.get(resourceId)?.get(week) ?? 0;
     const parts = (d.assignmentsByResource.get(resourceId) ?? [])
-      .filter((a) => a.weekly[week] && d.loads.classOf.get(a.id) !== 'excluded')
+      .filter((a) => a.weekly[week] && d.loads.classAt(a, week) !== 'excluded')
       .map((a) => {
-        const tag = a.kind === 'presales' ? 'presales' : d.loads.classOf.get(a.id) === 'tentative' ? 'pipeline' : 'delivery';
+        const project = d.projectsById.get(a.projectId);
+        const tag =
+          weekKind(project, week) === 'presales'
+            ? 'presales'
+            : d.loads.classAt(a, week) === 'tentative'
+              ? 'pipeline delivery'
+              : 'delivery';
         return `${d.projectsById.get(a.projectId)?.name ?? '?'} ${a.weekly[week]}% (${tag})`;
       });
     const head =
@@ -265,13 +270,16 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     const a = assignmentsById.get(row.assignmentId!);
     if (!a) return <td key={b.key} />;
     const st = cellValue(a.id, b);
-    const cls = d.loads.classOf.get(a.id);
+    // A month/quarter cell can straddle the start date; style it by its first allocated week.
+    const repWeek = b.weeks.find((w) => a.weekly[w]) ?? b.weeks[0];
+    const kind = weekKind(d.projectsById.get(a.projectId), repWeek);
+    const cls = d.loads.classAt(a, repWeek);
     const flags = assignmentFlagWeeks(a, b.weeks, d.loads, threshold);
     const flagWeek = flags.over[0] ?? flags.risk[0];
     const flag: Severity | null = flags.over.length ? 'over' : flags.risk.length ? 'risk' : null;
     const selected = inSelection(r, c);
     const isFocus = focus?.r === r && focus?.c === c;
-    const classes = ['cell', 'edit', a.kind, ...rangeClasses(row.range, b, a.kind)];
+    const classes = ['cell', 'edit', kind, ...rangeClasses(row.range, b, 'allocation')];
     if (selected) classes.push('selected');
     if (isFocus) classes.push('focus');
     if (flag) classes.push(flag);

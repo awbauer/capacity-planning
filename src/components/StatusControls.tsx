@@ -1,7 +1,5 @@
-import type { AllocationKind, Assignment, ProjectStatus } from '../domain/types';
-import type { LoadClass } from '../domain/load';
+import type { ProjectStatus } from '../domain/types';
 import { STATUS_LABELS } from '../domain/labels';
-import { usePlanStore } from '../store/planStore';
 
 
 interface StatusSelectProps {
@@ -27,61 +25,17 @@ export function StatusSelect({ value, onChange, compact }: StatusSelectProps) {
   );
 }
 
-const KIND_LABELS: Record<AllocationKind, string> = { presales: 'Presales', delivery: 'Delivery' };
-
-/** Chip showing presales/delivery; click to switch. */
-export function KindToggle({ assignment }: { assignment: Assignment }) {
-  const setAssignmentKind = usePlanStore((s) => s.setAssignmentKind);
-  const other: AllocationKind = assignment.kind === 'presales' ? 'delivery' : 'presales';
-  return (
-    <button
-      type="button"
-      className={`kind kind-${assignment.kind}`}
-      title={`Click to change to ${KIND_LABELS[other]}`}
-      onClick={() => {
-        if (!setAssignmentKind(assignment.id, other)) {
-          window.alert(`This person already has a ${KIND_LABELS[other].toLowerCase()} row on this workstream.`);
-        }
-      }}
-    >
-      {KIND_LABELS[assignment.kind]}
-    </button>
-  );
-}
-
-/** Explains how a row counts when it isn't simply committed. */
-export function LoadClassBadge({ cls }: { cls: LoadClass | undefined }) {
-  if (cls === 'tentative') {
-    return (
-      <span className="badge badge-tentative" title="Delivery on a pipeline workstream: counts toward 'at risk', not 'overallocated'">
-        Tentative
-      </span>
-    );
-  }
-  if (cls === 'excluded') {
-    return (
-      <span className="badge" title="Delivery on a lost workstream: not counted toward load">
-        Not counted
-      </span>
-    );
-  }
-  return null;
-}
-
 interface AssignmentBadgesProps {
-  assignment: Assignment;
-  cls: LoadClass | undefined;
   over: boolean;
   risk: boolean;
   mismatch: boolean;
 }
 
-/** Second line of an allocation row: kind toggle plus any warnings. */
-export function AssignmentBadges({ assignment, cls, over, risk, mismatch }: AssignmentBadgesProps) {
+/** Warnings shown under an allocation row's name. */
+export function AssignmentBadges({ over, risk, mismatch }: AssignmentBadgesProps) {
+  if (!over && !risk && !mismatch) return null;
   return (
     <div className="row-badges">
-      <KindToggle assignment={assignment} />
-      <LoadClassBadge cls={cls} />
       {over && <span className="badge badge-danger">⚠ Overallocated</span>}
       {risk && (
         <span className="badge badge-risk" title="Over capacity only if pipeline work is won">

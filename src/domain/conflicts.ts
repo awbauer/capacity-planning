@@ -48,7 +48,7 @@ export function findOverallocations(plan: PlanData, loads: SplitLoads = splitLoa
         cls === 'committed' || (sev === 'risk' && cls === 'tentative');
       const projectIds = new Set<string>();
       for (const a of mine) {
-        if (counts(loads.classOf.get(a.id)) && run.some((w) => a.weekly[w])) projectIds.add(a.projectId);
+        if (run.some((w) => a.weekly[w] && counts(loads.classAt(a, w)))) projectIds.add(a.projectId);
       }
       out.push({
         resourceId,
@@ -88,11 +88,10 @@ export function assignmentFlagWeeks(
   threshold: number,
 ): Record<Severity, WeekKey[]> {
   const flags: Record<Severity, WeekKey[]> = { over: [], risk: [] };
-  if (loads.classOf.get(a.id) === 'excluded') return flags;
   const committed = loads.committed.get(a.resourceId);
   const tentative = loads.tentative.get(a.resourceId);
   for (const w of weeks) {
-    if (!a.weekly[w]) continue;
+    if (!a.weekly[w] || loads.classAt(a, w) === 'excluded') continue;
     const sev = severity(committed?.get(w) ?? 0, tentative?.get(w) ?? 0, threshold);
     if (sev) flags[sev].push(w);
   }

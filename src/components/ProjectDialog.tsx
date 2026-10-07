@@ -94,8 +94,9 @@ export function ProjectDialog({ project, onClose }: Props) {
           </label>
         </div>
         <p className="muted small form-note">
-          Presales time always counts toward people&apos;s load. Delivery time counts once the workstream is Won, shows as
-          tentative (“at risk”) while it&apos;s in Pipeline, and stops counting if it&apos;s Lost.
+          Weeks before the start date are presales and always count toward people&apos;s load. From the start date
+          they&apos;re delivery: counted once Won, tentative (“at risk”) while Pipeline, not counted if Lost. With no
+          start date, a Pipeline workstream is all presales.
         </p>
         <div className="label-like">
           Required capabilities

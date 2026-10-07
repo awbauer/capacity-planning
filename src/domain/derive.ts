@@ -47,7 +47,12 @@ export function derive(plan: PlanData): Derived {
     assignmentsByProject: groupBy(plan.assignments, (a) => a.projectId),
     assignmentsByResource: groupBy(plan.assignments, (a) => a.resourceId),
     loads,
-    projectLoad: projectLoad(plan.assignments.filter((a) => loads.classOf.get(a.id) !== 'excluded')),
+    projectLoad: projectLoad(
+      plan.assignments.map((a) => ({
+        ...a,
+        weekly: Object.fromEntries(Object.entries(a.weekly).filter(([w]) => loads.classAt(a, w) !== 'excluded')),
+      })),
+    ),
     overallocations: findOverallocations(plan, loads),
     skillIssues,
     mismatchedAssignmentIds: new Set(

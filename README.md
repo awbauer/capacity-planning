@@ -8,7 +8,11 @@ A browser-based planner for allocating people (resources) to workstreams by % pe
 - **Conflicts panel**: lists current and upcoming overallocations, at-risk weeks and skill gaps. Click an item to jump to the row.
 - **Presales vs. delivery, pipeline vs. won**:
   - Each workstream has a status: *Pipeline*, *Won* or *Lost*.
-  - Each person's row on a workstream is either *Presales* or *Delivery*. A person can have one of each on the same workstream. Click the chip on the row to switch it.
+  - Each person has **one row per workstream**. The workstream's start date decides what each week is:
+    - Weeks **before the start date** are **presales**.
+    - Weeks **from the start date** on are **delivery**.
+    - With no start date, a *Pipeline* or *Lost* workstream is all presales and a *Won* one is all delivery.
+    - If a deal slips, move its start date.
   - **Presales** time always counts toward load, whether or not the deal is won.
   - **Delivery** time counts once the workstream is *Won*. While the workstream is *Pipeline* it is **tentative**: shown with a dashed outline in the grid and as a small `+N` in the Resources view. On a *Lost* workstream it isn't counted.
   - **Red / overallocated**: committed work alone is over the threshold.
@@ -23,12 +27,10 @@ Each week of a person's row on a workstream is **0, 25, 50 or 100%**. This is a 
 
 - **Totals aren't rounded.** Workstream FTE, a person's total load, and month/quarter averages show whatever the weeks add up to.
 - **Colors:**
-  - Presales circles are **violet**; delivery circles are **blue**.
+  - Presales weeks (before the start) are **violet**; delivery weeks are **blue**.
   - A dashed circle is pipeline delivery, which is tentative.
   - Red and amber mark overallocated and at-risk weeks.
 - **Workstream start and end** are drawn as vertical lines across the workstream's rows, labelled on the workstream row.
-  - Delivery rows are shaded before the start.
-  - Presales rows aren't, because that's when presales happens.
   - On the workstream row, pre-start weeks that have presales work are tinted violet.
   - Everything after the end is shaded.
 - The ◑ / % toggle in the toolbar switches cells between circles and numbers.
@@ -40,7 +42,7 @@ Each week of a person's row on a workstream is **0, 25, 50 or 100%**. This is a 
 | Clear | Select, then press Delete or Backspace |
 | Move | Arrow keys, Tab / Shift+Tab |
 | Month / quarter view | Clicking or typing sets every week in that period |
-| Put someone on a workstream for a date range | **+ Person** on a workstream row (or **+ Workstream** on a resource row). Pick Presales or Delivery (pipeline workstreams default to Presales) and 25 / 50 / 100%. Candidates are ranked by matching capabilities and show their peak load before and after the change. |
+| Put someone on a workstream for a date range | **+ Person** on a workstream row (or **+ Workstream** on a resource row). Pick 25 / 50 / 100% and a date range. A pipeline workstream that hasn't started defaults to now until its start date; the dialog says how many of the weeks are presales and how many delivery. Candidates are ranked by matching capabilities and show their peak load before and after the change. |
 | Undo / redo | Ctrl/⌘+Z, Ctrl/⌘+Shift+Z |
 
 Older saved data and imported files with other values (e.g. 60%) are rounded to the nearest step when loaded.

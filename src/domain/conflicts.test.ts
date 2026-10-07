@@ -1,24 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import { assignmentFlagWeeks, findOverallocations, findSkillIssues, isSkillMismatch, uncoveredTags } from './conflicts';
-import { splitLoads } from './load';
+import { splitLoads, weekKind } from './load';
 import { createEmptyPlan, createSamplePlan } from './sampleData';
-import type { AllocationKind, Assignment, PlanData, Project, ProjectStatus } from './types';
+import type { Assignment, PlanData, Project, ProjectStatus } from './types';
 
-const project = (id: string, status: ProjectStatus = 'won', tagIds: string[] = []): Project => ({
+const project = (id: string, status: ProjectStatus = 'won', tagIds: string[] = [], startWeek?: string): Project => ({
   id,
   name: id,
   sellerId: null,
   status,
   tagIds,
+  startWeek,
 });
 
 const alloc = (
   id: string,
   projectId: string,
   weekly: Record<string, number>,
-  kind: AllocationKind = 'delivery',
   resourceId = 'r',
-): Assignment => ({ id, projectId, resourceId, kind, weekly });
+): Assignment => ({ id, projectId, resourceId, weekly });
 
 function plan(patch: Partial<PlanData>): PlanData {
   return { ...createEmptyPlan(), projects: [project('p1'), project('p2')], ...patch };
@@ -55,16 +55,28 @@ describe('overallocation', () => {
 });
 
 describe('presales vs pipeline delivery', () => {
-  const projects = [project('won'), project('pipe', 'pipeline'), project('lost', 'lost')];
+  // All three start on 2026-10-05: earlier weeks are presales, later ones delivery.
+  const START = '2026-10-05';
+  const PRE = '2026-09-28';
+  const projects = [
+    project('won', 'won', [], START),
+    project('pipe', 'pipeline', [], START),
+    project('lost', 'lost', [], START),
+  ];
 
-  it('counts presales as committed even on pipeline and lost projects', () => {
+  it('decides presales vs delivery from the start date', () => {
+    expect(weekKind(projects[1], PRE)).toBe('presales');
+    expect(weekKind(projects[1], START)).toBe('delivery');
+    // Without a start date: won is delivery, pipeline and lost are presales.
+    expect(weekKind(project('w', 'won'), PRE)).toBe('delivery');
+    expect(weekKind(project('p', 'pipeline'), PRE)).toBe('presales');
+    expect(weekKind(project('l', 'lost'), PRE)).toBe('presales');
+  });
+
+  it('counts presales weeks as committed whatever the status', () => {
     const p = plan({
       projects,
-      assignments: [
-        alloc('a', 'won', { '2026-10-05': 80 }),
-        alloc('b', 'pipe', { '2026-10-05': 20 }, 'presales'),
-        alloc('c', 'lost', { '2026-10-05': 10 }, 'presales'),
-      ],
+      assignments: [alloc('a', 'won', { [PRE]: 80 }), alloc('b', 'pipe', { [PRE]: 20 }), alloc('c', 'lost', { [PRE]: 10 })],
     });
     expect(findOverallocations(p)).toEqual([
       expect.objectContaining({ severity: 'over', peak: 110, projectIds: ['won', 'pipe', 'lost'] }),
@@ -74,20 +86,31 @@ describe('presales vs pipeline delivery', () => {
   it('flags pipeline delivery that would push someone over as "risk", not "over"', () => {
     const p = plan({
       projects,
-      assignments: [alloc('a', 'won', { '2026-10-05': 80 }), alloc('b', 'pipe', { '2026-10-05': 40 })],
+      assignments: [alloc('a', 'won', { [START]: 80 }), alloc('b', 'pipe', { [START]: 40 })],
     });
     expect(findOverallocations(p)).toEqual([
       expect.objectContaining({ severity: 'risk', peak: 120, projectIds: ['won', 'pipe'] }),
     ]);
   });
 
-  it('ignores delivery on lost projects', () => {
+  it('ignores delivery weeks on lost workstreams', () => {
     const p = plan({
       projects,
-      assignments: [alloc('a', 'won', { '2026-10-05': 80 }), alloc('b', 'lost', { '2026-10-05': 80 })],
+      assignments: [alloc('a', 'won', { [START]: 80 }), alloc('b', 'lost', { [START]: 80 })],
     });
     expect(findOverallocations(p)).toEqual([]);
-    expect(splitLoads(p).classOf.get('b')).toBe('excluded');
+    expect(splitLoads(p).classAt(p.assignments[1], START)).toBe('excluded');
+  });
+
+  it('treats one row as presales before the start and delivery after it', () => {
+    const p = plan({
+      projects,
+      assignments: [alloc('a', 'won', { [PRE]: 80, [START]: 80 }), alloc('b', 'pipe', { [PRE]: 50, [START]: 50 })],
+    });
+    expect(findOverallocations(p).map((o) => [o.severity, o.from, o.peak])).toEqual([
+      ['over', PRE, 130],
+      ['risk', START, 130],
+    ]);
   });
 
   it('splits runs when severity changes week to week', () => {
