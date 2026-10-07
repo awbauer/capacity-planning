@@ -1,14 +1,18 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { WeekKey, Zoom } from '../domain/types';
+import type { ProjectStatus, WeekKey, Zoom } from '../domain/types';
 import { addWeeks, currentWeek } from '../domain/weeks';
 
 export type View = 'projects' | 'resources' | 'manage';
+
+/** How allocation cells render: Harvey-ball circles or plain numbers. */
+export type CellStyle = 'pie' | 'number';
 
 export interface Filters {
   text: string;
   tagId: string | null;
   sellerId: string | null;
+  status: ProjectStatus | null;
 }
 
 /** Row keys: `p:<projectId>` in the project view, `r:<resourceId>` in the resource view. */
@@ -22,6 +26,7 @@ interface UIState {
   /** Explicit expand/collapse choices; rows without one use the view's default. */
   expanded: Record<RowKey, boolean>;
   showConflicts: boolean;
+  cellStyle: CellStyle;
   /** Row to scroll to and highlight once it renders. */
   focusRow: RowKey | null;
   lastExportedAt: string | null;
@@ -35,6 +40,7 @@ interface UIState {
   setExpanded: (key: RowKey, expanded: boolean) => void;
   setAllExpanded: (keys: RowKey[], expanded: boolean) => void;
   toggleConflicts: () => void;
+  setCellStyle: (style: CellStyle) => void;
   jumpTo: (view: View, row: RowKey, week?: WeekKey) => void;
   clearFocusRow: () => void;
   markExported: (hash: string) => void;
@@ -49,9 +55,10 @@ export const useUIStore = create<UIState>()(
       view: 'projects',
       zoom: 'week',
       anchor: todayAnchor(),
-      filters: { text: '', tagId: null, sellerId: null },
+      filters: { text: '', tagId: null, sellerId: null, status: null },
       expanded: {},
       showConflicts: true,
+      cellStyle: 'pie',
       focusRow: null,
       lastExportedAt: null,
       lastExportedHash: null,
@@ -67,12 +74,13 @@ export const useUIStore = create<UIState>()(
           expanded: { ...s.expanded, ...Object.fromEntries(keys.map((k) => [k, expanded])) },
         })),
       toggleConflicts: () => set((s) => ({ showConflicts: !s.showConflicts })),
+      setCellStyle: (cellStyle) => set({ cellStyle }),
       jumpTo: (view, row, week) =>
         set((s) => ({
           view,
           focusRow: row,
           expanded: { ...s.expanded, [row]: true },
-          filters: { text: '', tagId: null, sellerId: null },
+          filters: { text: '', tagId: null, sellerId: null, status: null },
           anchor: week ? addWeeks(week, -2) : s.anchor,
         })),
       clearFocusRow: () => set({ focusRow: null }),
@@ -87,6 +95,7 @@ export const useUIStore = create<UIState>()(
         zoom: s.zoom,
         expanded: s.expanded,
         showConflicts: s.showConflicts,
+        cellStyle: s.cellStyle,
         lastExportedAt: s.lastExportedAt,
         lastExportedHash: s.lastExportedHash,
       }),

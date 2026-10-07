@@ -1,11 +1,13 @@
 import { useMemo, useRef } from 'react';
 import { hashString } from '../domain/hash';
+import { STATUS_LABELS } from '../domain/labels';
 import { parsePlan } from '../domain/schema';
-import type { Zoom } from '../domain/types';
+import type { ProjectStatus, Zoom } from '../domain/types';
 import { currentWeek, shiftAnchor, type Bucket } from '../domain/weeks';
 import { redo, undo, useHistory, usePlan, usePlanStore } from '../store/planStore';
 import { useUIStore, type View } from '../store/uiStore';
 import { useDerived } from '../store/useDerived';
+import { Pie } from './grid/Pie';
 
 const VIEWS: { id: View; label: string }[] = [
   { id: 'projects', label: 'Projects' },
@@ -120,6 +122,26 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
               </button>
             ))}
           </nav>
+          <nav className="segmented" aria-label="Cell display">
+            <button
+              type="button"
+              aria-pressed={ui.cellStyle === 'pie'}
+              aria-label="Circles"
+              title="Show allocations as filled circles"
+              onClick={() => ui.setCellStyle('pie')}
+            >
+              <Pie value={50} />
+            </button>
+            <button
+              type="button"
+              aria-pressed={ui.cellStyle === 'number'}
+              aria-label="Numbers"
+              title="Show allocations as numbers"
+              onClick={() => ui.setCellStyle('number')}
+            >
+              %
+            </button>
+          </nav>
           <div className="nav-group">
             <button type="button" className="btn" aria-label="Earlier" onClick={() => ui.setAnchor(shiftAnchor(ui.zoom, ui.anchor, -1))}>
               ◀
@@ -153,6 +175,18 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
                   {t.name}
                 </option>
               ))}
+          </select>
+          <select
+            aria-label="Filter by status"
+            value={ui.filters.status ?? ''}
+            onChange={(e) => ui.setFilters({ status: (e.target.value || null) as ProjectStatus | null })}
+          >
+            <option value="">All statuses</option>
+            {(Object.keys(STATUS_LABELS) as ProjectStatus[]).map((st) => (
+              <option key={st} value={st}>
+                {STATUS_LABELS[st]}
+              </option>
+            ))}
           </select>
           <select
             aria-label="Filter by seller"

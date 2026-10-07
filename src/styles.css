@@ -19,6 +19,12 @@
   --danger-strong: #f9b4ab;
   --warn: #93590a;
   --warn-bg: #fdf0d5;
+  --risk: #a15c00;
+  --risk-bg: #ffe8c2;
+  --risk-strong: #f5b860;
+  --presales: #7c3aed;
+  --presales-bg: #efe7fd;
+  --edge: #0f766e;
   --ok-bg: #d9f2df;
   --part-bg: #eef3fb;
   --hatch: rgba(102, 112, 133, 0.12);
@@ -46,6 +52,12 @@
     --danger-strong: #7a2a24;
     --warn: #f3c46b;
     --warn-bg: #3d2f12;
+    --risk: #ffb84d;
+    --risk-bg: #4a3010;
+    --risk-strong: #8a5a1c;
+    --presales: #a78bfa;
+    --presales-bg: #2a2140;
+    --edge: #2dd4bf;
     --ok-bg: #173a24;
     --part-bg: #1b2433;
     --hatch: rgba(152, 162, 179, 0.1);
@@ -322,6 +334,16 @@ button:focus-visible {
   border-color: var(--danger-strong);
 }
 
+.swatch-risk {
+  background: var(--risk-bg);
+  border-color: var(--risk-strong);
+}
+
+.swatch-tentative {
+  border-style: dashed;
+  border-color: var(--accent);
+}
+
 .swatch-outside {
   background: repeating-linear-gradient(135deg, var(--hatch) 0 3px, transparent 3px 6px);
 }
@@ -543,6 +565,43 @@ button:focus-visible {
   font-weight: 600;
 }
 
+.cell.risk {
+  background-color: var(--risk-bg);
+  color: var(--risk);
+  font-weight: 600;
+}
+
+.cell.edit.tentative {
+  font-style: italic;
+}
+
+.cell.edit.tentative.filled {
+  outline: 1px dashed var(--accent);
+  outline-offset: -3px;
+}
+
+.cell.edit.excluded {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.cell.edit.excluded.filled {
+  background-color: var(--surface-2);
+}
+
+.cell.edit.filled.presales {
+  background-color: var(--presales-bg);
+}
+
+/* Conflict tints win over the plain "has a value" tint. */
+.cell.edit.filled.over {
+  background-color: var(--danger-bg);
+}
+
+.cell.edit.filled.risk {
+  background-color: var(--risk-bg);
+}
+
 .cell.edit.selected {
   background-color: var(--sel);
 }
@@ -597,6 +656,39 @@ button:focus-visible {
 
 .grid tr.depth-0 td.heat-full {
   background-color: var(--ok-bg);
+}
+
+.grid tr.depth-0 td.heat-risk {
+  background-color: var(--risk-bg);
+  color: var(--risk);
+  font-weight: 600;
+}
+
+.grid tr.depth-0 td.heat-tentative {
+  background-image: repeating-linear-gradient(135deg, var(--fill) 0 3px, transparent 3px 6px);
+}
+
+.cell .extra {
+  font-size: 10px;
+  color: var(--muted);
+  font-style: italic;
+  margin-left: 2px;
+}
+
+.cell.fte.has-risk::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--risk-strong);
+}
+
+.grid tr.project-row.lost th.label .row-title,
+.grid tr.project-row.lost td {
+  opacity: 0.6;
 }
 
 .grid tr.depth-0 td.heat-over {
@@ -677,6 +769,76 @@ button:focus-visible {
   background: var(--warn-bg);
   border-color: transparent;
   color: var(--warn);
+}
+
+.badge-risk {
+  background: var(--risk-bg);
+  border-color: var(--risk-strong);
+  color: var(--risk);
+}
+
+.badge-tentative {
+  border-style: dashed;
+  border-color: var(--accent);
+  color: var(--accent);
+  background: none;
+}
+
+.pill-risk {
+  color: var(--risk);
+  font-weight: 700;
+}
+
+.danger-text {
+  color: var(--danger);
+}
+
+.kind {
+  font-size: 11px;
+  line-height: 17px;
+  padding: 0 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+}
+
+.kind-presales {
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--accent);
+}
+
+.status-select {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 4px;
+}
+
+.status-select.compact {
+  font-size: 11px;
+  padding: 0 2px;
+}
+
+.status-pipeline {
+  color: var(--accent);
+}
+
+.status-won {
+  color: #16a34a;
+}
+
+.status-lost {
+  color: var(--muted);
+}
+
+.status-text {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.form-note {
+  margin: 0;
 }
 
 .pill-danger {
@@ -1041,4 +1203,147 @@ button:focus-visible {
 .button-row {
   display: flex;
   gap: 8px;
+}
+
+/* Keep the focus ring visible over the dashed tentative outline. */
+.grid .cell.edit.focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* ---------- Harvey-ball cells ---------- */
+
+.cells-pie .cell.edit {
+  cursor: pointer;
+  --pie: var(--accent);
+}
+
+.cells-pie .cell.presales {
+  --pie: var(--presales);
+}
+
+.cells-pie .cell.edit.filled:not(.over):not(.risk):not(.selected):not(.excluded) {
+  background-color: transparent;
+}
+
+.cells-pie .cell.edit.tentative.filled:not(.focus) {
+  outline: none;
+}
+
+.cells-pie .cell.over {
+  --pie: var(--danger);
+}
+
+.cells-pie .cell.risk {
+  --pie: var(--risk);
+}
+
+.cells-pie .cell.excluded {
+  --pie: var(--muted);
+  text-decoration: none;
+}
+
+.pie-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  vertical-align: middle;
+}
+
+.pie {
+  display: block;
+}
+
+.pie-ring {
+  fill: var(--surface);
+  stroke: var(--pie);
+  stroke-width: 1.5;
+}
+
+.pie-fill {
+  fill: var(--pie);
+}
+
+.cell.tentative .pie-ring {
+  stroke-dasharray: 2.5 2;
+}
+
+.cell.tentative .pie-fill {
+  opacity: 0.55;
+}
+
+.cell.excluded .pie-fill {
+  opacity: 0.4;
+}
+
+.segmented .pie {
+  --pie: currentColor;
+  width: 16px;
+  height: 16px;
+}
+
+.segmented button:has(.pie) {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* ---------- Project start / end and the presales window ---------- */
+
+.cell.edge-start {
+  box-shadow: inset 2px 0 0 var(--edge);
+}
+
+.cell.edge-end {
+  box-shadow: inset -2px 0 0 var(--edge);
+}
+
+.cell.edge-start.edge-end {
+  box-shadow: inset 2px 0 0 var(--edge), inset -2px 0 0 var(--edge);
+}
+
+.cell.summary.edge-start::before,
+.cell.summary.edge-end::before {
+  position: absolute;
+  top: 2px;
+  font-size: 9px;
+  font-weight: 700;
+  font-style: normal;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--edge);
+}
+
+.cell.summary.edge-start::before {
+  content: 'Start';
+  left: 4px;
+}
+
+/* ::after is taken by the conflict dot, so End also uses ::before. */
+.cell.summary.edge-end::before {
+  content: 'End';
+  top: auto;
+  bottom: 2px;
+  right: 4px;
+}
+
+.cell.summary.edge-start.edge-end::before {
+  content: 'Start–End';
+}
+
+/* Presales activity before the project starts. */
+.grid tr.depth-0 td.prestart.has-presales {
+  background-color: var(--presales-bg);
+}
+
+.swatch-presales {
+  background: var(--presales);
+  border-color: var(--presales);
+  border-radius: 50%;
+}
+
+.swatch-edge {
+  width: 3px;
+  border: none;
+  border-radius: 0;
+  background: var(--edge);
 }

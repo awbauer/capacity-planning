@@ -8,14 +8,20 @@ import {
   type ReactNode,
 } from 'react';
 import { bucketStats } from '../../domain/aggregate';
+import { assignmentFlagWeeks } from '../../domain/conflicts';
+import type { Severity } from '../../domain/load';
 import type { WeekKey, Zoom } from '../../domain/types';
+import { nextStep } from '../../domain/steps';
 import { currentWeek, formatWeek, type Bucket } from '../../domain/weeks';
 import { usePlan, usePlanStore, type AllocationEdit } from '../../store/planStore';
 import { useUIStore } from '../../store/uiStore';
 import { useDerived } from '../../store/useDerived';
+import { Pie } from './Pie';
 
 export interface SummaryCell {
   text: string;
+  /** Secondary value shown small after the text (e.g. tentative load). */
+  extra?: string;
   className?: string;
   title?: string;
 }
@@ -29,7 +35,7 @@ export interface GridRow {
   assignmentId?: string;
   /** Read-only cells for summary rows. */
   summary?: (bucket: Bucket) => SummaryCell;
-  /** Project date range; cells fully outside it are shaded. */
+  /** Project date range: drawn as start/end lines; cells outside it are shaded (see rangeClasses). */
   range?: { start?: WeekKey; end?: WeekKey };
 }
 
@@ -47,6 +53,27 @@ interface Pos {
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
+/**
+ * Classes showing where a cell sits relative to its project's dates.
+ * - Start/end weeks get a vertical line ('edge-start' / 'edge-end').
+ * - After the end, every row is shaded as outside the project.
+ * - Before the start, delivery rows are shaded (delivery shouldn't happen yet),
+ *   presales rows are not (that's when presales happens), and the project row
+ *   gets a 'prestart' tint marking the presales window.
+ */
+function rangeClasses(range: GridRow['range'], b: Bucket, kind: 'delivery' | 'presales' | 'summary'): string[] {
+  if (!range) return [];
+  const out: string[] = [];
+  const { start, end } = range;
+  if (start && b.weeks.includes(start)) out.push('edge-start');
+  if (end && b.weeks.includes(end)) out.push('edge-end');
+  const before = !!start && b.weeks.every((w) => w < start);
+  const after = !!end && b.weeks.every((w) => w > end);
+  if (after || (before && kind === 'delivery')) out.push('outside');
+  else if (before && kind === 'summary') out.push('prestart');
+  return out;
+}
 
 function formatPct(v: number): string {
   return v ? String(Math.round(v)) : '';
@@ -70,6 +97,7 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
   const setAllocations = usePlanStore((s) => s.setAllocations);
   const focusRow = useUIStore((s) => s.focusRow);
   const clearFocusRow = useUIStore((s) => s.clearFocusRow);
+  const cellStyle = useUIStore((s) => s.cellStyle);
   const threshold = plan.settings.overallocationThreshold;
   const thisWeek = currentWeek();
 
@@ -84,6 +112,8 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
   const draftRef = useRef<string | null>(null);
   const selectAllOnFocus = useRef(false);
   const dragging = useRef(false);
+  /** Set once a drag leaves its starting cell, so the mouseup isn't treated as a click. */
+  const dragMoved = useRef(false);
 
   // Reset the selection when the set of editable rows or columns changes.
   const signature = editRows.map((r) => r.key).join('|') + '#' + buckets.map((b) => b.key).join('|');
@@ -129,14 +159,17 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     !!rect && r >= rect.r0 && r <= rect.r1 && c >= rect.c0 && c <= rect.c1;
   const isSingle = !!rect && rect.r0 === rect.r1 && rect.c0 === rect.c1;
 
-  const applyToSelection = (percent: number) => {
-    if (!rect) return;
-    const weeks = buckets.slice(rect.c0, rect.c1 + 1).flatMap((b) => b.weeks);
+  const applyToCells = (area: { r0: number; r1: number; c0: number; c1: number }, percent: number) => {
+    const weeks = buckets.slice(area.c0, area.c1 + 1).flatMap((b) => b.weeks);
     const edits: AllocationEdit[] = [];
-    for (let r = rect.r0; r <= rect.r1; r++) {
+    for (let r = area.r0; r <= area.r1; r++) {
       edits.push({ assignmentId: editRows[r].assignmentId!, weeks, percent });
     }
     setAllocations(edits);
+  };
+
+  const applyToSelection = (percent: number) => {
+    if (rect) applyToCells(rect, percent);
   };
 
   const move = (dr: number, dc: number, extend = false) => {
@@ -179,6 +212,11 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
       e.preventDefault();
       const st = cellValue(editRows[focus.r].assignmentId!, buckets[focus.c]);
       startEditing(formatPct(st.avg), true);
+    } else if (e.key === ' ') {
+      // Space cycles the whole selection to the step after the focused cell's value.
+      e.preventDefault();
+      const st = cellValue(editRows[focus.r].assignmentId!, buckets[focus.c]);
+      applyToSelection(nextStep(st.avg));
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
       e.preventDefault();
       applyToSelection(0);
@@ -200,55 +238,71 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
   const onCellMouseDown = (pos: Pos, e: MouseEvent) => {
     if (e.button !== 0) return;
     dragging.current = true;
+    dragMoved.current = false;
     setFocus(pos);
     if (!e.shiftKey || !anchor) setAnchor(pos);
   };
 
-  const overTitle = (resourceId: string, week: WeekKey, total: number) => {
+  /** Tooltip explaining a flagged week: committed vs tentative load and what makes it up. */
+  const loadTitle = (resourceId: string, week: WeekKey, sev: Severity) => {
     const resource = d.resourcesById.get(resourceId);
+    const committed = d.loads.committed.get(resourceId)?.get(week) ?? 0;
+    const tentative = d.loads.tentative.get(resourceId)?.get(week) ?? 0;
     const parts = (d.assignmentsByResource.get(resourceId) ?? [])
-      .filter((a) => a.weekly[week])
-      .map((a) => `${d.projectsById.get(a.projectId)?.name ?? '?'} ${a.weekly[week]}%`);
-    return `${resource?.name ?? 'Resource'} is at ${total}% in the week of ${formatWeek(week)}: ${parts.join(', ')}`;
+      .filter((a) => a.weekly[week] && d.loads.classOf.get(a.id) !== 'excluded')
+      .map((a) => {
+        const tag = a.kind === 'presales' ? 'presales' : d.loads.classOf.get(a.id) === 'tentative' ? 'pipeline' : 'delivery';
+        return `${d.projectsById.get(a.projectId)?.name ?? '?'} ${a.weekly[week]}% (${tag})`;
+      });
+    const head =
+      sev === 'over'
+        ? `${resource?.name ?? 'Resource'} is at ${committed}% committed`
+        : `${resource?.name ?? 'Resource'} would be at ${committed + tentative}% if pipeline work is won (${committed}% committed)`;
+    return `${head} in the week of ${formatWeek(week)}: ${parts.join(', ')}`;
   };
 
   const renderEditCell = (row: GridRow, r: number, b: Bucket, c: number) => {
     const a = assignmentsById.get(row.assignmentId!);
     if (!a) return <td key={b.key} />;
     const st = cellValue(a.id, b);
-    const load = d.resourceLoad.get(a.resourceId);
-    const overWeek = b.weeks.find((w) => (a.weekly[w] ?? 0) > 0 && (load?.get(w) ?? 0) > threshold);
-    const outside =
-      row.range &&
-      b.weeks.every((w) => (row.range!.start && w < row.range!.start) || (row.range!.end && w > row.range!.end));
+    const cls = d.loads.classOf.get(a.id);
+    const flags = assignmentFlagWeeks(a, b.weeks, d.loads, threshold);
+    const flagWeek = flags.over[0] ?? flags.risk[0];
+    const flag: Severity | null = flags.over.length ? 'over' : flags.risk.length ? 'risk' : null;
     const selected = inSelection(r, c);
     const isFocus = focus?.r === r && focus?.c === c;
-    const classes = ['cell', 'edit'];
+    const classes = ['cell', 'edit', a.kind, ...rangeClasses(row.range, b, a.kind)];
     if (selected) classes.push('selected');
     if (isFocus) classes.push('focus');
-    if (outside) classes.push('outside');
-    if (overWeek) classes.push('over');
+    if (flag) classes.push(flag);
+    if (cls === 'tentative') classes.push('tentative');
+    if (cls === 'excluded') classes.push('excluded');
     if (b.weeks.includes(thisWeek)) classes.push('today');
     if (st.avg > 0) classes.push('filled');
 
     let title: string | undefined;
-    if (overWeek) title = overTitle(a.resourceId, overWeek, load!.get(overWeek)!);
-    else if (st.mixed) title = `Varies by week: avg ${Math.round(st.avg)}%, peak ${st.peak}%. Typing sets every week.`;
+    if (flag) title = `This row: ${Math.round(st.avg)}%. ${loadTitle(a.resourceId, flagWeek, flag)}`;
+    else if (cls === 'excluded' && st.avg > 0) title = 'Delivery on a lost project: not counted toward load.';
+    else if (st.mixed) title = `Varies by week: avg ${Math.round(st.avg)}%, peak ${st.peak}%. Clicking or typing sets every week.`;
+    else if (st.avg > 0) title = `${Math.round(st.avg)}%`;
 
     return (
       <td
         key={b.key}
         data-pos={`${r}:${c}`}
+        data-value={Math.round(st.avg)}
         className={classes.join(' ')}
         title={title}
         onMouseDown={(e) => onCellMouseDown({ r, c }, e)}
         onMouseEnter={() => {
-          if (dragging.current) setFocus({ r, c });
-        }}
-        onDoubleClick={() => {
-          setAnchor({ r, c });
+          if (!dragging.current) return;
+          dragMoved.current = true;
           setFocus({ r, c });
-          startEditing(formatPct(st.avg), true);
+        }}
+        onClick={(e) => {
+          // A plain click cycles 0 → 25 → 50 → 100 → 0; drags and shift-clicks only select.
+          if (e.shiftKey || dragMoved.current || draft !== null) return;
+          applyToCells({ r0: r, r1: r, c0: c, c1: c }, nextStep(st.avg));
         }}
       >
         {isFocus && draft !== null ? (
@@ -286,6 +340,13 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
               }
             }}
           />
+        ) : cellStyle === 'pie' ? (
+          st.avg > 0 && (
+            <span className="pie-wrap">
+              {st.mixed && <span className="mixed">~</span>}
+              <Pie value={st.avg} />
+            </span>
+          )
         ) : (
           <>
             {st.mixed && st.avg > 0 && <span className="mixed">~</span>}
@@ -298,15 +359,12 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
 
   const renderSummaryCell = (row: GridRow, b: Bucket) => {
     const cell = row.summary?.(b);
-    const outside =
-      row.range &&
-      b.weeks.every((w) => (row.range!.start && w < row.range!.start) || (row.range!.end && w > row.range!.end));
-    const classes = ['cell', 'summary', cell?.className ?? ''];
-    if (outside) classes.push('outside');
+    const classes = ['cell', 'summary', cell?.className ?? '', ...rangeClasses(row.range, b, 'summary')];
     if (b.weeks.includes(thisWeek)) classes.push('today');
     return (
       <td key={b.key} className={classes.join(' ')} title={cell?.title}>
         {cell?.text}
+        {cell?.extra && <span className="extra">{cell.extra}</span>}
       </td>
     );
   };
@@ -314,7 +372,7 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
   return (
     <div
       ref={scrollRef}
-      className={`grid-scroll zoom-${zoom}`}
+      className={`grid-scroll zoom-${zoom} cells-${cellStyle}`}
       tabIndex={0}
       onKeyDown={onGridKeyDown}
       aria-label="Allocation grid"

@@ -1,5 +1,6 @@
-import { projectLoad, resourceLoad, type WeekTotals } from './aggregate';
+import { projectLoad, type WeekTotals } from './aggregate';
 import { findOverallocations, findSkillIssues, type Overallocation, type SkillIssue } from './conflicts';
+import { splitLoads, type SplitLoads } from './load';
 import type { Assignment, CapabilityTag, PlanData, Project, Resource, Seller } from './types';
 
 /** Lookups and conflict results computed once per plan version. */
@@ -10,7 +11,9 @@ export interface Derived {
   projectsById: Map<string, Project>;
   assignmentsByProject: Map<string, Assignment[]>;
   assignmentsByResource: Map<string, Assignment[]>;
-  resourceLoad: Map<string, WeekTotals>;
+  /** Per-resource weekly load, split into committed and tentative (pipeline delivery). */
+  loads: SplitLoads;
+  /** Per-project weekly total, excluding delivery on lost projects. */
   projectLoad: Map<string, WeekTotals>;
   overallocations: Overallocation[];
   skillIssues: SkillIssue[];
@@ -34,7 +37,7 @@ function groupBy<T>(items: T[], key: (item: T) => string): Map<string, T[]> {
 export function derive(plan: PlanData): Derived {
   const hit = cache.get(plan);
   if (hit) return hit;
-  const load = resourceLoad(plan.assignments);
+  const loads = splitLoads(plan);
   const skillIssues = findSkillIssues(plan);
   const derived: Derived = {
     tagsById: new Map(plan.tags.map((t) => [t.id, t])),
@@ -43,9 +46,9 @@ export function derive(plan: PlanData): Derived {
     projectsById: new Map(plan.projects.map((p) => [p.id, p])),
     assignmentsByProject: groupBy(plan.assignments, (a) => a.projectId),
     assignmentsByResource: groupBy(plan.assignments, (a) => a.resourceId),
-    resourceLoad: load,
-    projectLoad: projectLoad(plan.assignments),
-    overallocations: findOverallocations(plan, load),
+    loads,
+    projectLoad: projectLoad(plan.assignments.filter((a) => loads.classOf.get(a.id) !== 'excluded')),
+    overallocations: findOverallocations(plan, loads),
     skillIssues,
     mismatchedAssignmentIds: new Set(
       skillIssues.flatMap((i) => (i.kind === 'mismatch' ? [i.assignmentId] : [])),

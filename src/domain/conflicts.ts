@@ -1,14 +1,16 @@
-import { resourceLoad, type WeekTotals } from './aggregate';
+import { severity, splitLoads, type LoadClass, type Severity, type SplitLoads } from './load';
 import type { Assignment, PlanData, Project, Resource, WeekKey } from './types';
 import { addWeeks } from './weeks';
 
 export interface Overallocation {
   resourceId: string;
+  severity: Severity;
   from: WeekKey;
   to: WeekKey;
   weeks: WeekKey[];
+  /** Highest committed load in the run (for 'over') or committed + tentative (for 'risk'). */
   peak: number;
-  /** Projects with a non-zero allocation in any of these weeks. */
+  /** Projects with a counted, non-zero allocation in any of these weeks. */
   projectIds: string[];
 }
 
@@ -20,53 +22,81 @@ export function isOver(total: number, threshold: number): boolean {
   return total > threshold;
 }
 
-/** Overallocated weeks per resource, merged into runs of consecutive weeks. */
-export function findOverallocations(
-  plan: PlanData,
-  load: Map<string, WeekTotals> = resourceLoad(plan.assignments),
-): Overallocation[] {
+/**
+ * Weeks where a resource is over the threshold, merged into runs of
+ * consecutive weeks with the same severity.
+ */
+export function findOverallocations(plan: PlanData, loads: SplitLoads = splitLoads(plan)): Overallocation[] {
   const threshold = plan.settings.overallocationThreshold;
   const out: Overallocation[] = [];
-  for (const [resourceId, totals] of load) {
-    const overWeeks = [...totals.entries()]
-      .filter(([, v]) => isOver(v, threshold))
-      .map(([w]) => w)
-      .sort();
+  const resourceIds = new Set([...loads.committed.keys(), ...loads.tentative.keys()]);
+
+  for (const resourceId of resourceIds) {
+    const committed = loads.committed.get(resourceId);
+    const tentative = loads.tentative.get(resourceId);
+    const c = (w: WeekKey) => committed?.get(w) ?? 0;
+    const t = (w: WeekKey) => tentative?.get(w) ?? 0;
+    const weeks = [...new Set([...(committed?.keys() ?? []), ...(tentative?.keys() ?? [])])].sort();
+    const mine = plan.assignments.filter((a) => a.resourceId === resourceId);
+
     let run: WeekKey[] = [];
+    let runSeverity: Severity | null = null;
     const flush = () => {
-      if (run.length === 0) return;
+      if (!runSeverity || run.length === 0) return;
+      const sev = runSeverity;
+      const counts = (cls: LoadClass | undefined) =>
+        cls === 'committed' || (sev === 'risk' && cls === 'tentative');
       const projectIds = new Set<string>();
-      for (const a of plan.assignments) {
-        if (a.resourceId !== resourceId) continue;
-        if (run.some((w) => a.weekly[w])) projectIds.add(a.projectId);
+      for (const a of mine) {
+        if (counts(loads.classOf.get(a.id)) && run.some((w) => a.weekly[w])) projectIds.add(a.projectId);
       }
       out.push({
         resourceId,
+        severity: sev,
         from: run[0],
         to: run[run.length - 1],
         weeks: run,
-        peak: Math.max(...run.map((w) => totals.get(w) ?? 0)),
+        peak: Math.max(...run.map((w) => (sev === 'over' ? c(w) : c(w) + t(w)))),
         projectIds: [...projectIds],
       });
       run = [];
+      runSeverity = null;
     };
-    for (const w of overWeeks) {
-      if (run.length && addWeeks(run[run.length - 1], 1) !== w) flush();
-      run.push(w);
+
+    for (const w of weeks) {
+      const sev = severity(c(w), t(w), threshold);
+      const continues = sev !== null && sev === runSeverity && addWeeks(run[run.length - 1], 1) === w;
+      if (!continues) flush();
+      if (sev) {
+        run.push(w);
+        runSeverity = sev;
+      }
     }
     flush();
   }
-  return out.sort((a, b) => a.from.localeCompare(b.from) || a.resourceId.localeCompare(b.resourceId));
+  return out.sort(
+    (a, b) =>
+      a.from.localeCompare(b.from) || a.resourceId.localeCompare(b.resourceId) || a.severity.localeCompare(b.severity),
+  );
 }
 
-/** Weeks (of those given) in which this assignment contributes to an overallocation. */
-export function assignmentOverWeeks(
+/** Of the given weeks, those in which this assignment adds to an 'over' or 'risk' week. */
+export function assignmentFlagWeeks(
   a: Assignment,
   weeks: WeekKey[],
-  load: WeekTotals | undefined,
+  loads: SplitLoads,
   threshold: number,
-): WeekKey[] {
-  return weeks.filter((w) => (a.weekly[w] ?? 0) > 0 && isOver(load?.get(w) ?? 0, threshold));
+): Record<Severity, WeekKey[]> {
+  const flags: Record<Severity, WeekKey[]> = { over: [], risk: [] };
+  if (loads.classOf.get(a.id) === 'excluded') return flags;
+  const committed = loads.committed.get(a.resourceId);
+  const tentative = loads.tentative.get(a.resourceId);
+  for (const w of weeks) {
+    if (!a.weekly[w]) continue;
+    const sev = severity(committed?.get(w) ?? 0, tentative?.get(w) ?? 0, threshold);
+    if (sev) flags[sev].push(w);
+  }
+  return flags;
 }
 
 /** True when the project requires capabilities and the resource has none of them. */
@@ -95,6 +125,7 @@ export function uncoveredTags(
   return project.tagIds.filter((t) => !covered.has(t));
 }
 
+/** Skill problems on live projects (lost projects are ignored). */
 export function findSkillIssues(plan: PlanData): SkillIssue[] {
   const resourcesById = new Map(plan.resources.map((r) => [r.id, r]));
   const projectsById = new Map(plan.projects.map((p) => [p.id, p]));
@@ -102,11 +133,12 @@ export function findSkillIssues(plan: PlanData): SkillIssue[] {
   for (const a of plan.assignments) {
     const r = resourcesById.get(a.resourceId);
     const p = projectsById.get(a.projectId);
-    if (r && p && isSkillMismatch(r, p)) {
+    if (r && p && p.status !== 'lost' && isSkillMismatch(r, p)) {
       issues.push({ kind: 'mismatch', assignmentId: a.id, projectId: p.id, resourceId: r.id });
     }
   }
   for (const p of plan.projects) {
+    if (p.status === 'lost') continue;
     const tagIds = uncoveredTags(p, plan);
     if (tagIds.length) issues.push({ kind: 'uncovered', projectId: p.id, tagIds });
   }

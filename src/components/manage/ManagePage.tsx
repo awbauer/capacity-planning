@@ -4,6 +4,7 @@ import { normalizeWeek } from '../../domain/weeks';
 import { usePlan, usePlanStore } from '../../store/planStore';
 import { useDerived } from '../../store/useDerived';
 import { SellerPicker } from '../SellerPicker';
+import { StatusSelect } from '../StatusControls';
 import { TagPicker } from '../TagPicker';
 import { AddRow, InlineText } from './InlineText';
 
@@ -103,13 +104,14 @@ function ProjectsTable() {
   return (
     <section>
       <p className="muted">Required capabilities are compared against assigned people. Dates shade the grid outside the project.</p>
-      <AddRow placeholder="New project name…" onAdd={(name) => s.addProject({ name, sellerId: null, tagIds: [] })} />
+      <AddRow placeholder="New project name…" onAdd={(name) => s.addProject({ name, sellerId: null, status: 'pipeline', tagIds: [] })} />
       <table className="table">
         <thead>
           <tr>
             <th>Name</th>
             <th>Client</th>
             <th>Seller</th>
+            <th>Status</th>
             <th>Required capabilities</th>
             <th>Start</th>
             <th>End</th>
@@ -130,6 +132,9 @@ function ProjectsTable() {
                 </td>
                 <td>
                   <SellerPicker value={p.sellerId} onChange={(sellerId) => s.updateProject(p.id, { sellerId })} />
+                </td>
+                <td>
+                  <StatusSelect value={p.status} onChange={(status) => s.updateProject(p.id, { status })} />
                 </td>
                 <td className="wide">
                   <TagPicker value={p.tagIds} onChange={(tagIds) => s.updateProject(p.id, { tagIds })} />

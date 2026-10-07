@@ -45,7 +45,7 @@ describe('planStore', () => {
     expect(weekly()['2026-10-05']).toBe(25);
   });
 
-  it('clears weeks set to 0 and clamps bad input', () => {
+  it('clears weeks set to 0 and snaps other values to 0/25/50/100', () => {
     store().setAllocations([
       { assignmentId: 'sample-a1', weeks: ['2026-10-05'], percent: 0 },
       { assignmentId: 'sample-a1', weeks: ['2026-10-12'], percent: -5 },
@@ -54,15 +54,26 @@ describe('planStore', () => {
     const weekly = store().plan.assignments.find((a) => a.id === 'sample-a1')!.weekly;
     expect('2026-10-05' in weekly).toBe(false);
     expect('2026-10-12' in weekly).toBe(false);
-    expect(weekly['2026-10-19']).toBe(63);
+    expect(weekly['2026-10-19']).toBe(50);
   });
 
   it('adds an assignment with a filled range, reusing an existing row', () => {
-    const a = store().addAssignment('proj-acme', 'res-drew', { percent: 40, from: '2026-10-05', to: '2026-10-19' });
+    const a = store().addAssignment('proj-acme', 'res-drew', 'delivery', { percent: 50, from: '2026-10-05', to: '2026-10-19' });
     expect(Object.keys(a.weekly)).toEqual(['2026-10-05', '2026-10-12', '2026-10-19']);
-    const again = store().addAssignment('proj-acme', 'res-drew', { percent: 20, from: '2026-10-26', to: '2026-10-26' });
+    const again = store().addAssignment('proj-acme', 'res-drew', 'delivery', { percent: 25, from: '2026-10-26', to: '2026-10-26' });
     expect(again.id).toBe(a.id);
     expect(store().plan.assignments.filter((x) => x.resourceId === 'res-drew' && x.projectId === 'proj-acme')).toHaveLength(1);
-    expect(again.weekly).toMatchObject({ '2026-10-05': 40, '2026-10-26': 20 });
+    expect(again.weekly).toMatchObject({ '2026-10-05': 50, '2026-10-26': 25 });
+  });
+
+  it('keeps presales and delivery as separate rows for the same person', () => {
+    const presales = store().addAssignment('proj-acme', 'res-drew', 'presales', { percent: 10, from: '2026-10-05', to: '2026-10-05' });
+    const delivery = store().addAssignment('proj-acme', 'res-drew', 'delivery', { percent: 50, from: '2026-10-05', to: '2026-10-05' });
+    expect(presales.id).not.toBe(delivery.id);
+    // Switching to a kind the person already has on this project is refused.
+    expect(store().setAssignmentKind(presales.id, 'delivery')).toBe(false);
+    store().removeAssignment(delivery.id);
+    expect(store().setAssignmentKind(presales.id, 'delivery')).toBe(true);
+    expect(store().plan.assignments.find((a) => a.id === presales.id)?.kind).toBe('delivery');
   });
 });

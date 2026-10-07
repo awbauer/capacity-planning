@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { bucketStats, totalsGetter } from '../domain/aggregate';
-import { isOver } from '../domain/conflicts';
+import { assignmentFlagWeeks } from '../domain/conflicts';
 import type { Derived } from '../domain/derive';
+import { STATUS_LABELS } from '../domain/labels';
+import { severity } from '../domain/load';
 import type { Resource } from '../domain/types';
 import type { Bucket } from '../domain/weeks';
 import { usePlan, usePlanStore } from '../store/planStore';
@@ -9,6 +11,7 @@ import { isExpanded, useUIStore, type Filters } from '../store/uiStore';
 import { useDerived } from '../store/useDerived';
 import { AddAssignmentDialog } from './AddAssignmentDialog';
 import { TagChips } from './Chips';
+import { AssignmentBadges } from './StatusControls';
 import { TimeGrid, type GridRow } from './grid/TimeGrid';
 
 interface Props {
@@ -21,6 +24,7 @@ function matchesFilters(r: Resource, f: Filters, d: Derived): boolean {
   if (f.sellerId && !assignments.some((a) => d.projectsById.get(a.projectId)?.sellerId === f.sellerId)) {
     return false;
   }
+  if (f.status && !assignments.some((a) => d.projectsById.get(a.projectId)?.status === f.status)) return false;
   const q = f.text.trim().toLowerCase();
   if (!q) return true;
   return [r.name, r.role ?? ''].some((s) => s.toLowerCase().includes(q));
@@ -47,11 +51,15 @@ export function ResourceView({ buckets }: Props) {
   for (const r of resources) {
     const key = `r:${r.id}`;
     const open = isExpanded(expanded, key);
-    const load = d.resourceLoad.get(r.id);
-    const get = totalsGetter(load);
-    const overCount = visibleWeeks.filter((w) => isOver(get(w), threshold)).length;
-    const assignments = [...(d.assignmentsByResource.get(r.id) ?? [])].sort((a, b) =>
-      (d.projectsById.get(a.projectId)?.name ?? '').localeCompare(d.projectsById.get(b.projectId)?.name ?? ''),
+    const committed = totalsGetter(d.loads.committed.get(r.id));
+    const tentative = totalsGetter(d.loads.tentative.get(r.id));
+    const sevOf = (w: string) => severity(committed(w), tentative(w), threshold);
+    const overCount = visibleWeeks.filter((w) => sevOf(w) === 'over').length;
+    const riskCount = visibleWeeks.filter((w) => sevOf(w) === 'risk').length;
+    const assignments = [...(d.assignmentsByResource.get(r.id) ?? [])].sort(
+      (a, b) =>
+        (d.projectsById.get(a.projectId)?.name ?? '').localeCompare(d.projectsById.get(b.projectId)?.name ?? '') ||
+        a.kind.localeCompare(b.kind),
     );
 
     rows.push({
@@ -80,11 +88,18 @@ export function ResourceView({ buckets }: Props) {
                 {assignments.length} project{assignments.length === 1 ? '' : 's'}
               </span>
             </div>
-            {overCount > 0 && (
+            {(overCount > 0 || riskCount > 0) && (
               <div className="row-badges">
-                <span className="badge badge-danger">
-                  ⚠ Over {threshold}% in {overCount} week{overCount === 1 ? '' : 's'}
-                </span>
+                {overCount > 0 && (
+                  <span className="badge badge-danger" title="Committed work (presales + won delivery) over capacity">
+                    ⚠ Over {threshold}% in {overCount} week{overCount === 1 ? '' : 's'}
+                  </span>
+                )}
+                {riskCount > 0 && (
+                  <span className="badge badge-risk" title="Over capacity only if pipeline delivery work is won">
+                    At risk {riskCount} week{riskCount === 1 ? '' : 's'}
+                  </span>
+                )}
               </div>
             )}
           </div>
@@ -94,18 +109,25 @@ export function ResourceView({ buckets }: Props) {
         </div>
       ),
       summary: (b) => {
-        const st = bucketStats(get, b.weeks);
+        const c = bucketStats(committed, b.weeks);
+        const t = bucketStats(tentative, b.weeks);
+        const sevs = b.weeks.map(sevOf);
         let className = 'heat';
-        if (isOver(st.peak, threshold)) className += ' heat-over';
-        else if (st.avg >= threshold * 0.8) className += ' heat-full';
-        else if (st.avg > 0) className += ' heat-part';
-        const title =
-          st.avg || st.peak
-            ? b.weeks.length > 1
-              ? `Average ${Math.round(st.avg)}%, peak week ${st.peak}%`
-              : `${st.peak}% allocated`
-            : 'Unallocated';
-        return { text: st.avg ? String(Math.round(st.avg)) : '', className, title };
+        if (sevs.includes('over')) className += ' heat-over';
+        else if (sevs.includes('risk')) className += ' heat-risk';
+        else if (c.avg >= threshold * 0.8) className += ' heat-full';
+        else if (c.avg > 0) className += ' heat-part';
+        else if (t.avg > 0) className += ' heat-tentative';
+        const multi = b.weeks.length > 1;
+        const parts: string[] = [];
+        if (c.avg || c.peak) parts.push(multi ? `Committed avg ${Math.round(c.avg)}%, peak ${c.peak}%` : `${c.peak}% committed`);
+        if (t.avg || t.peak) parts.push(multi ? `pipeline avg +${Math.round(t.avg)}%` : `+${t.peak}% pipeline (tentative)`);
+        return {
+          text: c.avg ? String(Math.round(c.avg)) : '',
+          extra: t.avg ? `+${Math.round(t.avg)}` : undefined,
+          className,
+          title: parts.length ? parts.join(' · ') : 'Unallocated',
+        };
       },
     });
 
@@ -114,6 +136,8 @@ export function ResourceView({ buckets }: Props) {
       const p = d.projectsById.get(a.projectId);
       if (!p) continue;
       const mismatch = d.mismatchedAssignmentIds.has(a.id);
+      const flags = assignmentFlagWeeks(a, visibleWeeks, d.loads, threshold);
+      const over = flags.over.length > 0;
       rows.push({
         key: `a:${a.id}`,
         depth: 1,
@@ -125,14 +149,15 @@ export function ResourceView({ buckets }: Props) {
               <div className="row-title">
                 {p.name}
                 {p.client && <span className="muted small"> · {p.client}</span>}
+                <span className={`status-text status-${p.status}`}> · {STATUS_LABELS[p.status]}</span>
               </div>
-              {mismatch && (
-                <div className="row-badges">
-                  <span className="badge badge-warn" title="This person has none of the project's required capabilities">
-                    Skill mismatch
-                  </span>
-                </div>
-              )}
+              <AssignmentBadges
+                assignment={a}
+                cls={d.loads.classOf.get(a.id)}
+                over={over}
+                risk={!over && flags.risk.length > 0}
+                mismatch={mismatch}
+              />
             </div>
             <button
               type="button"
@@ -141,7 +166,7 @@ export function ResourceView({ buckets }: Props) {
               title="Remove from project"
               onClick={() => {
                 const weeks = Object.keys(a.weekly).length;
-                if (weeks === 0 || window.confirm(`Remove ${r.name} from ${p.name}? This clears ${weeks} week(s) of allocation (undo with Ctrl+Z).`)) {
+                if (weeks === 0 || window.confirm(`Remove ${r.name}'s ${a.kind} row from ${p.name}? This clears ${weeks} week(s) of allocation (undo with Ctrl+Z).`)) {
                   removeAssignment(a.id);
                 }
               }}
