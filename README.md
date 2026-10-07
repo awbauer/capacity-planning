@@ -21,7 +21,7 @@ A browser-based planner for allocating people (resources) to workstreams by % pe
   - Flags, based on a person's weekly load:
     - **Red, overallocated:** committed work of 150% or more.
     - **Orange, stretched:** committed work of 101–149%.
-    - **Yellow, at risk:** committed work fits, but goes over 100% if pipeline delivery is won.
+    - **At risk:** committed work fits, but goes over 100% if pipeline delivery is won. In the grid these show the same orange text, with the pipeline share shown as `+N` and dashed circles. They have their own yellow "At risk" badge and conflicts-panel section.
   - Both thresholds can be changed under Manage → Settings & data.
   - There's deliberately no win-probability %. A per-person "140% weighted" load isn't something anyone can act on.
 - **Capability tags** go on both resources and workstreams. Create them from Manage → Capabilities, or by typing a new name into any capability picker.
@@ -35,7 +35,7 @@ Each week of a person's row on a workstream is **0, 25, 50 or 100%**. This is a 
 - **Colors:**
   - Presales weeks (before the start) are **violet**; delivery weeks are **blue**.
   - A dashed circle is pipeline delivery, which is tentative.
-  - Red, orange and yellow mark overallocated, stretched and at-risk weeks.
+  - Red marks overallocated weeks. Orange text marks stretched and at-risk weeks.
 - **Workstream start and end** are drawn as vertical lines across the workstream's rows, labelled on the workstream row.
   - On the workstream row, pre-start weeks that have presales work are tinted violet.
   - Everything after the end is shaded.

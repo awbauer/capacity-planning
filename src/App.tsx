@@ -74,8 +74,7 @@ export function App() {
               <span className="swatch swatch-presales" /> presales
               <span className="swatch swatch-edge" /> workstream start / end
               <span className="swatch swatch-over" /> overallocated (150%+)
-              <span className="swatch swatch-stretch" /> stretched (101–149%)
-              <span className="swatch swatch-risk" /> at risk if pipeline wins
+              <span className="swatch swatch-stretch" /> stretched (101–149%) or at risk (pipeline)
               <span className="swatch swatch-tentative" /> tentative (pipeline delivery)
               <span className="swatch swatch-outside" /> outside workstream dates
               <span className="mixed">~</span> varies by week
