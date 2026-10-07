@@ -111,8 +111,6 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
   const draftRef = useRef<string | null>(null);
   const selectAllOnFocus = useRef(false);
   const dragging = useRef(false);
-  /** Set once a drag leaves its starting cell, so the mouseup isn't treated as a click. */
-  const dragMoved = useRef(false);
 
   // Reset the selection when the set of editable rows or columns changes.
   const signature = editRows.map((r) => r.key).join('|') + '#' + buckets.map((b) => b.key).join('|');
@@ -237,7 +235,6 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
   const onCellMouseDown = (pos: Pos, e: MouseEvent) => {
     if (e.button !== 0) return;
     dragging.current = true;
-    dragMoved.current = false;
     setFocus(pos);
     if (!e.shiftKey || !anchor) setAnchor(pos);
   };
@@ -291,7 +288,7 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     let title: string | undefined;
     if (flag) title = `This row: ${Math.round(st.avg)}%. ${loadTitle(a.resourceId, flagWeek, flag)}`;
     else if (cls === 'excluded' && st.avg > 0) title = 'Delivery on a lost workstream: not counted toward load.';
-    else if (st.mixed) title = `Varies by week: avg ${Math.round(st.avg)}%, peak ${st.peak}%. Clicking or typing sets every week.`;
+    else if (st.mixed) title = `Varies by week: avg ${Math.round(st.avg)}%, peak ${st.peak}%. Double-clicking or typing sets every week.`;
     else if (st.avg > 0) title = `${Math.round(st.avg)}%`;
 
     return (
@@ -303,13 +300,11 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
         title={title}
         onMouseDown={(e) => onCellMouseDown({ r, c }, e)}
         onMouseEnter={() => {
-          if (!dragging.current) return;
-          dragMoved.current = true;
-          setFocus({ r, c });
+          if (dragging.current) setFocus({ r, c });
         }}
-        onClick={(e) => {
-          // A plain click cycles 0 → 25 → 50 → 100 → 0; drags and shift-clicks only select.
-          if (e.shiftKey || dragMoved.current || draft !== null) return;
+        onDoubleClick={() => {
+          // A single click only selects; a double-click cycles 0 → 25 → 50 → 100 → 0.
+          if (draft !== null) return;
           applyToCells({ r0: r, r1: r, c0: c, c1: c }, nextStep(st.avg));
         }}
       >

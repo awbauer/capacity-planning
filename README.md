@@ -2,7 +2,7 @@
 
 A browser-based planner for allocating people (resources) to workstreams by % per week. A workstream is any body of work someone can be allocated to: a sold project, or a pursuit still in presales.
 
-- **Workstreams view**: one row per workstream, expandable to the people on it. Click a weekly cell to cycle 0 → 25 → 50 → 100%. Badges flag overallocated people, skill mismatches and capabilities nobody on the workstream has.
+- **Workstreams view**: one row per workstream, expandable to the people on it. Double-click a weekly cell to cycle 0 → 25 → 50 → 100%. Badges flag overallocated people, skill mismatches and capabilities nobody on the workstream has.
 - **Resources view**: one row per person, showing their total load per week as a heat map (red means over the threshold). Expand a person to edit their allocations workstream by workstream.
 - **Zoom**: Week, Month or Quarter. In month and quarter view a cell shows the *average* for the period, and is flagged red if *any* week in it is over capacity. Typing into an aggregated cell sets every week in that period.
 - **Conflicts panel**: lists current and upcoming overallocations, at-risk weeks and skill gaps. Click an item to jump to the row.
@@ -37,11 +37,11 @@ Each week of a person's row on a workstream is **0, 25, 50 or 100%**. This is a 
 
 | Action | How |
 | --- | --- |
-| Change one week | Click the cell: 0 → 25 → 50 → 100 → 0 |
+| Change one week | Double-click the cell: 0 → 25 → 50 → 100 → 0. A single click only selects it. |
 | Change a range | Drag across cells (or click, then Shift+click). Press Space to step them all, or type 25, 50 or 100 and press Enter. Typed values round to the nearest step. |
 | Clear | Select, then press Delete or Backspace |
 | Move | Arrow keys, Tab / Shift+Tab |
-| Month / quarter view | Clicking or typing sets every week in that period |
+| Month / quarter view | Double-clicking or typing sets every week in that period |
 | Put someone on a workstream for a date range | **+ Person** on a workstream row (or **+ Workstream** on a resource row). Pick 25 / 50 / 100% and a date range. A pipeline workstream that hasn't started defaults to now until its start date; the dialog says how many of the weeks are presales and how many delivery. Candidates are ranked by matching capabilities and show their peak load before and after the change. |
 | Undo / redo | Ctrl/⌘+Z, Ctrl/⌘+Shift+Z |
 
