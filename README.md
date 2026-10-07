@@ -19,15 +19,31 @@ A browser-based planner for allocating people (resources) to projects by % per w
 
 ## Editing allocations
 
+Each week of a person's row on a project is **0, 25, 50 or 100%**. This is a rough planning tool, not a timesheet. A cell shows a circle filled to the matching level.
+
+- **Totals aren't rounded.** Project FTE, a person's total load, and month/quarter averages show whatever the weeks add up to.
+- **Colors:**
+  - Presales circles are **violet**; delivery circles are **blue**.
+  - A dashed circle is pipeline delivery, which is tentative.
+  - Red and amber mark overallocated and at-risk weeks.
+- **Project start and end** are drawn as vertical lines across the project's rows, labelled on the project row.
+  - Delivery rows are shaded before the start.
+  - Presales rows aren't, because that's when presales happens.
+  - On the project row, pre-start weeks that have presales work are tinted violet.
+  - Everything after the end is shaded.
+- The ◑ / % toggle in the toolbar switches cells between circles and numbers.
+
 | Action | How |
 | --- | --- |
-| Set one week | Click a cell, type a number, press Enter |
-| Fill a range | Drag across cells (or click, then Shift+click), type a number, press Enter |
+| Change one week | Click the cell: 0 → 25 → 50 → 100 → 0 |
+| Change a range | Drag across cells (or click, then Shift+click). Press Space to step them all, or type 25, 50 or 100 and press Enter. Typed values round to the nearest step. |
 | Clear | Select, then press Delete or Backspace |
-| Edit an existing value | Double-click, Enter or F2 |
 | Move | Arrow keys, Tab / Shift+Tab |
-| Put someone on a project for a date range | **+ Person** on a project row (or **+ Project** on a resource row). Pick Presales or Delivery; pipeline projects default to Presales. Candidates are ranked by matching capabilities and show their peak load before and after the change. |
+| Month / quarter view | Clicking or typing sets every week in that period |
+| Put someone on a project for a date range | **+ Person** on a project row (or **+ Project** on a resource row). Pick Presales or Delivery (pipeline projects default to Presales) and 25 / 50 / 100%. Candidates are ranked by matching capabilities and show their peak load before and after the change. |
 | Undo / redo | Ctrl/⌘+Z, Ctrl/⌘+Shift+Z |
+
+Older saved data and imported files with other values (e.g. 60%) are rounded to the nearest step when loaded.
 
 ## Data storage
 

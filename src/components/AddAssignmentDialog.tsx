@@ -1,6 +1,7 @@
-import { STATUS_LABELS } from '../domain/labels';
 import { useState, type ReactNode } from 'react';
+import { STATUS_LABELS } from '../domain/labels';
 import { classify, severity, type Severity } from '../domain/load';
+import { CLICK_STEPS } from '../domain/steps';
 import type { AllocationKind, Project, Resource, WeekKey } from '../domain/types';
 import { addWeeks, currentWeek, formatWeekRange, normalizeWeek, weeksBetween } from '../domain/weeks';
 import { usePlan, usePlanStore } from '../store/planStore';
@@ -28,7 +29,7 @@ export function AddAssignmentDialog({ projectId, resourceId, onClose }: Props) {
 
   const [pickedId, setPickedId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
-  const [percentText, setPercentText] = useState('50');
+  const [percent, setPercent] = useState(50);
   const [range, setRange] = useState<{ from: WeekKey; to: WeekKey } | null>(null);
   const [kindChoice, setKindChoice] = useState<AllocationKind | null>(null);
 
@@ -45,7 +46,6 @@ export function AddAssignmentDialog({ projectId, resourceId, onClose }: Props) {
 
   const { from, to } = range ?? defaultRange(project);
   const weeks = weeksBetween(from, to);
-  const percent = Math.max(0, Math.round(Number(percentText) || 0));
   // Pipeline deals default to presales effort; won projects to delivery.
   const kind: AllocationKind = kindChoice ?? (project?.status === 'pipeline' ? 'presales' : 'delivery');
 
@@ -195,17 +195,16 @@ export function AddAssignmentDialog({ projectId, resourceId, onClose }: Props) {
             ))}
           </div>
         </div>
-        <label>
-          Allocation %
-          <input
-            type="number"
-            min={0}
-            max={999}
-            step={5}
-            value={percentText}
-            onChange={(e) => setPercentText(e.target.value)}
-          />
-        </label>
+        <div className="label-like">
+          Allocation
+          <div className="segmented" role="group" aria-label="Allocation">
+            {CLICK_STEPS.filter((v) => v > 0).map((v) => (
+              <button key={v} type="button" aria-pressed={percent === v} onClick={() => setPercent(v)}>
+                {v}%
+              </button>
+            ))}
+          </div>
+        </div>
         <label>
           From week of
           <input type="date" value={from} onChange={(e) => setDate('from', e.target.value)} />

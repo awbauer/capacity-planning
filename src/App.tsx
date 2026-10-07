@@ -56,10 +56,13 @@ export function App() {
           </main>
           <footer className="legend">
             <span>
-              Click or drag to select cells, type a % and press Enter. Delete clears. Shift+click extends.
+              Click a cell to cycle 0 → 25 → 50 → 100%. Drag or Shift+click to select a range, then press Space
+              to cycle it (or type 25, 50 or 100). Delete clears.
               {zoom !== 'week' && ' In month/quarter view, typing sets every week in the period.'}
             </span>
             <span className="legend-keys">
+              <span className="swatch swatch-presales" /> presales
+              <span className="swatch swatch-edge" /> project start / end
               <span className="swatch swatch-over" /> overallocated
               <span className="swatch swatch-risk" /> at risk if pipeline wins
               <span className="swatch swatch-tentative" /> tentative (pipeline delivery)

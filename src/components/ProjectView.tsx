@@ -73,6 +73,7 @@ export function ProjectView({ buckets }: Props) {
       new Set(assignments.filter((a) => flagsByAssignment.get(a.id)![sev].length > 0).map((a) => a.resourceId));
     const overPeople = flagged('over');
     const riskPeople = [...flagged('risk')].filter((id) => !overPeople.has(id));
+    const presales = assignments.filter((a) => a.kind === 'presales');
     const uncovered = d.uncoveredByProject.get(p.id) ?? [];
     const seller = p.sellerId ? d.sellersById.get(p.sellerId) : undefined;
     const totals = d.projectLoad.get(p.id);
@@ -142,7 +143,11 @@ export function ProjectView({ buckets }: Props) {
         const note = over ? ' · someone is overallocated' : risk ? ' · someone is at risk if pipeline work is won' : '';
         return {
           text: avg ? (avg / 100).toFixed(1) : '',
-          className: over ? 'fte has-over' : risk ? 'fte has-risk' : 'fte',
+          className: [
+            'fte',
+            over ? 'has-over' : risk ? 'has-risk' : '',
+            presales.some((a) => b.weeks.some((w) => a.weekly[w])) ? 'has-presales' : '',
+          ].join(' '),
           title: avg ? `${(avg / 100).toFixed(2)} FTE${b.weeks.length > 1 ? ' (average)' : ''}${note}` : undefined,
         };
       },

@@ -4,6 +4,7 @@ import { temporal } from 'zundo';
 import { newId, nextTagColor } from '../domain/ids';
 import { createEmptyPlan, createSamplePlan } from '../domain/sampleData';
 import { upgradePlan } from '../domain/schema';
+import { snapToStep } from '../domain/steps';
 import type {
   AllocationKind,
   Assignment,
@@ -19,7 +20,7 @@ import { weeksBetween } from '../domain/weeks';
 export interface AllocationEdit {
   assignmentId: string;
   weeks: WeekKey[];
-  /** Whole percent. 0 clears the weeks. */
+  /** Percent, snapped to 0/25/50/100. 0 clears the weeks. */
   percent: number;
 }
 
@@ -63,14 +64,9 @@ interface PlanActions {
 
 export type PlanState = { plan: PlanData } & PlanActions;
 
-export function clampPercent(value: number): number {
-  if (!Number.isFinite(value) || value < 0) return 0;
-  return Math.min(Math.round(value), 999);
-}
-
 function applyFill(weekly: Record<WeekKey, number>, weeks: WeekKey[], percent: number) {
   const next = { ...weekly };
-  const pct = clampPercent(percent);
+  const pct = snapToStep(percent);
   for (const w of weeks) {
     if (pct === 0) delete next[w];
     else next[w] = pct;
@@ -232,11 +228,12 @@ export const usePlanStore = create<PlanState>()(
     ),
     {
       name: 'capacity-plan:v1',
-      version: 2,
+      // v2: project status + allocation kind. v3: weekly values snapped to 0/25/50/100.
+      version: 3,
       partialize: (s) => ({ plan: s.plan }),
-      migrate: (persisted, version) => {
+      migrate: (persisted) => {
         const state = persisted as { plan: PlanData };
-        return version < 2 ? { ...state, plan: upgradePlan(state.plan) } : state;
+        return { ...state, plan: upgradePlan(state.plan) };
       },
     },
   ),

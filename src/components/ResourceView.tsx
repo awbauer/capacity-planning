@@ -1,9 +1,9 @@
-import { STATUS_LABELS } from '../domain/labels';
 import { useState } from 'react';
 import { bucketStats, totalsGetter } from '../domain/aggregate';
 import { assignmentFlagWeeks } from '../domain/conflicts';
-import { severity } from '../domain/load';
 import type { Derived } from '../domain/derive';
+import { STATUS_LABELS } from '../domain/labels';
+import { severity } from '../domain/load';
 import type { Resource } from '../domain/types';
 import type { Bucket } from '../domain/weeks';
 import { usePlan, usePlanStore } from '../store/planStore';
@@ -11,8 +11,8 @@ import { isExpanded, useUIStore, type Filters } from '../store/uiStore';
 import { useDerived } from '../store/useDerived';
 import { AddAssignmentDialog } from './AddAssignmentDialog';
 import { TagChips } from './Chips';
-import { TimeGrid, type GridRow } from './grid/TimeGrid';
 import { AssignmentBadges } from './StatusControls';
+import { TimeGrid, type GridRow } from './grid/TimeGrid';
 
 interface Props {
   buckets: Bucket[];

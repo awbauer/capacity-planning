@@ -46,4 +46,10 @@ describe('parsePlan', () => {
     plan.assignments.push({ ...plan.assignments[0], id: 'dup' });
     expect(() => parsePlan(plan)).toThrow(/duplicate/);
   });
+
+  it('rounds imported weekly values to 0/25/50/100', () => {
+    const plan = createSamplePlan('2026-10-05');
+    plan.assignments[0].weekly = { '2026-10-05': 60, '2026-10-12': 10 };
+    expect(parsePlan(plan).assignments[0].weekly).toEqual({ '2026-10-05': 50 });
+  });
 });

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { PlanData } from './types';
+import { snapWeekly } from './steps';
 import { normalizeWeek } from './weeks';
 
 const id = z.string().min(1);
@@ -46,7 +47,11 @@ export function parsePlan(input: unknown): PlanData {
     const issue = result.error.issues[0];
     throw new Error(`Invalid plan file at ${issue.path.join('.') || '(root)'}: ${issue.message}`);
   }
-  const plan: PlanData = { ...result.data, version: 2 };
+  const plan: PlanData = {
+    ...result.data,
+    version: 2,
+    assignments: result.data.assignments.map((a) => ({ ...a, weekly: snapWeekly(a.weekly) })),
+  };
   const tagIds = new Set(plan.tags.map((t) => t.id));
   const sellerIds = new Set(plan.sellers.map((s) => s.id));
   const resourceIds = new Set(plan.resources.map((r) => r.id));
@@ -82,7 +87,8 @@ export function parsePlan(input: unknown): PlanData {
 
 /**
  * Best-effort upgrade of data saved by an older version of the app (no
- * validation, so a slightly malformed save isn't thrown away).
+ * validation, so a slightly malformed save isn't thrown away). Fills in
+ * status/kind and snaps weekly values to 0/25/50/100.
  */
 export function upgradePlan(raw: unknown): PlanData {
   const plan = raw as PlanData;
@@ -90,6 +96,10 @@ export function upgradePlan(raw: unknown): PlanData {
     ...plan,
     version: 2,
     projects: (plan.projects ?? []).map((p) => ({ ...p, status: p.status ?? 'won' })),
-    assignments: (plan.assignments ?? []).map((a) => ({ ...a, kind: a.kind ?? 'delivery' })),
+    assignments: (plan.assignments ?? []).map((a) => ({
+      ...a,
+      kind: a.kind ?? 'delivery',
+      weekly: snapWeekly(a.weekly ?? {}),
+    })),
   };
 }
