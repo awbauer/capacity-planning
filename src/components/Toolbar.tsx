@@ -1,7 +1,8 @@
+import { STATUS_LABELS } from '../domain/labels';
 import { useMemo, useRef } from 'react';
 import { hashString } from '../domain/hash';
 import { parsePlan } from '../domain/schema';
-import type { Zoom } from '../domain/types';
+import type { ProjectStatus, Zoom } from '../domain/types';
 import { currentWeek, shiftAnchor, type Bucket } from '../domain/weeks';
 import { redo, undo, useHistory, usePlan, usePlanStore } from '../store/planStore';
 import { useUIStore, type View } from '../store/uiStore';
@@ -153,6 +154,18 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
                   {t.name}
                 </option>
               ))}
+          </select>
+          <select
+            aria-label="Filter by status"
+            value={ui.filters.status ?? ''}
+            onChange={(e) => ui.setFilters({ status: (e.target.value || null) as ProjectStatus | null })}
+          >
+            <option value="">All statuses</option>
+            {(Object.keys(STATUS_LABELS) as ProjectStatus[]).map((st) => (
+              <option key={st} value={st}>
+                {STATUS_LABELS[st]}
+              </option>
+            ))}
           </select>
           <select
             aria-label="Filter by seller"

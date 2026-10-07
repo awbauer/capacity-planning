@@ -58,11 +58,22 @@ describe('planStore', () => {
   });
 
   it('adds an assignment with a filled range, reusing an existing row', () => {
-    const a = store().addAssignment('proj-acme', 'res-drew', { percent: 40, from: '2026-10-05', to: '2026-10-19' });
+    const a = store().addAssignment('proj-acme', 'res-drew', 'delivery', { percent: 40, from: '2026-10-05', to: '2026-10-19' });
     expect(Object.keys(a.weekly)).toEqual(['2026-10-05', '2026-10-12', '2026-10-19']);
-    const again = store().addAssignment('proj-acme', 'res-drew', { percent: 20, from: '2026-10-26', to: '2026-10-26' });
+    const again = store().addAssignment('proj-acme', 'res-drew', 'delivery', { percent: 20, from: '2026-10-26', to: '2026-10-26' });
     expect(again.id).toBe(a.id);
     expect(store().plan.assignments.filter((x) => x.resourceId === 'res-drew' && x.projectId === 'proj-acme')).toHaveLength(1);
     expect(again.weekly).toMatchObject({ '2026-10-05': 40, '2026-10-26': 20 });
+  });
+
+  it('keeps presales and delivery as separate rows for the same person', () => {
+    const presales = store().addAssignment('proj-acme', 'res-drew', 'presales', { percent: 10, from: '2026-10-05', to: '2026-10-05' });
+    const delivery = store().addAssignment('proj-acme', 'res-drew', 'delivery', { percent: 50, from: '2026-10-05', to: '2026-10-05' });
+    expect(presales.id).not.toBe(delivery.id);
+    // Switching to a kind the person already has on this project is refused.
+    expect(store().setAssignmentKind(presales.id, 'delivery')).toBe(false);
+    store().removeAssignment(delivery.id);
+    expect(store().setAssignmentKind(presales.id, 'delivery')).toBe(true);
+    expect(store().plan.assignments.find((a) => a.id === presales.id)?.kind).toBe('delivery');
   });
 });

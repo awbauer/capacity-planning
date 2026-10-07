@@ -3,7 +3,9 @@ import { persist } from 'zustand/middleware';
 import { temporal } from 'zundo';
 import { newId, nextTagColor } from '../domain/ids';
 import { createEmptyPlan, createSamplePlan } from '../domain/sampleData';
+import { upgradePlan } from '../domain/schema';
 import type {
+  AllocationKind,
   Assignment,
   CapabilityTag,
   PlanData,
@@ -45,8 +47,10 @@ interface PlanActions {
   updateProject: (id: string, patch: Partial<Omit<Project, 'id'>>) => void;
   deleteProject: (id: string) => void;
 
-  /** Adds the resource to the project (reusing an existing row) and optionally fills a week range. */
-  addAssignment: (projectId: string, resourceId: string, fill?: FillRange) => Assignment;
+  /** Adds the resource to the project for this kind of work (reusing an existing row) and optionally fills a week range. */
+  addAssignment: (projectId: string, resourceId: string, kind: AllocationKind, fill?: FillRange) => Assignment;
+  /** Switches presales <-> delivery. Returns false if the person already has a row of that kind on the project. */
+  setAssignmentKind: (id: string, kind: AllocationKind) => boolean;
   removeAssignment: (id: string) => void;
   /** Applies all edits as a single undo step. */
   setAllocations: (edits: AllocationEdit[]) => void;
@@ -162,11 +166,11 @@ export const usePlanStore = create<PlanState>()(
               assignments: p.assignments.filter((a) => a.projectId !== id),
             })),
 
-          addAssignment: (projectId, resourceId, fill) => {
+          addAssignment: (projectId, resourceId, kind, fill) => {
             const existing = get().plan.assignments.find(
-              (a) => a.projectId === projectId && a.resourceId === resourceId,
+              (a) => a.projectId === projectId && a.resourceId === resourceId && a.kind === kind,
             );
-            const base: Assignment = existing ?? { id: newId(), projectId, resourceId, weekly: {} };
+            const base: Assignment = existing ?? { id: newId(), projectId, resourceId, kind, weekly: {} };
             const assignment: Assignment = fill
               ? { ...base, weekly: applyFill(base.weekly, weeksBetween(fill.from, fill.to), fill.percent) }
               : base;
@@ -177,6 +181,20 @@ export const usePlanStore = create<PlanState>()(
                 : [...p.assignments, assignment],
             }));
             return assignment;
+          },
+          setAssignmentKind: (id, kind) => {
+            const { assignments } = get().plan;
+            const a = assignments.find((x) => x.id === id);
+            if (!a || a.kind === kind) return !!a;
+            const clash = assignments.some(
+              (x) => x.id !== id && x.projectId === a.projectId && x.resourceId === a.resourceId && x.kind === kind,
+            );
+            if (clash) return false;
+            update((p) => ({
+              ...p,
+              assignments: p.assignments.map((x) => (x.id === id ? { ...x, kind } : x)),
+            }));
+            return true;
           },
           removeAssignment: (id) =>
             update((p) => ({ ...p, assignments: p.assignments.filter((a) => a.id !== id) })),
@@ -214,8 +232,12 @@ export const usePlanStore = create<PlanState>()(
     ),
     {
       name: 'capacity-plan:v1',
-      version: 1,
+      version: 2,
       partialize: (s) => ({ plan: s.plan }),
+      migrate: (persisted, version) => {
+        const state = persisted as { plan: PlanData };
+        return version < 2 ? { ...state, plan: upgradePlan(state.plan) } : state;
+      },
     },
   ),
 );

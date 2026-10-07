@@ -8,6 +8,8 @@ import {
   type ReactNode,
 } from 'react';
 import { bucketStats } from '../../domain/aggregate';
+import { assignmentFlagWeeks } from '../../domain/conflicts';
+import type { Severity } from '../../domain/load';
 import type { WeekKey, Zoom } from '../../domain/types';
 import { currentWeek, formatWeek, type Bucket } from '../../domain/weeks';
 import { usePlan, usePlanStore, type AllocationEdit } from '../../store/planStore';
@@ -16,6 +18,8 @@ import { useDerived } from '../../store/useDerived';
 
 export interface SummaryCell {
   text: string;
+  /** Secondary value shown small after the text (e.g. tentative load). */
+  extra?: string;
   className?: string;
   title?: string;
 }
@@ -204,20 +208,32 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     if (!e.shiftKey || !anchor) setAnchor(pos);
   };
 
-  const overTitle = (resourceId: string, week: WeekKey, total: number) => {
+  /** Tooltip explaining a flagged week: committed vs tentative load and what makes it up. */
+  const loadTitle = (resourceId: string, week: WeekKey, sev: Severity) => {
     const resource = d.resourcesById.get(resourceId);
+    const committed = d.loads.committed.get(resourceId)?.get(week) ?? 0;
+    const tentative = d.loads.tentative.get(resourceId)?.get(week) ?? 0;
     const parts = (d.assignmentsByResource.get(resourceId) ?? [])
-      .filter((a) => a.weekly[week])
-      .map((a) => `${d.projectsById.get(a.projectId)?.name ?? '?'} ${a.weekly[week]}%`);
-    return `${resource?.name ?? 'Resource'} is at ${total}% in the week of ${formatWeek(week)}: ${parts.join(', ')}`;
+      .filter((a) => a.weekly[week] && d.loads.classOf.get(a.id) !== 'excluded')
+      .map((a) => {
+        const tag = a.kind === 'presales' ? 'presales' : d.loads.classOf.get(a.id) === 'tentative' ? 'pipeline' : 'delivery';
+        return `${d.projectsById.get(a.projectId)?.name ?? '?'} ${a.weekly[week]}% (${tag})`;
+      });
+    const head =
+      sev === 'over'
+        ? `${resource?.name ?? 'Resource'} is at ${committed}% committed`
+        : `${resource?.name ?? 'Resource'} would be at ${committed + tentative}% if pipeline work is won (${committed}% committed)`;
+    return `${head} in the week of ${formatWeek(week)}: ${parts.join(', ')}`;
   };
 
   const renderEditCell = (row: GridRow, r: number, b: Bucket, c: number) => {
     const a = assignmentsById.get(row.assignmentId!);
     if (!a) return <td key={b.key} />;
     const st = cellValue(a.id, b);
-    const load = d.resourceLoad.get(a.resourceId);
-    const overWeek = b.weeks.find((w) => (a.weekly[w] ?? 0) > 0 && (load?.get(w) ?? 0) > threshold);
+    const cls = d.loads.classOf.get(a.id);
+    const flags = assignmentFlagWeeks(a, b.weeks, d.loads, threshold);
+    const flagWeek = flags.over[0] ?? flags.risk[0];
+    const flag: Severity | null = flags.over.length ? 'over' : flags.risk.length ? 'risk' : null;
     const outside =
       row.range &&
       b.weeks.every((w) => (row.range!.start && w < row.range!.start) || (row.range!.end && w > row.range!.end));
@@ -227,12 +243,15 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     if (selected) classes.push('selected');
     if (isFocus) classes.push('focus');
     if (outside) classes.push('outside');
-    if (overWeek) classes.push('over');
+    if (flag) classes.push(flag);
+    if (cls === 'tentative') classes.push('tentative');
+    if (cls === 'excluded') classes.push('excluded');
     if (b.weeks.includes(thisWeek)) classes.push('today');
     if (st.avg > 0) classes.push('filled');
 
     let title: string | undefined;
-    if (overWeek) title = overTitle(a.resourceId, overWeek, load!.get(overWeek)!);
+    if (flag) title = loadTitle(a.resourceId, flagWeek, flag);
+    else if (cls === 'excluded' && st.avg > 0) title = 'Delivery on a lost project: not counted toward load.';
     else if (st.mixed) title = `Varies by week: avg ${Math.round(st.avg)}%, peak ${st.peak}%. Typing sets every week.`;
 
     return (
@@ -307,6 +326,7 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     return (
       <td key={b.key} className={classes.join(' ')} title={cell?.title}>
         {cell?.text}
+        {cell?.extra && <span className="extra">{cell.extra}</span>}
       </td>
     );
   };

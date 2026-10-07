@@ -5,6 +5,7 @@ import { usePlanStore } from '../store/planStore';
 import { useDerived } from '../store/useDerived';
 import { Modal } from './Modal';
 import { SellerPicker } from './SellerPicker';
+import { StatusSelect } from './StatusControls';
 import { TagPicker } from './TagPicker';
 
 interface Props {
@@ -19,7 +20,7 @@ export function ProjectDialog({ project, onClose }: Props) {
   const deleteProject = usePlanStore((s) => s.deleteProject);
   const d = useDerived();
   const [draft, setDraft] = useState<Omit<Project, 'id'>>(
-    project ?? { name: '', client: '', sellerId: null, tagIds: [], notes: '' },
+    project ?? { name: '', client: '', sellerId: null, status: 'pipeline', tagIds: [], notes: '' },
   );
   const set = (patch: Partial<Omit<Project, 'id'>>) => setDraft((p) => ({ ...p, ...patch }));
   const datesInvalid = !!draft.startWeek && !!draft.endWeek && draft.endWeek < draft.startWeek;
@@ -82,10 +83,20 @@ export function ProjectDialog({ project, onClose }: Props) {
           Client
           <input value={draft.client ?? ''} onChange={(e) => set({ client: e.target.value })} />
         </label>
-        <label>
-          Seller
-          <SellerPicker value={draft.sellerId} onChange={(sellerId) => set({ sellerId })} />
-        </label>
+        <div className="form-row">
+          <label>
+            Seller
+            <SellerPicker value={draft.sellerId} onChange={(sellerId) => set({ sellerId })} />
+          </label>
+          <label>
+            Status
+            <StatusSelect value={draft.status} onChange={(status) => set({ status })} />
+          </label>
+        </div>
+        <p className="muted small form-note">
+          Presales time always counts toward people&apos;s load. Delivery time counts once the project is Won, shows as
+          tentative (“at risk”) while it&apos;s in Pipeline, and stops counting if it&apos;s Lost.
+        </p>
         <div className="label-like">
           Required capabilities
           <TagPicker value={draft.tagIds} onChange={(tagIds) => set({ tagIds })} />

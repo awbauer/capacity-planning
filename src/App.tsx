@@ -60,7 +60,9 @@ export function App() {
               {zoom !== 'week' && ' In month/quarter view, typing sets every week in the period.'}
             </span>
             <span className="legend-keys">
-              <span className="swatch swatch-over" /> over capacity
+              <span className="swatch swatch-over" /> overallocated
+              <span className="swatch swatch-risk" /> at risk if pipeline wins
+              <span className="swatch swatch-tentative" /> tentative (pipeline delivery)
               <span className="swatch swatch-outside" /> outside project dates
               <span className="mixed">~</span> varies by week
             </span>

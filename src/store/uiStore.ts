@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { WeekKey, Zoom } from '../domain/types';
+import type { ProjectStatus, WeekKey, Zoom } from '../domain/types';
 import { addWeeks, currentWeek } from '../domain/weeks';
 
 export type View = 'projects' | 'resources' | 'manage';
@@ -9,6 +9,7 @@ export interface Filters {
   text: string;
   tagId: string | null;
   sellerId: string | null;
+  status: ProjectStatus | null;
 }
 
 /** Row keys: `p:<projectId>` in the project view, `r:<resourceId>` in the resource view. */
@@ -49,7 +50,7 @@ export const useUIStore = create<UIState>()(
       view: 'projects',
       zoom: 'week',
       anchor: todayAnchor(),
-      filters: { text: '', tagId: null, sellerId: null },
+      filters: { text: '', tagId: null, sellerId: null, status: null },
       expanded: {},
       showConflicts: true,
       focusRow: null,
@@ -72,7 +73,7 @@ export const useUIStore = create<UIState>()(
           view,
           focusRow: row,
           expanded: { ...s.expanded, [row]: true },
-          filters: { text: '', tagId: null, sellerId: null },
+          filters: { text: '', tagId: null, sellerId: null, status: null },
           anchor: week ? addWeeks(week, -2) : s.anchor,
         })),
       clearFocusRow: () => set({ focusRow: null }),

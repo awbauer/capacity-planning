@@ -1,11 +1,15 @@
-import type { Assignment, PlanData, WeekKey } from './types';
+import type { AllocationKind, Assignment, PlanData, WeekKey } from './types';
 import { addWeeks, currentWeek, weeksBetween } from './weeks';
 
 /**
- * Demo plan positioned around the current week. It deliberately contains an
- * overallocation (Alex, Sam), a resource at exactly 100% (Casey, not a
- * conflict), a skill mismatch (Riley on Globex) and an uncovered capability
- * (Agentforce on Northwind).
+ * Demo plan positioned around the current week. It deliberately contains:
+ * - a committed overallocation (Sam, 150%),
+ * - an at-risk week run that only exceeds 100% if the Contoso pipeline deal
+ *   is won (Alex),
+ * - a resource at exactly 100% including pipeline work (Casey, no flag),
+ * - a skill mismatch (Riley on Globex) and an uncovered capability
+ *   (Agentforce on Northwind),
+ * - a lost deal whose presales effort is kept but whose delivery is not counted.
  */
 export function createSamplePlan(today: WeekKey = currentWeek()): PlanData {
   const w = (offset: number) => addWeeks(today, offset);
@@ -16,15 +20,17 @@ export function createSamplePlan(today: WeekKey = currentWeek()): PlanData {
     percent: number,
     from: number,
     to: number,
+    kind: AllocationKind = 'delivery',
   ): Assignment => ({
     id: `sample-a${++n}`,
     projectId,
     resourceId,
+    kind,
     weekly: Object.fromEntries(weeksBetween(w(from), w(to)).map((k) => [k, percent])),
   });
 
   return {
-    version: 1,
+    version: 2,
     settings: { overallocationThreshold: 100 },
     tags: [
       { id: 'tag-dc', name: 'Data Cloud', color: '#2563eb' },
@@ -53,6 +59,7 @@ export function createSamplePlan(today: WeekKey = currentWeek()): PlanData {
     projects: [
       {
         id: 'proj-acme',
+        status: 'won',
         name: 'Data Cloud Unification',
         client: 'Acme Retail',
         sellerId: 'seller-jordan',
@@ -62,6 +69,7 @@ export function createSamplePlan(today: WeekKey = currentWeek()): PlanData {
       },
       {
         id: 'proj-northwind',
+        status: 'won',
         name: 'Journey Modernization',
         client: 'Northwind',
         sellerId: 'seller-priya',
@@ -71,6 +79,7 @@ export function createSamplePlan(today: WeekKey = currentWeek()): PlanData {
       },
       {
         id: 'proj-contoso',
+        status: 'pipeline',
         name: 'Agentforce Service Pilot',
         client: 'Contoso',
         sellerId: 'seller-marcus',
@@ -80,6 +89,7 @@ export function createSamplePlan(today: WeekKey = currentWeek()): PlanData {
       },
       {
         id: 'proj-globex',
+        status: 'won',
         name: 'Sales Cloud Rollout',
         client: 'Globex',
         sellerId: 'seller-jordan',
@@ -89,12 +99,23 @@ export function createSamplePlan(today: WeekKey = currentWeek()): PlanData {
       },
       {
         id: 'proj-initech',
+        status: 'won',
         name: 'Analytics Foundation',
         client: 'Initech',
         sellerId: 'seller-priya',
         tagIds: ['tag-tableau', 'tag-dc'],
         startWeek: w(8),
         endWeek: w(24),
+      },
+      {
+        id: 'proj-fabrikam',
+        status: 'lost',
+        name: 'Commerce Replatform',
+        client: 'Fabrikam',
+        sellerId: 'seller-marcus',
+        tagIds: ['tag-mc', 'tag-dc'],
+        startWeek: w(2),
+        endWeek: w(10),
       },
     ],
     assignments: [
@@ -110,13 +131,17 @@ export function createSamplePlan(today: WeekKey = currentWeek()): PlanData {
       assign('proj-globex', 'res-riley', 30, 1, 10),
       assign('proj-initech', 'res-drew', 100, 10, 24),
       assign('proj-initech', 'res-sam', 50, 8, 14),
+      assign('proj-contoso', 'res-alex', 20, 0, 3, 'presales'),
+      assign('proj-contoso', 'res-jamie', 20, 0, 3, 'presales'),
+      assign('proj-fabrikam', 'res-morgan', 30, -4, -1, 'presales'),
+      assign('proj-fabrikam', 'res-morgan', 50, 2, 10),
     ],
   };
 }
 
 export function createEmptyPlan(): PlanData {
   return {
-    version: 1,
+    version: 2,
     settings: { overallocationThreshold: 100 },
     tags: [],
     sellers: [],
