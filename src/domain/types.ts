@@ -25,11 +25,16 @@ export interface Seller {
   email?: string;
 }
 
+/** Career levels, most senior first. */
+export const CAREER_LEVELS = ['D', 'SM', 'M', 'SA', 'A'] as const;
+export type CareerLevel = (typeof CAREER_LEVELS)[number];
+
 /** A person who can be allocated to projects. */
 export interface Resource {
   id: string;
   name: string;
   role?: string;
+  level?: CareerLevel;
   tagIds: string[];
 }
 

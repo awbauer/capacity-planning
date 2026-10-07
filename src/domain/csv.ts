@@ -58,12 +58,13 @@ export function workstreamCsv(plan: PlanData, projectId: string): string {
     ['End (week of)', project.endWeek],
     ['Required capabilities', project.tagIds.map((t) => tags.get(t)).filter(Boolean).join('; ')],
     [],
-    ['Person', 'Role', 'Capabilities', ...weeks],
-    ['Phase', '', '', ...weeks.map((w) => (weekKind(project, w) === 'presales' ? 'Presales' : 'Delivery'))],
+    ['Person', 'Level', 'Role', 'Capabilities', ...weeks],
+    ['Phase', '', '', '', ...weeks.map((w) => (weekKind(project, w) === 'presales' ? 'Presales' : 'Delivery'))],
   ];
   for (const { a, r } of rows) {
     out.push([
       r?.name ?? '(deleted)',
+      r?.level,
       r?.role,
       (r?.tagIds ?? []).map((t) => tags.get(t)).filter(Boolean).join('; '),
       ...weeks.map((w) => a.weekly[w] ?? 0),
@@ -71,6 +72,7 @@ export function workstreamCsv(plan: PlanData, projectId: string): string {
   }
   out.push([
     'Total FTE',
+    '',
     '',
     '',
     ...weeks.map((w) => rows.reduce((sum, { a }) => sum + (a.weekly[w] ?? 0), 0) / 100),
@@ -87,7 +89,7 @@ export function allWorkstreamsCsv(plan: PlanData): string {
   const projects = new Map(plan.projects.map((p) => [p.id, p]));
   const sellers = new Map(plan.sellers.map((s) => [s.id, s.name]));
   const out: Cell[][] = [
-    ['Workstream', 'Client', 'Seller', 'Status', 'Person', 'Role', 'Week of', 'Phase', 'Allocation %'],
+    ['Workstream', 'Client', 'Seller', 'Status', 'Person', 'Level', 'Role', 'Week of', 'Phase', 'Allocation %'],
   ];
   const lines: Cell[][] = [];
   for (const a of plan.assignments) {
@@ -102,6 +104,7 @@ export function allWorkstreamsCsv(plan: PlanData): string {
         p.sellerId ? sellers.get(p.sellerId) : '',
         STATUS_LABELS[p.status],
         r?.name ?? '(deleted)',
+        r?.level,
         r?.role,
         w,
         weekKind(p, w) === 'presales' ? 'Presales' : 'Delivery',
@@ -110,7 +113,7 @@ export function allWorkstreamsCsv(plan: PlanData): string {
     }
   }
   lines.sort((x, y) =>
-    String(x[0]).localeCompare(String(y[0])) || String(x[4]).localeCompare(String(y[4])) || String(x[6]).localeCompare(String(y[6])),
+    String(x[0]).localeCompare(String(y[0])) || String(x[4]).localeCompare(String(y[4])) || String(x[7]).localeCompare(String(y[7])),
   );
   return toCsv([...out, ...lines]);
 }

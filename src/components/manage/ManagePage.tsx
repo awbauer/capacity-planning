@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { TAG_COLORS } from '../../domain/ids';
+import { CAREER_LEVELS, type CareerLevel, type Resource } from '../../domain/types';
 import { normalizeWeek } from '../../domain/weeks';
 import { usePlan, usePlanStore } from '../../store/planStore';
 import { useDerived } from '../../store/useDerived';
@@ -43,7 +44,9 @@ function ResourcesTable() {
   const plan = usePlan();
   const d = useDerived();
   const s = usePlanStore();
-  const resources = [...plan.resources].sort((a, b) => a.name.localeCompare(b.name));
+  // Most senior level first, then by name; people without a level last.
+  const rank = (r: Resource) => (r.level ? CAREER_LEVELS.indexOf(r.level) : CAREER_LEVELS.length);
+  const resources = [...plan.resources].sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
   return (
     <section>
       <p className="muted">People who can be allocated to workstreams. Capabilities drive skill-mismatch warnings.</p>
@@ -52,6 +55,7 @@ function ResourcesTable() {
         <thead>
           <tr>
             <th>Name</th>
+            <th>Level</th>
             <th>Role</th>
             <th>Capabilities</th>
             <th>Workstreams</th>
@@ -65,6 +69,20 @@ function ResourcesTable() {
               <tr key={r.id}>
                 <td>
                   <InlineText ariaLabel="Name" required value={r.name} onCommit={(name) => s.updateResource(r.id, { name })} />
+                </td>
+                <td>
+                  <select
+                    aria-label="Career level"
+                    value={r.level ?? ''}
+                    onChange={(e) => s.updateResource(r.id, { level: (e.target.value || undefined) as CareerLevel | undefined })}
+                  >
+                    <option value="">—</option>
+                    {CAREER_LEVELS.map((l) => (
+                      <option key={l} value={l}>
+                        {l}
+                      </option>
+                    ))}
+                  </select>
                 </td>
                 <td>
                   <InlineText ariaLabel="Role" value={r.role ?? ''} placeholder="Role" onCommit={(role) => s.updateResource(r.id, { role: role || undefined })} />

@@ -15,7 +15,7 @@ export interface Filters {
   status: ProjectStatus | null;
 }
 
-/** Row keys: `p:<projectId>` in the project view, `r:<resourceId>` in the resource view. */
+/** Row keys: `p:<projectId>` (workstreams), `r:<resourceId>` (people), `g:<level>` (level groups). */
 export type RowKey = string;
 
 interface UIState {
@@ -107,7 +107,10 @@ export const useUIStore = create<UIState>()(
   ),
 );
 
-/** Default expansion: projects open (to show who's on them), resources closed (to show load). */
+/**
+ * Default expansion: workstreams open (to show who's on them), level groups
+ * open, people closed (to show load).
+ */
 export function isExpanded(expanded: Record<RowKey, boolean>, key: RowKey): boolean {
-  return expanded[key] ?? key.startsWith('p:');
+  return expanded[key] ?? (key.startsWith('p:') || key.startsWith('g:'));
 }

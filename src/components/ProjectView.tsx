@@ -200,6 +200,7 @@ export function ProjectView({ buckets }: Props) {
             <div className="row-main">
               <div className="row-title">
                 {r.name}
+                {r.level && <span className="level-badge">{r.level}</span>}
                 {r.role && <span className="muted small"> · {r.role}</span>}
               </div>
               <AssignmentBadges worst={rowWorst} mismatch={mismatch} />
