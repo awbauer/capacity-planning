@@ -2,7 +2,7 @@
 
 A browser-based planner for allocating people (resources) to workstreams by % per week. A workstream is any body of work someone can be allocated to: a sold project, or a pursuit still in presales.
 
-- **Workstreams view**: one row per workstream, expandable to the people on it. Double-click a weekly cell to cycle 0 → 25 → 50 → 100%. Badges flag overallocated people, skill mismatches and capabilities nobody on the workstream has.
+- **Workstreams view**: one row per workstream, expandable to the people on it. Double-click a weekly cell to cycle 0 → 25 → 50 → 100%. Badges flag overallocated people (red/orange/yellow counts), skill mismatches and capability gaps (hover a badge for details).
 - **Resources view**: one row per person, showing their total load per week as a heat map (red means over the threshold). Expand a person to edit their allocations workstream by workstream.
   - People are grouped by career level: D, SM, M, SA, A, then anyone without a level. Each group can be collapsed.
   - A group's row shows its people's average % per week, plus `+N` for pipeline work. **Levels only** collapses the view to one row per level.

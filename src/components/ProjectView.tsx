@@ -109,37 +109,37 @@ export function ProjectView({ buckets }: Props) {
               <span className="seller" title="Seller">
                 {seller ? seller.name : <em className="muted">No seller</em>}
               </span>
-              <TagChips tagIds={p.tagIds} tagsById={d.tagsById} />
-            </div>
             {(overPeople.size > 0 ||
               stretchPeople.length > 0 ||
               riskPeople.length > 0 ||
               uncovered.length > 0 ||
               assignments.length === 0) && (
-              <div className="row-badges">
+              <span className="row-badges">
                 {overPeople.size > 0 && (
-                  <span className="badge badge-danger" title={`People on this workstream with committed work above ${plan.settings.criticalThreshold}% in the visible range`}>
-                    ⚠ {overPeople.size} overallocated
+                  <span className="badge badge-danger" title={`${overPeople.size} overallocated: people on this workstream with committed work above ${plan.settings.criticalThreshold}% in the visible range`}>
+                    ⚠ {overPeople.size}
                   </span>
                 )}
                 {stretchPeople.length > 0 && (
-                  <span className="badge badge-stretch" title={`People on this workstream with committed work above ${plan.settings.overallocationThreshold}% in the visible range`}>
-                    {stretchPeople.length} stretched
+                  <span className="badge badge-stretch" title={`${stretchPeople.length} stretched: people on this workstream with committed work above ${plan.settings.overallocationThreshold}% in the visible range`}>
+                    {stretchPeople.length}
                   </span>
                 )}
                 {riskPeople.length > 0 && (
-                  <span className="badge badge-risk" title="People who would be over capacity if pipeline work is won">
-                    {riskPeople.length} at risk
+                  <span className="badge badge-risk" title={`${riskPeople.length} at risk: people who would be over capacity if pipeline work is won`}>
+                    {riskPeople.length}
                   </span>
                 )}
                 {uncovered.length > 0 && (
-                  <span className="badge badge-warn" title="Required capabilities nobody on the workstream has">
-                    Uncovered: {uncovered.map((t) => d.tagsById.get(t)?.name).join(', ')}
+                  <span className="badge badge-warn" title={`Uncovered capabilities: ${uncovered.map((t) => d.tagsById.get(t)?.name).join(', ')} (nobody on the workstream has them)`}>
+                    Gap{uncovered.length > 1 ? ` ${uncovered.length}` : ''}
                   </span>
                 )}
                 {assignments.length === 0 && <span className="badge">Unstaffed</span>}
-              </div>
+              </span>
             )}
+              <TagChips tagIds={p.tagIds} tagsById={d.tagsById} />
+            </div>
           </div>
           <div className="row-actions">
             <button type="button" className="btn btn-small" onClick={() => setAdding(p.id)}>
@@ -149,9 +149,10 @@ export function ProjectView({ buckets }: Props) {
               type="button"
               className="btn btn-small"
               title="Download this workstream's staffing plan as CSV"
+              aria-label="Download CSV"
               onClick={() => downloadText(`staffing-${slug(p.name)}-${today()}.csv`, workstreamCsv(plan, p.id), 'text/csv')}
             >
-              ⤓ CSV
+              ⤓
             </button>
           </div>
         </div>
@@ -199,11 +200,13 @@ export function ProjectView({ buckets }: Props) {
           <div className="row-label">
             <div className="row-main">
               <div className="row-title">
-                {r.name}
-                {r.level && <span className="level-badge">{r.level}</span>}
-                {r.role && <span className="muted small"> · {r.role}</span>}
+                <span className="row-name">
+                  {r.name}
+                  {r.level && <span className="level-badge">{r.level}</span>}
+                  {r.role && <span className="muted small"> · {r.role}</span>}
+                </span>
+                <AssignmentBadges worst={rowWorst} mismatch={mismatch} />
               </div>
-              <AssignmentBadges worst={rowWorst} mismatch={mismatch} />
             </div>
             <button
               type="button"

@@ -57,13 +57,12 @@ export function ResourceView({ buckets }: Props) {
     const overCount = visibleWeeks.filter((w) => sevOf(w) === 'over').length;
     const stretchCount = visibleWeeks.filter((w) => sevOf(w) === 'stretch').length;
     const riskCount = visibleWeeks.filter((w) => sevOf(w) === 'risk').length;
-    const weeksText = (n: number) => `${n} week${n === 1 ? '' : 's'}`;
+    const weeksText = (n: number) => `${n}w`;
     const assignments = [...(d.assignmentsByResource.get(r.id) ?? [])].sort(
       (a, b) =>
         (d.projectsById.get(a.projectId)?.name ?? '').localeCompare(d.projectsById.get(b.projectId)?.name ?? ''),
     );
 
-    const projectCount = new Set(assignments.map((a) => a.projectId)).size;
     rows.push({
       key,
       depth: 0,
@@ -86,13 +85,8 @@ export function ResourceView({ buckets }: Props) {
               {r.role && <span className="muted small"> · {r.role}</span>}
             </div>
             <div className="row-meta">
-              <TagChips tagIds={r.tagIds} tagsById={d.tagsById} />
-              <span className="muted small">
-                {projectCount} workstream{projectCount === 1 ? '' : 's'}
-              </span>
-            </div>
             {(overCount > 0 || stretchCount > 0 || riskCount > 0) && (
-              <div className="row-badges">
+              <span className="row-badges">
                 {overCount > 0 && (
                   <span className="badge badge-danger" title={`Committed work above ${plan.settings.criticalThreshold}%`}>
                     ⚠ Overallocated {weeksText(overCount)}
@@ -108,8 +102,10 @@ export function ResourceView({ buckets }: Props) {
                     At risk {weeksText(riskCount)}
                   </span>
                 )}
-              </div>
+              </span>
             )}
+              <TagChips tagIds={r.tagIds} tagsById={d.tagsById} />
+            </div>
           </div>
           <button type="button" className="btn btn-small" onClick={() => setAdding(r.id)}>
             + Workstream
@@ -155,14 +151,16 @@ export function ResourceView({ buckets }: Props) {
           <div className="row-label">
             <div className="row-main">
               <div className="row-title">
-                {p.name}
-                {p.client && <span className="muted small"> · {p.client}</span>}
-                <span className={`status-text status-${p.status}`}> · {STATUS_LABELS[p.status]}</span>
+                <span className="row-name">
+                  {p.name}
+                  {p.client && <span className="muted small"> · {p.client}</span>}
+                  <span className={`status-text status-${p.status}`}> · {STATUS_LABELS[p.status]}</span>
+                </span>
+                <AssignmentBadges
+                  worst={flags.over.length ? 'over' : flags.stretch.length ? 'stretch' : flags.risk.length ? 'risk' : null}
+                  mismatch={mismatch}
+                />
               </div>
-              <AssignmentBadges
-                worst={flags.over.length ? 'over' : flags.stretch.length ? 'stretch' : flags.risk.length ? 'risk' : null}
-                mismatch={mismatch}
-              />
             </div>
             <button
               type="button"

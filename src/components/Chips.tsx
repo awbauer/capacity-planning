@@ -29,8 +29,9 @@ interface ChipListProps {
 }
 
 export function TagChips({ tagIds, tagsById, highlight }: ChipListProps) {
+  const names = tagIds.map((id) => tagsById.get(id)?.name).filter(Boolean).join(', ');
   return (
-    <span className="chips">
+    <span className="chips" title={names || undefined}>
       {tagIds.map((id) => {
         const tag = tagsById.get(id);
         return tag ? <TagChip key={id} tag={tag} dim={highlight && !highlight.has(id)} /> : null;
