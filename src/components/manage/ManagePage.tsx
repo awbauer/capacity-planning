@@ -11,7 +11,7 @@ import { AddRow, InlineText } from './InlineText';
 type Tab = 'resources' | 'projects' | 'tags' | 'sellers' | 'settings';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'resources', label: 'Resources' },
-  { id: 'projects', label: 'Projects' },
+  { id: 'projects', label: 'Workstreams' },
   { id: 'tags', label: 'Capabilities' },
   { id: 'sellers', label: 'Sellers' },
   { id: 'settings', label: 'Settings & data' },
@@ -46,7 +46,7 @@ function ResourcesTable() {
   const resources = [...plan.resources].sort((a, b) => a.name.localeCompare(b.name));
   return (
     <section>
-      <p className="muted">People who can be allocated to projects. Capabilities drive skill-mismatch warnings.</p>
+      <p className="muted">People who can be allocated to workstreams. Capabilities drive skill-mismatch warnings.</p>
       <AddRow placeholder="New resource name…" onAdd={(name) => s.addResource({ name, tagIds: [] })} />
       <table className="table">
         <thead>
@@ -54,7 +54,7 @@ function ResourcesTable() {
             <th>Name</th>
             <th>Role</th>
             <th>Capabilities</th>
-            <th>Projects</th>
+            <th>Workstreams</th>
             <th />
           </tr>
         </thead>
@@ -79,7 +79,7 @@ function ResourcesTable() {
                     className="icon-btn"
                     aria-label={`Delete ${r.name}`}
                     onClick={() => {
-                      if (window.confirm(`Delete ${r.name}${n ? ` and remove them from ${plural(n, 'project')}` : ''}?`)) {
+                      if (window.confirm(`Delete ${r.name}${n ? ` and remove them from ${plural(n, 'workstream')}` : ''}?`)) {
                         s.deleteResource(r.id);
                       }
                     }}
@@ -103,8 +103,8 @@ function ProjectsTable() {
   const projects = [...plan.projects].sort((a, b) => a.name.localeCompare(b.name));
   return (
     <section>
-      <p className="muted">Required capabilities are compared against assigned people. Dates shade the grid outside the project.</p>
-      <AddRow placeholder="New project name…" onAdd={(name) => s.addProject({ name, sellerId: null, status: 'pipeline', tagIds: [] })} />
+      <p className="muted">Required capabilities are compared against assigned people. Dates mark the start and end on the grid.</p>
+      <AddRow placeholder="New workstream name…" onAdd={(name) => s.addProject({ name, sellerId: null, status: 'pipeline', tagIds: [] })} />
       <table className="table">
         <thead>
           <tr>
@@ -189,7 +189,7 @@ function TagsTable() {
   });
   return (
     <section>
-      <p className="muted">Capabilities can also be created on the fly from any resource or project capability picker.</p>
+      <p className="muted">Capabilities can also be created on the fly from any resource or workstream capability picker.</p>
       <AddRow placeholder="New capability (e.g. Data Cloud)…" onAdd={(name) => s.addTag(name)} />
       <table className="table">
         <thead>
@@ -197,7 +197,7 @@ function TagsTable() {
             <th>Color</th>
             <th>Name</th>
             <th>Resources</th>
-            <th>Projects</th>
+            <th>Workstreams</th>
             <th />
           </tr>
         </thead>
@@ -236,7 +236,7 @@ function TagsTable() {
                       if (
                         window.confirm(
                           used
-                            ? `Delete ${t.name}? It will be removed from ${plural(u.resources, 'resource')} and ${plural(u.projects, 'project')}.`
+                            ? `Delete ${t.name}? It will be removed from ${plural(u.resources, 'resource')} and ${plural(u.projects, 'workstream')}.`
                             : `Delete ${t.name}?`,
                         )
                       ) {
@@ -262,14 +262,14 @@ function SellersTable() {
   const sellers = [...plan.sellers].sort((a, b) => a.name.localeCompare(b.name));
   return (
     <section>
-      <p className="muted">Sellers own projects but aren't allocatable.</p>
+      <p className="muted">Sellers own workstreams but aren't allocatable.</p>
       <AddRow placeholder="New seller name…" onAdd={(name) => s.addSeller(name)} />
       <table className="table">
         <thead>
           <tr>
             <th>Name</th>
             <th>Email</th>
-            <th>Projects</th>
+            <th>Workstreams</th>
             <th />
           </tr>
         </thead>
@@ -297,7 +297,7 @@ function SellersTable() {
                     className="icon-btn"
                     aria-label={`Delete ${seller.name}`}
                     onClick={() => {
-                      if (window.confirm(`Delete ${seller.name}?${n ? ` ${plural(n, 'project')} will have no seller.` : ''}`)) {
+                      if (window.confirm(`Delete ${seller.name}?${n ? ` ${plural(n, 'workstream')} will have no seller.` : ''}`)) {
                         s.deleteSeller(seller.id);
                       }
                     }}
@@ -348,7 +348,7 @@ function SettingsPanel() {
         <button
           type="button"
           className="btn btn-danger"
-          onClick={() => window.confirm('Delete all projects, people, sellers and capabilities? You can undo.') && s.clearAll()}
+          onClick={() => window.confirm('Delete all workstreams, people, sellers and capabilities? You can undo.') && s.clearAll()}
         >
           Start empty
         </button>

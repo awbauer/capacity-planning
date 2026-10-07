@@ -62,6 +62,7 @@ export function ResourceView({ buckets }: Props) {
         a.kind.localeCompare(b.kind),
     );
 
+    const projectCount = new Set(assignments.map((a) => a.projectId)).size;
     rows.push({
       key,
       depth: 0,
@@ -85,7 +86,7 @@ export function ResourceView({ buckets }: Props) {
             <div className="row-meta">
               <TagChips tagIds={r.tagIds} tagsById={d.tagsById} />
               <span className="muted small">
-                {assignments.length} project{assignments.length === 1 ? '' : 's'}
+                {projectCount} workstream{projectCount === 1 ? '' : 's'}
               </span>
             </div>
             {(overCount > 0 || riskCount > 0) && (
@@ -104,7 +105,7 @@ export function ResourceView({ buckets }: Props) {
             )}
           </div>
           <button type="button" className="btn btn-small" onClick={() => setAdding(r.id)}>
-            + Project
+            + Workstream
           </button>
         </div>
       ),
@@ -163,7 +164,7 @@ export function ResourceView({ buckets }: Props) {
               type="button"
               className="icon-btn"
               aria-label={`Remove ${r.name} from ${p.name}`}
-              title="Remove from project"
+              title="Remove from workstream"
               onClick={() => {
                 const weeks = Object.keys(a.weekly).length;
                 if (weeks === 0 || window.confirm(`Remove ${r.name}'s ${a.kind} row from ${p.name}? This clears ${weeks} week(s) of allocation (undo with Ctrl+Z).`)) {

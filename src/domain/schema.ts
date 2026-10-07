@@ -63,22 +63,22 @@ export function parsePlan(input: unknown): PlanData {
     for (const t of r.tagIds) if (!tagIds.has(t)) missing('tag', t, `resource "${r.name}"`);
   }
   for (const p of plan.projects) {
-    for (const t of p.tagIds) if (!tagIds.has(t)) missing('tag', t, `project "${p.name}"`);
-    if (p.sellerId && !sellerIds.has(p.sellerId)) missing('seller', p.sellerId, `project "${p.name}"`);
+    for (const t of p.tagIds) if (!tagIds.has(t)) missing('tag', t, `workstream "${p.name}"`);
+    if (p.sellerId && !sellerIds.has(p.sellerId)) missing('seller', p.sellerId, `workstream "${p.name}"`);
   }
   for (const a of plan.assignments) {
     const bad = Object.keys(a.weekly).find((k) => !isMonday(k));
     if (bad) {
       throw new Error(`Invalid plan file: assignment ${a.id} has week "${bad}"; weeks must be Mondays (yyyy-MM-dd)`);
     }
-    if (!projectIds.has(a.projectId)) missing('project', a.projectId, `assignment ${a.id}`);
+    if (!projectIds.has(a.projectId)) missing('workstream', a.projectId, `assignment ${a.id}`);
     if (!resourceIds.has(a.resourceId)) missing('resource', a.resourceId, `assignment ${a.id}`);
   }
   const seen = new Set<string>();
   for (const a of plan.assignments) {
     const key = `${a.projectId}|${a.resourceId}|${a.kind}`;
     if (seen.has(key)) {
-      throw new Error(`Invalid plan file: duplicate ${a.kind} assignment ${a.id} for the same person and project`);
+      throw new Error(`Invalid plan file: duplicate ${a.kind} assignment ${a.id} for the same person and workstream`);
     }
     seen.add(key);
   }

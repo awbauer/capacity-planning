@@ -1,35 +1,35 @@
 # Capacity Planner
 
-A browser-based planner for allocating people (resources) to projects by % per week.
+A browser-based planner for allocating people (resources) to workstreams by % per week. A workstream is any body of work someone can be allocated to: a sold project, or a pursuit still in presales.
 
-- **Projects view**: one row per project, expandable to the people on it. Type a % into the weekly cells. Badges flag overallocated people, skill mismatches and capabilities nobody on the project has.
-- **Resources view**: one row per person, showing their total load per week as a heat map (red means over the threshold). Expand a person to edit their allocations project by project.
+- **Workstreams view**: one row per workstream, expandable to the people on it. Click a weekly cell to cycle 0 → 25 → 50 → 100%. Badges flag overallocated people, skill mismatches and capabilities nobody on the workstream has.
+- **Resources view**: one row per person, showing their total load per week as a heat map (red means over the threshold). Expand a person to edit their allocations workstream by workstream.
 - **Zoom**: Week, Month or Quarter. In month and quarter view a cell shows the *average* for the period, and is flagged red if *any* week in it is over capacity. Typing into an aggregated cell sets every week in that period.
 - **Conflicts panel**: lists current and upcoming overallocations, at-risk weeks and skill gaps. Click an item to jump to the row.
 - **Presales vs. delivery, pipeline vs. won**:
-  - Each project has a status: *Pipeline*, *Won* or *Lost*.
-  - Each person's row on a project is either *Presales* or *Delivery*. A person can have one of each on the same project. Click the chip on the row to switch it.
+  - Each workstream has a status: *Pipeline*, *Won* or *Lost*.
+  - Each person's row on a workstream is either *Presales* or *Delivery*. A person can have one of each on the same workstream. Click the chip on the row to switch it.
   - **Presales** time always counts toward load, whether or not the deal is won.
-  - **Delivery** time counts once the project is *Won*. While the project is *Pipeline* it is **tentative**: shown with a dashed outline in the grid and as a small `+N` in the Resources view. On a *Lost* project it isn't counted.
+  - **Delivery** time counts once the workstream is *Won*. While the workstream is *Pipeline* it is **tentative**: shown with a dashed outline in the grid and as a small `+N` in the Resources view. On a *Lost* workstream it isn't counted.
   - **Red / overallocated**: committed work alone is over the threshold.
   - **Amber / at risk**: the person is only over the threshold if pipeline delivery work is won.
   - There's deliberately no win-probability %. A per-person "140% weighted" load isn't something anyone can act on.
-- **Capability tags** go on both resources and projects. Create them from Manage → Capabilities, or by typing a new name into any capability picker.
-- **Sellers** are attached to projects. They are not allocatable.
+- **Capability tags** go on both resources and workstreams. Create them from Manage → Capabilities, or by typing a new name into any capability picker.
+- **Sellers** are attached to workstreams. They are not allocatable.
 
 ## Editing allocations
 
-Each week of a person's row on a project is **0, 25, 50 or 100%**. This is a rough planning tool, not a timesheet. A cell shows a circle filled to the matching level.
+Each week of a person's row on a workstream is **0, 25, 50 or 100%**. This is a rough planning tool, not a timesheet. A cell shows a circle filled to the matching level.
 
-- **Totals aren't rounded.** Project FTE, a person's total load, and month/quarter averages show whatever the weeks add up to.
+- **Totals aren't rounded.** Workstream FTE, a person's total load, and month/quarter averages show whatever the weeks add up to.
 - **Colors:**
   - Presales circles are **violet**; delivery circles are **blue**.
   - A dashed circle is pipeline delivery, which is tentative.
   - Red and amber mark overallocated and at-risk weeks.
-- **Project start and end** are drawn as vertical lines across the project's rows, labelled on the project row.
+- **Workstream start and end** are drawn as vertical lines across the workstream's rows, labelled on the workstream row.
   - Delivery rows are shaded before the start.
   - Presales rows aren't, because that's when presales happens.
-  - On the project row, pre-start weeks that have presales work are tinted violet.
+  - On the workstream row, pre-start weeks that have presales work are tinted violet.
   - Everything after the end is shaded.
 - The ◑ / % toggle in the toolbar switches cells between circles and numbers.
 
@@ -40,7 +40,7 @@ Each week of a person's row on a project is **0, 25, 50 or 100%**. This is a rou
 | Clear | Select, then press Delete or Backspace |
 | Move | Arrow keys, Tab / Shift+Tab |
 | Month / quarter view | Clicking or typing sets every week in that period |
-| Put someone on a project for a date range | **+ Person** on a project row (or **+ Project** on a resource row). Pick Presales or Delivery (pipeline projects default to Presales) and 25 / 50 / 100%. Candidates are ranked by matching capabilities and show their peak load before and after the change. |
+| Put someone on a workstream for a date range | **+ Person** on a workstream row (or **+ Workstream** on a resource row). Pick Presales or Delivery (pipeline workstreams default to Presales) and 25 / 50 / 100%. Candidates are ranked by matching capabilities and show their peak load before and after the change. |
 | Undo / redo | Ctrl/⌘+Z, Ctrl/⌘+Shift+Z |
 
 Older saved data and imported files with other values (e.g. 60%) are rounded to the nearest step when loaded.
@@ -67,6 +67,10 @@ npm run build    # typecheck + production build into dist/
 ```
 
 `dist/` is a static site and can be hosted anywhere.
+
+### Naming
+
+The UI says *workstream*. The code, saved data and export files still use `Project` / `projects` / `projectId`, so existing data and exports keep working.
 
 ### Layout
 

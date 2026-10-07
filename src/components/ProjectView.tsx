@@ -96,7 +96,7 @@ export function ProjectView({ buckets }: Props) {
           </button>
           <div className="row-main">
             <div className="row-title">
-              <button type="button" className="link" onClick={() => setEditing(p)} title="Edit project">
+              <button type="button" className="link" onClick={() => setEditing(p)} title="Edit workstream">
                 {p.name}
               </button>
               {p.client && <span className="muted"> · {p.client}</span>}
@@ -111,7 +111,7 @@ export function ProjectView({ buckets }: Props) {
             {(overPeople.size > 0 || riskPeople.length > 0 || uncovered.length > 0 || assignments.length === 0) && (
               <div className="row-badges">
                 {overPeople.size > 0 && (
-                  <span className="badge badge-danger" title="People on this project whose committed work is over capacity in the visible range">
+                  <span className="badge badge-danger" title="People on this workstream whose committed work is over capacity in the visible range">
                     ⚠ {overPeople.size} overallocated
                   </span>
                 )}
@@ -121,7 +121,7 @@ export function ProjectView({ buckets }: Props) {
                   </span>
                 )}
                 {uncovered.length > 0 && (
-                  <span className="badge badge-warn" title="Required capabilities nobody on the project has">
+                  <span className="badge badge-warn" title="Required capabilities nobody on the workstream has">
                     Uncovered: {uncovered.map((t) => d.tagsById.get(t)?.name).join(', ')}
                   </span>
                 )}
@@ -180,7 +180,7 @@ export function ProjectView({ buckets }: Props) {
               type="button"
               className="icon-btn"
               aria-label={`Remove ${r.name} from ${p.name}`}
-              title="Remove from project"
+              title="Remove from workstream"
               onClick={() => {
                 const weeks = Object.keys(a.weekly).length;
                 if (weeks === 0 || window.confirm(`Remove ${r.name}'s ${a.kind} row from ${p.name}? This clears ${weeks} week(s) of allocation (undo with Ctrl+Z).`)) {
@@ -206,10 +206,10 @@ export function ProjectView({ buckets }: Props) {
         rows={rows}
         corner={
           <div className="corner-content">
-            <strong>Projects</strong> <span className="muted">({projects.length})</span>
+            <strong>Workstreams</strong> <span className="muted">({projects.length})</span>
             <div className="corner-actions">
               <button type="button" className="btn btn-small btn-primary" onClick={() => setEditing('new')}>
-                + New project
+                + New workstream
               </button>
               <button type="button" className="btn btn-small" onClick={() => setAllExpanded(projectKeys, true)}>
                 Expand
@@ -223,13 +223,13 @@ export function ProjectView({ buckets }: Props) {
         empty={
           plan.projects.length === 0 ? (
             <span>
-              No projects yet.{' '}
+              No workstreams yet.{' '}
               <button type="button" className="link" onClick={() => setEditing('new')}>
                 Create one
               </button>
             </span>
           ) : (
-            'No projects match the filters.'
+            'No workstreams match the filters.'
           )
         }
       />

@@ -48,7 +48,7 @@ export function ProjectDialog({ project, onClose }: Props) {
 
   return (
     <Modal
-      title={project ? 'Edit project' : 'New project'}
+      title={project ? 'Edit workstream' : 'New workstream'}
       onClose={onClose}
       footer={
         <>
@@ -62,7 +62,7 @@ export function ProjectDialog({ project, onClose }: Props) {
             Cancel
           </button>
           <button type="submit" form="project-form" className="btn btn-primary" disabled={!canSave}>
-            {project ? 'Save' : 'Create project'}
+            {project ? 'Save' : 'Create workstream'}
           </button>
         </>
       }
@@ -94,7 +94,7 @@ export function ProjectDialog({ project, onClose }: Props) {
           </label>
         </div>
         <p className="muted small form-note">
-          Presales time always counts toward people&apos;s load. Delivery time counts once the project is Won, shows as
+          Presales time always counts toward people&apos;s load. Delivery time counts once the workstream is Won, shows as
           tentative (“at risk”) while it&apos;s in Pipeline, and stops counting if it&apos;s Lost.
         </p>
         <div className="label-like">

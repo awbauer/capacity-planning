@@ -14,7 +14,7 @@ export function StatusSelect({ value, onChange, compact }: StatusSelectProps) {
   return (
     <select
       className={`status-select status-${value}${compact ? ' compact' : ''}`}
-      aria-label="Project status"
+      aria-label="Workstream status"
       value={value}
       onChange={(e) => onChange(e.target.value as ProjectStatus)}
     >
@@ -40,7 +40,7 @@ export function KindToggle({ assignment }: { assignment: Assignment }) {
       title={`Click to change to ${KIND_LABELS[other]}`}
       onClick={() => {
         if (!setAssignmentKind(assignment.id, other)) {
-          window.alert(`This person already has a ${KIND_LABELS[other].toLowerCase()} row on this project.`);
+          window.alert(`This person already has a ${KIND_LABELS[other].toLowerCase()} row on this workstream.`);
         }
       }}
     >
@@ -53,14 +53,14 @@ export function KindToggle({ assignment }: { assignment: Assignment }) {
 export function LoadClassBadge({ cls }: { cls: LoadClass | undefined }) {
   if (cls === 'tentative') {
     return (
-      <span className="badge badge-tentative" title="Delivery on a pipeline project: counts toward 'at risk', not 'overallocated'">
+      <span className="badge badge-tentative" title="Delivery on a pipeline workstream: counts toward 'at risk', not 'overallocated'">
         Tentative
       </span>
     );
   }
   if (cls === 'excluded') {
     return (
-      <span className="badge" title="Delivery on a lost project: not counted toward load">
+      <span className="badge" title="Delivery on a lost workstream: not counted toward load">
         Not counted
       </span>
     );
@@ -89,7 +89,7 @@ export function AssignmentBadges({ assignment, cls, over, risk, mismatch }: Assi
         </span>
       )}
       {mismatch && (
-        <span className="badge badge-warn" title="This person has none of the project's required capabilities">
+        <span className="badge badge-warn" title="This person has none of the workstream's required capabilities">
           Skill mismatch
         </span>
       )}

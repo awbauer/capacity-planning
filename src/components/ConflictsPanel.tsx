@@ -43,7 +43,7 @@ export function ConflictsPanel() {
 
   return (
     <aside className="conflicts" aria-label="Conflicts">
-      <h2 title="Committed work (presales + delivery on won projects) over capacity">
+      <h2 title="Committed work (presales + delivery on won workstreams) over capacity">
         Overallocated <span className="count">{over.length}</span>
       </h2>
       {list(over, 'Nobody is over capacity from this week on.')}
@@ -57,7 +57,7 @@ export function ConflictsPanel() {
         Skill gaps <span className="count">{d.skillIssues.length}</span>
       </h2>
       {d.skillIssues.length === 0 ? (
-        <p className="muted small">Every assignment matches its project's capabilities.</p>
+        <p className="muted small">Every assignment matches its workstream's capabilities.</p>
       ) : (
         <ul>
           {d.skillIssues.map((i) =>
