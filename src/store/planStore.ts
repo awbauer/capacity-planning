@@ -79,7 +79,7 @@ export const usePlanStore = create<PlanState>()(
         const update = (fn: (plan: PlanData) => PlanData) => set({ plan: fn(get().plan) });
 
         return {
-          plan: {},
+          plan: createEmptyPlan(),
 
           addTag: (name) => {
             const trimmed = name.trim();
