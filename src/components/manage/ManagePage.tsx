@@ -65,7 +65,7 @@ function ResourcesTable() {
             <th>Level</th>
             <th>Role</th>
             <th>Capabilities</th>
-            <th>Workstreams</th>
+            <th>Roles</th>
             <th />
           </tr>
         </thead>
@@ -104,7 +104,7 @@ function ResourcesTable() {
                     className="icon-btn"
                     aria-label={`Delete ${r.name}`}
                     onClick={() => {
-                      if (window.confirm(`Delete ${r.name}${n ? ` and remove them from ${plural(n, 'workstream')}` : ''}?`)) {
+                      if (window.confirm(`Delete ${r.name}?${n ? ` Their ${plural(n, 'role')} stay on the workstreams as open roles.` : ''}`)) {
                         s.deleteResource(r.id);
                       }
                     }}

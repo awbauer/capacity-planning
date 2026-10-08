@@ -6,6 +6,8 @@ const a = (id: string, projectId: string, resourceId: string, weekly: Record<str
   id,
   projectId,
   resourceId,
+  name: '',
+  tagIds: [],
   weekly,
 });
 

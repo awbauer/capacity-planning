@@ -9,8 +9,9 @@ const isMonday = (k: string) => /^\d{4}-\d{2}-\d{2}$/.test(k) && normalizeWeek(k
 const weekKey = z.string().refine(isMonday, 'weeks must be Mondays in yyyy-MM-dd format');
 
 const planSchema = z.object({
-  // v1 predates workstream status; v2 had separate presales/delivery rows. Both are upgraded.
-  version: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+  // v1 predates workstream status; v2 had separate presales/delivery rows; v3 kept open
+  // roles apart from people's rows. All are upgraded to v4 (every row is a role).
+  version: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
   // Files exported before named plans have neither; they import as "Default".
   name: z.string().trim().min(1).optional(),
   revision: z.number().int().min(0).optional(),
@@ -42,12 +43,15 @@ const planSchema = z.object({
     z.object({
       id,
       projectId: id,
-      resourceId: id,
+      resourceId: id.nullable(),
+      name: z.string().optional(),
+      level: z.enum(CAREER_LEVELS).optional(),
+      tagIds: z.array(id).optional(),
       kind: z.enum(['presales', 'delivery']).optional(),
       weekly: z.record(z.string(), z.number().min(0)),
     }),
   ),
-  // Open roles (unfilled demand); files from before they existed have none.
+  // v3 only: open roles were kept separately.
   roles: z
     .array(
       z.object({
@@ -59,7 +63,7 @@ const planSchema = z.object({
         weekly: z.record(z.string(), z.number().min(0)),
       }),
     )
-    .default([]),
+    .optional(),
   settings: z.object({
     overallocationThreshold: z.number().positive(),
     criticalThreshold: z.number().positive().default(149),
@@ -79,12 +83,11 @@ export function parsePlanFile(input: unknown): PlanFile {
     const issue = result.error.issues[0];
     throw new Error(`Invalid plan file at ${issue.path.join('.') || '(root)'}: ${issue.message}`);
   }
-  const { name, revision, ...data } = result.data;
+  const { name, revision, roles, ...data } = result.data;
   const plan: PlanData = {
     ...data,
-    version: 3,
-    assignments: mergeAssignments(data.assignments),
-    roles: data.roles.map((r) => ({ ...r, weekly: snapWeekly(r.weekly) })),
+    version: 4,
+    assignments: toRoles(data.version, data.assignments, roles, data.resources),
   };
   const tagIds = new Set(plan.tags.map((t) => t.id));
   const sellerIds = new Set(plan.sellers.map((s) => s.id));
@@ -101,60 +104,93 @@ export function parsePlanFile(input: unknown): PlanFile {
     if (p.sellerId && !sellerIds.has(p.sellerId)) missing('seller', p.sellerId, `workstream "${p.name}"`);
   }
   for (const a of plan.assignments) {
+    const label = a.name ? `role "${a.name}"` : `role ${a.id}`;
     const bad = Object.keys(a.weekly).find((k) => !isMonday(k));
-    if (bad) {
-      throw new Error(`Invalid plan file: assignment ${a.id} has week "${bad}"; weeks must be Mondays (yyyy-MM-dd)`);
-    }
-    if (!projectIds.has(a.projectId)) missing('workstream', a.projectId, `assignment ${a.id}`);
-    if (!resourceIds.has(a.resourceId)) missing('resource', a.resourceId, `assignment ${a.id}`);
-  }
-  for (const r of plan.roles) {
-    const bad = Object.keys(r.weekly).find((k) => !isMonday(k));
-    if (bad) throw new Error(`Invalid plan file: role "${r.name}" has week "${bad}"; weeks must be Mondays (yyyy-MM-dd)`);
-    if (!projectIds.has(r.projectId)) missing('workstream', r.projectId, `role "${r.name}"`);
-    for (const t of r.tagIds) if (!tagIds.has(t)) missing('tag', t, `role "${r.name}"`);
+    if (bad) throw new Error(`Invalid plan file: ${label} has week "${bad}"; weeks must be Mondays (yyyy-MM-dd)`);
+    if (!projectIds.has(a.projectId)) missing('workstream', a.projectId, label);
+    if (a.resourceId !== null && !resourceIds.has(a.resourceId)) missing('resource', a.resourceId, label);
+    for (const t of a.tagIds) if (!tagIds.has(t)) missing('tag', t, label);
   }
   return { name: name ?? DEFAULT_PLAN_NAME, revision: revision ?? 0, plan };
 }
 
-type StoredAssignment = Omit<Assignment, 'weekly'> & { weekly?: Record<string, number>; kind?: string };
+/** A row as saved by any version: v1–v3 rows had no role fields, v1–v2 could have a `kind`. */
+type StoredAssignment = {
+  id: string;
+  projectId: string;
+  resourceId: string | null;
+  name?: string;
+  level?: Assignment['level'];
+  tagIds?: string[];
+  weekly?: Record<string, number>;
+  kind?: string;
+};
+type StoredRole = Omit<Assignment, 'resourceId'>;
 
 /**
- * One row per person per workstream. Older data could have separate presales
- * and delivery rows; their weeks are added together, then every week is
- * snapped to 0/25/50/100.
+ * Older data could have separate presales and delivery rows for the same
+ * person on a workstream; their weeks are added together into one row.
  */
-export function mergeAssignments(list: StoredAssignment[]): Assignment[] {
-  const byKey = new Map<string, Assignment>();
+export function mergeAssignments(list: StoredAssignment[]): StoredAssignment[] {
+  const byKey = new Map<string, StoredAssignment & { weekly: Record<string, number> }>();
   for (const a of list) {
     const key = `${a.projectId}|${a.resourceId}`;
     const prev = byKey.get(key);
     if (!prev) {
-      byKey.set(key, { id: a.id, projectId: a.projectId, resourceId: a.resourceId, weekly: { ...a.weekly } });
+      byKey.set(key, { ...a, weekly: { ...a.weekly } });
       continue;
     }
     for (const [w, v] of Object.entries(a.weekly ?? {})) prev.weekly[w] = (prev.weekly[w] ?? 0) + v;
   }
-  return [...byKey.values()].map((a) => ({ ...a, weekly: snapWeekly(a.weekly) }));
+  return [...byKey.values()];
+}
+
+/**
+ * Brings rows from any version to v4 roles. Before v4, a person had one row
+ * per workstream (merged here) and open roles were kept apart (folded in
+ * here). A person's row becomes a role named after their title, so nobody is
+ * outside a role. Every week is snapped to 0/25/50/100.
+ */
+export function toRoles(
+  version: number | undefined,
+  rows: StoredAssignment[],
+  roles: StoredRole[] | undefined,
+  resources: { id: string; role?: string }[],
+): Assignment[] {
+  const legacy = (version ?? 0) < 4;
+  const titles = new Map(resources.map((r) => [r.id, r.role ?? '']));
+  const people = (legacy ? mergeAssignments(rows) : rows).map(
+    (a): Assignment => ({
+      id: a.id,
+      projectId: a.projectId,
+      resourceId: a.resourceId ?? null,
+      name: a.name ?? (a.resourceId ? (titles.get(a.resourceId) ?? '') : ''),
+      ...(a.level ? { level: a.level } : {}),
+      tagIds: a.tagIds ?? [],
+      weekly: snapWeekly(a.weekly ?? {}),
+    }),
+  );
+  const open = (roles ?? []).map((r): Assignment => ({ ...r, resourceId: null, weekly: snapWeekly(r.weekly) }));
+  return [...people, ...open];
 }
 
 /**
  * Best-effort upgrade of data saved by an older version of the app (no
  * validation, so a slightly malformed save isn't thrown away). Fills in
- * workstream status, merges presales/delivery rows and snaps weekly values.
+ * workstream status and thresholds, and brings rows up to v4 roles.
  */
 export function upgradePlan(raw: unknown): PlanData {
-  const plan = raw as PlanData;
+  const plan = raw as Omit<PlanData, 'version'> & { version?: number; roles?: StoredRole[] };
+  const { roles, ...rest } = plan;
   return {
-    ...plan,
-    version: 3,
+    ...rest,
+    version: 4,
     settings: {
       ...plan.settings,
       overallocationThreshold: plan.settings?.overallocationThreshold ?? 100,
       criticalThreshold: plan.settings?.criticalThreshold ?? 149,
     },
     projects: (plan.projects ?? []).map((p) => ({ ...p, status: p.status ?? 'won' })),
-    assignments: mergeAssignments(plan.assignments ?? []),
-    roles: plan.roles ?? [],
+    assignments: toRoles(plan.version, plan.assignments ?? [], roles, plan.resources ?? []),
   };
 }

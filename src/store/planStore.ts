@@ -10,7 +10,6 @@ import type {
   Assignment,
   CapabilityTag,
   CareerLevel,
-  OpenRole,
   PlanData,
   PlanSettings,
   Project,
@@ -45,28 +44,33 @@ interface PlanActions {
 
   addResource: (input: Omit<Resource, 'id'>) => Resource;
   updateResource: (id: string, patch: Partial<Omit<Resource, 'id'>>) => void;
+  /** Removes a person; the roles they were in stay, as open roles. */
   deleteResource: (id: string) => void;
 
   addProject: (input: Omit<Project, 'id'>) => Project;
   /**
-   * Updates a workstream. With `shift`, also moves its people's and open
-   * roles' weeks on or after `shift.from` by `shift.weeks` (a slipped deal),
+   * Updates a workstream. With `shift`, also moves its roles'
+   * weeks on or after `shift.from` by `shift.weeks` (a slipped deal),
    * as one undo step.
    */
   updateProject: (id: string, patch: Partial<Omit<Project, 'id'>>, shift?: { from: WeekKey; weeks: number }) => void;
   deleteProject: (id: string) => void;
 
-  /** Adds the resource to the workstream (reusing their existing row) and optionally fills a week range. */
+  /**
+   * Puts a person on a workstream: reuses a role they're already in there,
+   * otherwise adds a role named after their title. Optionally fills a week range.
+   */
   addAssignment: (projectId: string, resourceId: string, fill?: FillRange) => Assignment;
+  /** Removes a role (and with it, the person's place on the workstream). */
   removeAssignment: (id: string) => void;
-  /** Applies all edits (to people's rows or open roles) as a single undo step. */
+  /** Applies all edits as a single undo step. */
   setAllocations: (edits: AllocationEdit[]) => void;
 
-  addRole: (projectId: string, input: Omit<OpenRole, 'id' | 'projectId' | 'weekly'>, fill?: FillRange) => OpenRole;
-  updateRole: (id: string, patch: Partial<Omit<OpenRole, 'id' | 'projectId'>>) => void;
-  removeRole: (id: string) => void;
-  /** Gives an open role's weeks to a person on the same workstream (adding to their row) and removes the role. */
-  fillRole: (roleId: string, resourceId: string) => void;
+  /** Adds a role, open or with a person in it, optionally filling a week range. */
+  addRole: (projectId: string, input: RoleInput, fill?: FillRange) => Assignment;
+  updateRole: (id: string, patch: Partial<Omit<RoleInput, 'resourceId'>>) => void;
+  /** Puts a person in a role, swaps them, or (null) leaves the role open. Keeps its weeks. */
+  assignRole: (id: string, resourceId: string | null) => void;
 
   setThresholds: (patch: Partial<Pick<PlanSettings, 'overallocationThreshold' | 'criticalThreshold'>>) => void;
   /** null resets the level to its default target. */
@@ -93,6 +97,13 @@ interface PlanActions {
 }
 
 export type ImportOutcome = 'replaced-open' | 'replaced-other' | 'created';
+
+export interface RoleInput {
+  name: string;
+  level?: CareerLevel;
+  tagIds: string[];
+  resourceId?: string | null;
+}
 
 export interface PlanState extends PlanActions {
   /** The open plan (the only part tracked by undo). */
@@ -162,8 +173,8 @@ export const usePlanStore = create<PlanState>()(
               projects: p.projects.map((pr) =>
                 pr.tagIds.includes(id) ? { ...pr, tagIds: pr.tagIds.filter((t) => t !== id) } : pr,
               ),
-              roles: p.roles.map((r) =>
-                r.tagIds.includes(id) ? { ...r, tagIds: r.tagIds.filter((t) => t !== id) } : r,
+              assignments: p.assignments.map((a) =>
+                a.tagIds.includes(id) ? { ...a, tagIds: a.tagIds.filter((t) => t !== id) } : a,
               ),
             })),
 
@@ -198,7 +209,7 @@ export const usePlanStore = create<PlanState>()(
             update((p) => ({
               ...p,
               resources: p.resources.filter((r) => r.id !== id),
-              assignments: p.assignments.filter((a) => a.resourceId !== id),
+              assignments: p.assignments.map((a) => (a.resourceId === id ? { ...a, resourceId: null } : a)),
             })),
 
           addProject: (input) => {
@@ -208,13 +219,12 @@ export const usePlanStore = create<PlanState>()(
           },
           updateProject: (id, patch, shift) =>
             update((p) => {
-              const move = <T extends { projectId: string; weekly: Record<WeekKey, number> }>(row: T): T =>
-                shift && row.projectId === id ? { ...row, weekly: shiftWeekly(row.weekly, shift.from, shift.weeks) } : row;
+              const move = (a: Assignment): Assignment =>
+                shift && a.projectId === id ? { ...a, weekly: shiftWeekly(a.weekly, shift.from, shift.weeks) } : a;
               return {
                 ...p,
                 projects: p.projects.map((pr) => (pr.id === id ? { ...pr, ...patch } : pr)),
                 assignments: shift ? p.assignments.map(move) : p.assignments,
-                roles: shift ? p.roles.map(move) : p.roles,
               };
             }),
           deleteProject: (id) =>
@@ -222,14 +232,14 @@ export const usePlanStore = create<PlanState>()(
               ...p,
               projects: p.projects.filter((pr) => pr.id !== id),
               assignments: p.assignments.filter((a) => a.projectId !== id),
-              roles: p.roles.filter((r) => r.projectId !== id),
             })),
 
           addAssignment: (projectId, resourceId, fill) => {
             const existing = get().plan.assignments.find(
               (a) => a.projectId === projectId && a.resourceId === resourceId,
             );
-            const base: Assignment = existing ?? { id: newId(), projectId, resourceId, weekly: {} };
+            const title = get().plan.resources.find((r) => r.id === resourceId)?.role ?? '';
+            const base: Assignment = existing ?? { id: newId(), projectId, resourceId, name: title, tagIds: [], weekly: {} };
             const assignment: Assignment = fill
               ? { ...base, weekly: applyFill(base.weekly, weeksBetween(fill.from, fill.to), fill.percent) }
               : base;
@@ -247,49 +257,43 @@ export const usePlanStore = create<PlanState>()(
             if (edits.length === 0) return;
             const byId = new Map<string, AllocationEdit[]>();
             for (const e of edits) byId.set(e.assignmentId, [...(byId.get(e.assignmentId) ?? []), e]);
-            const edit = <T extends { id: string; weekly: Record<WeekKey, number> }>(row: T): T => {
-              const mine = byId.get(row.id);
-              if (!mine) return row;
-              let weekly = row.weekly;
-              for (const e of mine) weekly = applyFill(weekly, e.weeks, e.percent);
-              return { ...row, weekly };
-            };
-            update((p) => ({ ...p, assignments: p.assignments.map(edit), roles: p.roles.map(edit) }));
+            update((p) => ({
+              ...p,
+              assignments: p.assignments.map((a) => {
+                const mine = byId.get(a.id);
+                if (!mine) return a;
+                let weekly = a.weekly;
+                for (const e of mine) weekly = applyFill(weekly, e.weeks, e.percent);
+                return { ...a, weekly };
+              }),
+            }));
           },
 
           addRole: (projectId, input, fill) => {
-            const role: OpenRole = {
-              ...input,
+            const role: Assignment = {
               id: newId(),
               projectId,
+              resourceId: input.resourceId ?? null,
               name: input.name.trim(),
+              ...(input.level ? { level: input.level } : {}),
+              tagIds: input.tagIds,
               weekly: fill ? applyFill({}, weeksBetween(fill.from, fill.to), fill.percent) : {},
             };
-            update((p) => ({ ...p, roles: [...p.roles, role] }));
+            update((p) => ({ ...p, assignments: [...p.assignments, role] }));
             return role;
           },
           updateRole: (id, patch) =>
-            update((p) => ({ ...p, roles: p.roles.map((r) => (r.id === id ? { ...r, ...patch } : r)) })),
-          removeRole: (id) => update((p) => ({ ...p, roles: p.roles.filter((r) => r.id !== id) })),
-          fillRole: (roleId, resourceId) =>
-            update((p) => {
-              const role = p.roles.find((r) => r.id === roleId);
-              if (!role) return p;
-              const existing = p.assignments.find((a) => a.projectId === role.projectId && a.resourceId === resourceId);
-              // Adds to whatever the person already has on the workstream, snapped to a step.
-              const weekly = { ...(existing?.weekly ?? {}) };
-              for (const [w, v] of Object.entries(role.weekly)) weekly[w] = snapToStep((weekly[w] ?? 0) + v);
-              const filled: Assignment = existing
-                ? { ...existing, weekly }
-                : { id: newId(), projectId: role.projectId, resourceId, weekly };
-              return {
-                ...p,
-                roles: p.roles.filter((r) => r.id !== roleId),
-                assignments: existing
-                  ? p.assignments.map((a) => (a.id === existing.id ? filled : a))
-                  : [...p.assignments, filled],
-              };
-            }),
+            update((p) => ({
+              ...p,
+              assignments: p.assignments.map((a) =>
+                a.id === id ? { ...a, ...patch, ...(patch.name !== undefined ? { name: patch.name.trim() } : {}) } : a,
+              ),
+            })),
+          assignRole: (id, resourceId) =>
+            update((p) => ({
+              ...p,
+              assignments: p.assignments.map((a) => (a.id === id ? { ...a, resourceId } : a)),
+            })),
 
           setThresholds: (patch) =>
             update((p) => ({
@@ -389,8 +393,8 @@ export const usePlanStore = create<PlanState>()(
       // v4: one row per person per workstream (presales/delivery come from the start date).
       // v5: separate yellow/red thresholds (criticalThreshold).
       // v6: multiple named plans; the existing one becomes "Default".
-      // v7: open roles.
-      version: 7,
+      // v7: open roles. v8: every row is a role with an optional person (plan format 4).
+      version: 8,
       partialize: (s) => ({ plan: s.plan, meta: s.meta, library: s.library }),
       migrate: (persisted) => {
         const state = persisted as { plan: PlanData; meta?: PlanMeta; library?: StoredPlan[] };

@@ -29,7 +29,7 @@ export function ProjectDialog({ project, onClose }: Props) {
   const oldStart = project?.startWeek;
   const slip = oldStart && draft.startWeek && draft.startWeek !== oldStart ? weeksApart(oldStart, draft.startWeek) : 0;
   const rowsToMove = project
-    ? [...(d.assignmentsByProject.get(project.id) ?? []), ...(d.rolesByProject.get(project.id) ?? [])].filter((a) =>
+    ? (d.assignmentsByProject.get(project.id) ?? []).filter((a) =>
         Object.keys(a.weekly).some((w) => w >= oldStart! && a.weekly[w] > 0),
       )
     : [];

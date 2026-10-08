@@ -45,6 +45,7 @@ export function splitLoads(plan: Pick<PlanData, 'assignments' | 'projects'>): Sp
   const committed = new Map<string, WeekTotals>();
   const tentative = new Map<string, WeekTotals>();
   for (const a of plan.assignments) {
+    if (a.resourceId === null) continue; // Open roles are nobody's load.
     for (const [w, pct] of Object.entries(a.weekly)) {
       if (!pct) continue;
       const cls = classAt(a, w);

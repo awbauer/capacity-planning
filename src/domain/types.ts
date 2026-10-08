@@ -52,37 +52,32 @@ export interface Project {
 }
 
 /**
- * One resource on one workstream (stored as a project), with a % allocation
- * per week (absent week = 0). There is at most one per person per workstream;
- * weeks before the start date are presales, weeks from it delivery.
+ * A role (seat) on a workstream, stored as an Assignment: what's needed
+ * (name, level, capabilities) and the weekly %, plus the person in it. A
+ * person is always in a role, even a bare shell named after their title; a
+ * role with no person is open demand ("Data Cloud Architect at 50% from
+ * January") that is nobody's load until filled. Weeks before the workstream's
+ * start date are presales, weeks from it delivery.
  */
 export interface Assignment {
   id: string;
   projectId: string;
-  resourceId: string;
-  weekly: Record<WeekKey, number>;
-}
-
-/**
- * Demand on a workstream that no one has been chosen for yet ("Data Cloud
- * Architect at 50% from January"). It's nobody's load until filled.
- */
-export interface OpenRole {
-  id: string;
-  projectId: string;
-  /** What the role is, e.g. "Data Cloud Architect". */
+  /** The person in the role; null while it's open. */
+  resourceId: string | null;
+  /** What the role is, e.g. "Solution Architect". May be empty (a shell). */
   name: string;
+  /** Level the role calls for (the person keeps their own). */
   level?: CareerLevel;
-  /** Capabilities the person filling it should have. */
+  /** Capabilities the role needs; empty means the workstream's. */
   tagIds: string[];
   weekly: Record<WeekKey, number>;
 }
 
-/** Either kind of row with weekly allocations on a workstream. */
-export type AllocationRow = Assignment | OpenRole;
+/** A role someone is in. */
+export type FilledAssignment = Assignment & { resourceId: string };
 
-export function isOpenRole(row: AllocationRow): row is OpenRole {
-  return !('resourceId' in row);
+export function isFilled(a: Assignment): a is FilledAssignment {
+  return a.resourceId !== null;
 }
 
 export interface PlanSettings {
@@ -95,12 +90,12 @@ export interface PlanSettings {
 }
 
 export interface PlanData {
-  version: 3;
+  /** 4: every row is a role with an optional person (open roles folded into assignments). */
+  version: 4;
   tags: CapabilityTag[];
   sellers: Seller[];
   resources: Resource[];
   projects: Project[];
   assignments: Assignment[];
-  roles: OpenRole[];
   settings: PlanSettings;
 }
