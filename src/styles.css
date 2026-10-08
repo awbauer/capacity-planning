@@ -1874,3 +1874,296 @@ kbd {
 .targets-row input {
   width: 64px;
 }
+
+/* ---------- Details modal ---------- */
+
+.details-subtitle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin: 0 0 8px;
+}
+
+.status-pill {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 10px;
+  border: 1px solid currentColor;
+}
+
+.details-tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.details-notes {
+  white-space: pre-wrap;
+  background: var(--surface-2);
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin: 0 0 8px;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+  margin: 8px 0 12px;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: var(--surface);
+}
+
+.stat-value {
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.stat-label {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.stat-warn .stat-value {
+  color: var(--warn);
+}
+
+.stat-good .stat-value {
+  color: #16a34a;
+}
+
+.details-section {
+  margin-top: 12px;
+}
+
+.details-section h3 {
+  font-size: 13px;
+  margin: 0 0 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.details-section .count,
+.demand .count {
+  display: inline-block;
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.count.count-warn {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.count.count-ok {
+  background: color-mix(in srgb, #16a34a 15%, transparent);
+  color: #16a34a;
+}
+
+.checklist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.check {
+  display: grid;
+  grid-template-columns: 18px auto 1fr;
+  gap: 6px;
+  align-items: baseline;
+  padding: 2px 0;
+  font-size: 13px;
+}
+
+.check-detail {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.check.fail .check-icon,
+.check.fail .check-label {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.check.ok .check-icon {
+  color: #16a34a;
+}
+
+.check.ok .check-label {
+  color: var(--muted);
+}
+
+.details-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.details-table th {
+  text-align: left;
+  color: var(--muted);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  padding: 3px 6px;
+}
+
+.details-table td {
+  border-bottom: 1px solid var(--border);
+  padding: 4px 6px;
+  vertical-align: middle;
+}
+
+.details-table td.num,
+.demand-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.details-table tr.past td {
+  color: var(--muted);
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+.role-suggestions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.role-suggestions li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+
+/* ---------- Demand view ---------- */
+
+.demand {
+  padding: 14px;
+  max-width: 1400px;
+}
+
+.demand-intro {
+  margin: 0 0 8px;
+}
+
+.demand-section {
+  margin-bottom: 24px;
+}
+
+.demand-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.demand-header h2 {
+  font-size: 16px;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.demand-table td {
+  vertical-align: top;
+}
+
+.link.strong {
+  font-weight: 700;
+}
+
+.role-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.role-chip {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  padding: 1px 6px;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  line-height: 1.25;
+}
+
+.role-chip:hover {
+  border-color: var(--accent);
+}
+
+.role-chip-person {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.role-chip-role {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.role-chip.open {
+  border-style: dashed;
+  border-color: var(--warn);
+  background: var(--warn-bg);
+}
+
+.role-chip.open .role-chip-person {
+  color: var(--warn);
+  font-style: italic;
+}
+
+.open-fte {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+/* Person rows: the clickable name stays whole; the job title after it truncates. */
+.grid tr.resource-row .row-title > .link {
+  flex-shrink: 0;
+}
+
+.grid tr.resource-row .row-title > .muted {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}

@@ -17,6 +17,7 @@ import { PlanSwitcher } from './PlanSwitcher';
 const VIEWS: { id: View; label: string }[] = [
   { id: 'projects', label: 'Workstreams' },
   { id: 'resources', label: 'Resources' },
+  { id: 'demand', label: 'Demand' },
   { id: 'manage', label: 'Manage' },
 ];
 const ZOOMS: { id: Zoom; label: string }[] = [
@@ -50,7 +51,7 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
   const thisWeek = currentWeek();
   const conflictCount =
     d.overallocations.filter((o) => o.to >= thisWeek).length + d.skillIssues.length + d.upcomingRoles.length;
-  const isGrid = ui.view !== 'manage';
+  const isGrid = ui.view === 'projects' || ui.view === 'resources';
 
   const exportPlan = () => {
     const next = bumpRevision();
