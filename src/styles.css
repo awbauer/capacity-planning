@@ -2167,3 +2167,81 @@ kbd {
   white-space: nowrap;
   min-width: 0;
 }
+
+/* ---------- Toggle switch ---------- */
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: none;
+  padding: 2px 4px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.toggle-track {
+  position: relative;
+  width: 30px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--border-strong);
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+
+.toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform 0.15s;
+}
+
+.toggle[aria-checked='true'] .toggle-track {
+  background: var(--accent);
+}
+
+.toggle[aria-checked='true'] .toggle-thumb {
+  transform: translateX(12px);
+}
+
+.toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.toggle-small {
+  font-size: 11px;
+  gap: 4px;
+}
+
+.toggle-small .toggle-track {
+  width: 24px;
+  height: 14px;
+}
+
+.toggle-small .toggle-thumb {
+  width: 10px;
+  height: 10px;
+}
+
+.toggle-small[aria-checked='true'] .toggle-thumb {
+  transform: translateX(10px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toggle-track,
+  .toggle-thumb {
+    transition: none;
+  }
+}
