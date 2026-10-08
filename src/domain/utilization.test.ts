@@ -37,8 +37,22 @@ describe('utilization', () => {
     expect(u.delivery).toBe(75);
     expect(u.pipeline).toBe(37.5);
     expect(u.presales).toBe(12.5);
-    // Won delivery + presales; tentative delivery doesn't count.
-    expect(u.committed).toBe(87.5);
+    // W1: won 100 + presales 25 = 125, capped at 100. W2: 50 (tentative delivery doesn't count).
+    expect(u.committed).toBe(75);
+  });
+
+  it('caps committed at 100% per week, so an overloaded week cannot offset an idle one', () => {
+    const p: PlanData = {
+      ...createEmptyPlan(),
+      projects: [{ id: 'won', name: 'won', sellerId: null, status: 'won', tagIds: [] }],
+      assignments: [
+        { id: 'a', projectId: 'won', resourceId: 'r', weekly: { [W1]: 100 } },
+        { id: 'b', projectId: 'won', resourceId: 'r', weekly: { [W1]: 50, [W2]: 50 } },
+      ],
+    };
+    const u = utilizationOf(utilizationByResource(p, splitLoads(p), [W1, W2]), 'r');
+    // 150% then 50% averages 75%, not 100%.
+    expect(u.committed).toBe(75);
   });
 
   it('averages the team per person, counting idle people as 0', () => {

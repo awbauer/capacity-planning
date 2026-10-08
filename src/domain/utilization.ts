@@ -17,16 +17,23 @@ export interface Utilization {
   pipeline: number;
   /** Part of `pipeline` that is presales (counts toward load whatever the outcome). */
   presales: number;
-  /** Average committed % (presales + won delivery): what over/underallocation is judged on. */
+  /**
+   * Average committed % (presales + won delivery): what underutilization is judged on.
+   * Each week is capped at 100% first, so a 150% week can't offset an idle one.
+   */
   committed: number;
 }
+
+/** A week counts for at most this much toward someone's average committed utilization. */
+export const UTILIZATION_CAP = 100;
 
 const ZERO: Utilization = { delivery: 0, pipeline: 0, presales: 0, committed: 0 };
 
 /**
  * Per-person average weekly utilization over the given weeks, split by the
  * status of the workstream the work is on. Delivery on lost workstreams is
- * excluded, as everywhere else.
+ * excluded, as everywhere else. Only `committed` is capped at 100% per week;
+ * delivery and pipeline are uncapped breakdowns.
  */
 export function utilizationByResource(
   plan: Pick<PlanData, 'assignments' | 'projects'>,
@@ -49,9 +56,14 @@ export function utilizationByResource(
         u.pipeline += share;
         if (cls === 'committed') u.presales += share;
       }
-      if (cls === 'committed') u.committed += share;
       out.set(a.resourceId, u);
     }
+  }
+  // Committed is capped per person per week, so it's taken from the weekly totals, not summed per assignment.
+  for (const [resourceId, totals] of loads.committed) {
+    const u = out.get(resourceId) ?? { ...ZERO };
+    u.committed = weeks.reduce((n, w) => n + Math.min(totals.get(w) ?? 0, UTILIZATION_CAP), 0) / weeks.length;
+    out.set(resourceId, u);
   }
   return out;
 }
