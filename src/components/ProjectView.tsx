@@ -14,6 +14,7 @@ import { FillRoleDialog } from './FillRoleDialog';
 import { RoleDialog } from './RoleDialog';
 import { TagChips } from './Chips';
 import { TimeGrid, type GridRow } from './grid/TimeGrid';
+import { Toggle } from './Toggle';
 import { ProjectDialog } from './ProjectDialog';
 import { AssignmentBadges, StatusSelect } from './StatusControls';
 
@@ -411,15 +412,7 @@ export function ProjectView({ buckets }: Props) {
                   Clients only
                 </button>
               )}
-              <button
-                type="button"
-                className="btn btn-small"
-                aria-pressed={groupByClient}
-                title="Group workstreams by client"
-                onClick={() => setGroupByClient(!groupByClient)}
-              >
-                By client
-              </button>
+              <Toggle small label="By client" checked={groupByClient} onChange={setGroupByClient} title="Group workstreams by client" />
             </div>
           </div>
         }

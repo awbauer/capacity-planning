@@ -13,6 +13,7 @@ import { useDerived } from '../store/useDerived';
 import { downloadText, today } from './download';
 import { Pie } from './grid/Pie';
 import { PlanSwitcher } from './PlanSwitcher';
+import { Toggle } from './Toggle';
 
 const VIEWS: { id: View; label: string }[] = [
   { id: 'projects', label: 'Workstreams' },
@@ -249,29 +250,23 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
                 </option>
               ))}
           </select>
-          <button
-            type="button"
-            className="btn"
-            aria-pressed={ui.filters.conflictsOnly}
+          <Toggle
+            label="Conflicts only"
+            checked={ui.filters.conflictsOnly}
             title={
               ui.view === 'projects'
                 ? 'Show only workstreams with a conflict: someone over/at risk in the visible weeks, a skill mismatch, an uncovered capability or an open role to fill'
                 : 'Show only people with a conflict: over/at risk in the visible weeks, or a skill mismatch'
             }
-            onClick={() => ui.setFilters({ conflictsOnly: !ui.filters.conflictsOnly })}
-          >
-            ⚠ Conflicts only
-          </button>
+            onChange={(conflictsOnly) => ui.setFilters({ conflictsOnly })}
+          />
           {ui.view === 'resources' && (
-            <button
-              type="button"
-              className="btn"
-              aria-pressed={ui.filters.underutilized}
+            <Toggle
+              label="Underutilized"
+              checked={ui.filters.underutilized}
               title={`Show only people whose committed work (presales + won delivery) averages under their level's utilization target over the next ${LOOKAHEAD_WEEKS} weeks (targets: Manage → Settings)`}
-              onClick={() => ui.setFilters({ underutilized: !ui.filters.underutilized })}
-            >
-              Underutilized
-            </button>
+              onChange={(underutilized) => ui.setFilters({ underutilized })}
+            />
           )}
           {ui.view === 'projects' && (
             <button
