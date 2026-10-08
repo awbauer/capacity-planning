@@ -47,6 +47,7 @@ export function ResourceView({ buckets }: Props) {
   const expanded = useUIStore((s) => s.expanded);
   const setExpanded = useUIStore((s) => s.setExpanded);
   const setAllExpanded = useUIStore((s) => s.setAllExpanded);
+  const showDetails = useUIStore((s) => s.showDetails);
   const removeAssignment = usePlanStore((s) => s.removeAssignment);
   const [adding, setAdding] = useState<string | null>(null);
 
@@ -108,7 +109,14 @@ export function ResourceView({ buckets }: Props) {
           </button>
           <div className="row-main">
             <div className="row-title">
-              {r.name}
+              <button
+                type="button"
+                className="link"
+                onClick={() => showDetails({ kind: 'resource', id: r.id })}
+                title="Details: utilization, checks, roles"
+              >
+                {r.name}
+              </button>
               {r.level && <span className="level-badge">{r.level}</span>}
               {r.role && <span className="muted small"> · {r.role}</span>}
             </div>

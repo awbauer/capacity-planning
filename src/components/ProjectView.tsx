@@ -61,6 +61,7 @@ export function ProjectView({ buckets }: Props) {
   const setAllExpanded = useUIStore((s) => s.setAllExpanded);
   const groupByClient = useUIStore((s) => s.groupByClient);
   const setGroupByClient = useUIStore((s) => s.setGroupByClient);
+  const showDetails = useUIStore((s) => s.showDetails);
   const removeAssignment = usePlanStore((s) => s.removeAssignment);
   const [roleDialog, setRoleDialog] = useState<{ projectId: string } | { role: Assignment } | null>(null);
   const [filling, setFilling] = useState<Assignment | null>(null);
@@ -129,7 +130,12 @@ export function ProjectView({ buckets }: Props) {
           </button>
           <div className="row-main">
             <div className="row-title">
-              <button type="button" className="link" onClick={() => setEditing(p)} title="Edit workstream">
+              <button
+                type="button"
+                className="link"
+                onClick={() => showDetails({ kind: 'project', id: p.id })}
+                title="Details: checks, filled and open roles"
+              >
                 {p.name}
               </button>
               {p.client && !groupByClient && <span className="muted"> · {p.client}</span>}

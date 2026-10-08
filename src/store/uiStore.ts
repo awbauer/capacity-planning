@@ -4,7 +4,10 @@ import type { ProjectStatus, WeekKey, Zoom } from '../domain/types';
 import { DEFAULT_PLAN_ID } from '../domain/plans';
 import { addWeeks, currentWeek } from '../domain/weeks';
 
-export type View = 'projects' | 'resources' | 'manage';
+export type View = 'projects' | 'resources' | 'demand' | 'manage';
+
+/** The workstream or person whose details modal is open. */
+export type DetailsTarget = { kind: 'project'; id: string } | { kind: 'resource'; id: string };
 
 export type ManageTab = 'resources' | 'projects' | 'tags' | 'sellers' | 'plans' | 'settings';
 
@@ -60,6 +63,7 @@ interface UIState {
   /** Workstreams view: group workstreams under their client. */
   groupByClient: boolean;
   showHelp: boolean;
+  details: DetailsTarget | null;
   cellStyle: CellStyle;
   /** Row to scroll to and highlight once it renders. */
   focusRow: RowKey | null;
@@ -79,6 +83,7 @@ interface UIState {
   setGroupByClient: (on: boolean) => void;
   resetFilters: () => void;
   setShowHelp: (show: boolean) => void;
+  showDetails: (target: DetailsTarget | null) => void;
   setCellStyle: (style: CellStyle) => void;
   /** Opens a view on a row, expanding it and any `parents` (its group rows). */
   jumpTo: (view: View, row: RowKey, week?: WeekKey, parents?: RowKey[]) => void;
@@ -102,6 +107,7 @@ export const useUIStore = create<UIState>()(
       showUtilization: false,
       groupByClient: true,
       showHelp: false,
+      details: null,
       cellStyle: 'pie',
       focusRow: null,
       exports: {},
@@ -122,6 +128,7 @@ export const useUIStore = create<UIState>()(
       setGroupByClient: (groupByClient) => set({ groupByClient }),
       resetFilters: () => set({ filters: NO_FILTERS }),
       setShowHelp: (showHelp) => set({ showHelp }),
+      showDetails: (details) => set({ details }),
       setCellStyle: (cellStyle) => set({ cellStyle }),
       jumpTo: (view, row, week, parents = []) =>
         set((s) => ({

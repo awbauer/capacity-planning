@@ -1,5 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { ConflictsPanel } from './components/ConflictsPanel';
+import { DemandView } from './components/DemandView';
+import { DetailsModal } from './components/DetailsModal';
 import { HelpDialog } from './components/HelpDialog';
 import { ManagePage } from './components/manage/ManagePage';
 import { ProjectView } from './components/ProjectView';
@@ -57,6 +59,10 @@ export function App() {
         <main className="main main-scroll">
           <ManagePage />
         </main>
+      ) : view === 'demand' ? (
+        <main className="main main-scroll">
+          <DemandView />
+        </main>
       ) : (
         <>
           <main className="main">
@@ -86,6 +92,7 @@ export function App() {
         </>
       )}
       {showHelp && <HelpDialog onClose={() => setShowHelp(false)} />}
+      <DetailsModal />
     </div>
   );
 }
