@@ -6,7 +6,7 @@ import { weekKind, type Severity } from '../domain/load';
 import type { Project } from '../domain/types';
 import type { Bucket } from '../domain/weeks';
 import { usePlan, usePlanStore } from '../store/planStore';
-import { isExpanded, useUIStore, type Filters } from '../store/uiStore';
+import { clientGroupKey, isExpanded, useUIStore, type Filters } from '../store/uiStore';
 import { useDerived } from '../store/useDerived';
 import { AddAssignmentDialog } from './AddAssignmentDialog';
 import { downloadText, today } from './download';
@@ -53,6 +53,8 @@ export function ProjectView({ buckets }: Props) {
   const expanded = useUIStore((s) => s.expanded);
   const setExpanded = useUIStore((s) => s.setExpanded);
   const setAllExpanded = useUIStore((s) => s.setAllExpanded);
+  const groupByClient = useUIStore((s) => s.groupByClient);
+  const setGroupByClient = useUIStore((s) => s.setGroupByClient);
   const removeAssignment = usePlanStore((s) => s.removeAssignment);
   const updateProject = usePlanStore((s) => s.updateProject);
   const [adding, setAdding] = useState<string | null>(null);
@@ -68,10 +70,11 @@ export function ProjectView({ buckets }: Props) {
       const flags = assignmentFlagWeeks(a, visibleWeeks, d.loads, plan.settings);
       return flags.over.length + flags.stretch.length + flags.risk.length > 0;
     });
-  const projects = sortProjects(plan.projects.filter((p) => matchesFilters(p, filters, d, hasConflict(p))));
+  const conflicted = new Set(plan.projects.filter(hasConflict).map((p) => p.id));
+  const projects = sortProjects(plan.projects.filter((p) => matchesFilters(p, filters, d, conflicted.has(p.id))));
 
   const rows: GridRow[] = [];
-  for (const p of projects) {
+  const pushProject = (p: Project) => {
     const key = `p:${p.id}`;
     const open = isExpanded(expanded, key);
     const assignments = [...(d.assignmentsByProject.get(p.id) ?? [])].sort(
@@ -112,7 +115,7 @@ export function ProjectView({ buckets }: Props) {
               <button type="button" className="link" onClick={() => setEditing(p)} title="Edit workstream">
                 {p.name}
               </button>
-              {p.client && <span className="muted"> · {p.client}</span>}
+              {p.client && !groupByClient && <span className="muted"> · {p.client}</span>}
             </div>
             <div className="row-meta">
               <StatusSelect compact value={p.status} onChange={(status) => updateProject(p.id, { status })} />
@@ -194,7 +197,7 @@ export function ProjectView({ buckets }: Props) {
       },
     });
 
-    if (!open) continue;
+    if (!open) return;
     for (const a of assignments) {
       const r = d.resourcesById.get(a.resourceId);
       if (!r) continue;
@@ -236,9 +239,74 @@ export function ProjectView({ buckets }: Props) {
         ),
       });
     }
+  };
+
+  // Client groups: named clients A–Z (case-insensitive), then workstreams without a client.
+  const groups: { key: string; client: string | undefined; projects: Project[] }[] = [];
+  if (groupByClient) {
+    const byKey = new Map<string, (typeof groups)[number]>();
+    for (const p of projects) {
+      const key = clientGroupKey(p.client);
+      const group = byKey.get(key) ?? { key, client: p.client?.trim() || undefined, projects: [] };
+      group.projects.push(p);
+      byKey.set(key, group);
+    }
+    groups.push(
+      ...[...byKey.values()].sort(
+        (a, b) => Number(!a.client) - Number(!b.client) || (a.client ?? '').localeCompare(b.client ?? ''),
+      ),
+    );
+  }
+
+  if (!groupByClient) projects.forEach(pushProject);
+  for (const g of groups) {
+    const open = isExpanded(expanded, g.key);
+    const issues = g.projects.filter((p) => conflicted.has(p.id)).length;
+    const fte = (w: string) => g.projects.reduce((n, p) => n + (d.projectLoad.get(p.id)?.get(w) ?? 0), 0);
+    rows.push({
+      key: g.key,
+      depth: 0,
+      className: 'group-row',
+      label: (
+        <div className="row-label">
+          <button
+            type="button"
+            className="twisty"
+            aria-expanded={open}
+            aria-label={open ? 'Collapse' : 'Expand'}
+            onClick={() => setExpanded(g.key, !open)}
+          >
+            {open ? '▾' : '▸'}
+          </button>
+          <div className="row-main">
+            <div className="row-title">
+              {g.client ? <strong>{g.client}</strong> : <em className="muted">No client</em>}{' '}
+              <span className="muted small">
+                · {g.projects.length} {g.projects.length === 1 ? 'workstream' : 'workstreams'}
+              </span>
+              {issues > 0 && (
+                <span className="badge badge-warn" title={`${issues} of this client's workstreams have a conflict`}>
+                  ⚠ {issues}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      ),
+      summary: (b) => {
+        const avg = b.weeks.reduce((n, w) => n + fte(w), 0) / b.weeks.length;
+        return {
+          text: avg ? (avg / 100).toFixed(1) : '',
+          className: 'group-sum',
+          title: avg ? `${(avg / 100).toFixed(2)} FTE across this client's workstreams${b.weeks.length > 1 ? ' (average)' : ''}` : undefined,
+        };
+      },
+    });
+    if (open) g.projects.forEach(pushProject);
   }
 
   const projectKeys = projects.map((p) => `p:${p.id}`);
+  const groupKeys = groups.map((g) => g.key);
 
   return (
     <>
@@ -253,11 +321,25 @@ export function ProjectView({ buckets }: Props) {
               <button type="button" className="btn btn-small btn-primary" onClick={() => setEditing('new')}>
                 + New workstream
               </button>
-              <button type="button" className="btn btn-small" onClick={() => setAllExpanded(projectKeys, true)}>
+              <button type="button" className="btn btn-small" onClick={() => setAllExpanded([...groupKeys, ...projectKeys], true)}>
                 Expand
               </button>
               <button type="button" className="btn btn-small" onClick={() => setAllExpanded(projectKeys, false)}>
                 Collapse
+              </button>
+              {groupByClient && (
+                <button type="button" className="btn btn-small" onClick={() => setAllExpanded(groupKeys, false)}>
+                  Clients only
+                </button>
+              )}
+              <button
+                type="button"
+                className="btn btn-small"
+                aria-pressed={groupByClient}
+                title="Group workstreams by client"
+                onClick={() => setGroupByClient(!groupByClient)}
+              >
+                By client
               </button>
             </div>
           </div>

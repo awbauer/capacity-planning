@@ -2,6 +2,7 @@ import { create, useStore } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { temporal } from 'zundo';
 import { newId, nextTagColor } from '../domain/ids';
+import { defaultMeta, sameName, type PlanFile, type PlanMeta, type StoredPlan } from '../domain/plans';
 import { createEmptyPlan, createSamplePlan } from '../domain/sampleData';
 import { upgradePlan } from '../domain/schema';
 import { snapToStep } from '../domain/steps';
@@ -55,12 +56,49 @@ interface PlanActions {
   setAllocations: (edits: AllocationEdit[]) => void;
 
   setThresholds: (patch: Partial<PlanSettings>) => void;
+  /** Replaces the open plan's contents (undoable); keeps its name. */
   importPlan: (plan: PlanData) => void;
   resetToSample: () => void;
   clearAll: () => void;
+
+  /** Saves the open plan to the library and opens a new, empty one. */
+  newPlan: (name: string) => PlanMeta;
+  switchPlan: (id: string) => void;
+  /** Returns false if another plan already has the name. */
+  renamePlan: (id: string, name: string) => boolean;
+  /** Deletes a plan; deleting the open one opens another. The last plan can't be deleted. */
+  deletePlan: (id: string) => void;
+  /** Increments the open plan's revision (on export) and returns the new meta. Not undoable. */
+  bumpRevision: () => PlanMeta;
+  /**
+   * Imports a file: a plan with the same name (case-insensitive) is
+   * overwritten, otherwise a new plan is created. The imported plan is opened.
+   */
+  importPlanFile: (file: PlanFile) => { meta: PlanMeta; outcome: ImportOutcome };
 }
 
-export type PlanState = { plan: PlanData } & PlanActions;
+export type ImportOutcome = 'replaced-open' | 'replaced-other' | 'created';
+
+export interface PlanState extends PlanActions {
+  /** The open plan (the only part tracked by undo). */
+  plan: PlanData;
+  meta: PlanMeta;
+  /** Every other saved plan. */
+  library: StoredPlan[];
+}
+
+/** All saved plans (open one included), by name. */
+export function allPlans(s: Pick<PlanState, 'plan' | 'meta' | 'library'>): StoredPlan[] {
+  return [{ meta: s.meta, plan: s.plan }, ...s.library].sort((a, b) => a.meta.name.localeCompare(b.meta.name));
+}
+
+/** The saved plan with this name (case-insensitive), if any. */
+export function findPlanByName(s: Pick<PlanState, 'plan' | 'meta' | 'library'>, name: string): StoredPlan | undefined {
+  return allPlans(s).find((p) => sameName(p.meta.name, name));
+}
+
+// Undo history belongs to the open plan; a switch starts afresh.
+const clearHistory = () => usePlanStore.temporal.getState().clear();
 
 function applyFill(weekly: Record<WeekKey, number>, weeks: WeekKey[], percent: number) {
   const next = { ...weekly };
@@ -80,6 +118,8 @@ export const usePlanStore = create<PlanState>()(
 
         return {
           plan: createEmptyPlan(),
+          meta: defaultMeta(),
+          library: [],
 
           addTag: (name) => {
             const trimmed = name.trim();
@@ -205,6 +245,72 @@ export const usePlanStore = create<PlanState>()(
           importPlan: (plan) => set({ plan }),
           resetToSample: () => set({ plan: createSamplePlan() }),
           clearAll: () => set({ plan: createEmptyPlan() }),
+
+          newPlan: (name) => {
+            const { plan, meta, library } = get();
+            const next: PlanMeta = { id: newId(), name: name.trim(), revision: 0 };
+            set({ plan: createEmptyPlan(), meta: next, library: [...library, { meta, plan }] });
+            clearHistory();
+            return next;
+          },
+          switchPlan: (id) => {
+            const { plan, meta, library } = get();
+            const target = library.find((p) => p.meta.id === id);
+            if (!target) return;
+            set({
+              plan: target.plan,
+              meta: target.meta,
+              library: [...library.filter((p) => p.meta.id !== id), { meta, plan }],
+            });
+            clearHistory();
+          },
+          renamePlan: (id, name) => {
+            const trimmed = name.trim();
+            const clash = findPlanByName(get(), trimmed);
+            if (!trimmed || (clash && clash.meta.id !== id)) return false;
+            const { meta, library } = get();
+            if (meta.id === id) set({ meta: { ...meta, name: trimmed } });
+            else {
+              set({
+                library: library.map((p) => (p.meta.id === id ? { ...p, meta: { ...p.meta, name: trimmed } } : p)),
+              });
+            }
+            return true;
+          },
+          deletePlan: (id) => {
+            const { meta, library } = get();
+            if (meta.id !== id) {
+              set({ library: library.filter((p) => p.meta.id !== id) });
+              return;
+            }
+            const [first, ...rest] = [...library].sort((a, b) => a.meta.name.localeCompare(b.meta.name));
+            if (!first) return;
+            set({ plan: first.plan, meta: first.meta, library: rest });
+            clearHistory();
+          },
+          bumpRevision: () => {
+            const meta = { ...get().meta, revision: get().meta.revision + 1 };
+            set({ meta });
+            return meta;
+          },
+          importPlanFile: (file) => {
+            const { plan, meta, library } = get();
+            const match = findPlanByName(get(), file.name);
+            if (match?.meta.id === meta.id) {
+              // Undoable, like any other edit to the open plan.
+              const next = { ...meta, name: file.name, revision: file.revision };
+              set({ plan: file.plan, meta: next });
+              return { meta: next, outcome: 'replaced-open' };
+            }
+            const next: PlanMeta = { id: match?.meta.id ?? newId(), name: file.name, revision: file.revision };
+            set({
+              plan: file.plan,
+              meta: next,
+              library: [...library.filter((p) => p.meta.id !== match?.meta.id), { meta, plan }],
+            });
+            clearHistory();
+            return { meta: next, outcome: match ? 'replaced-other' : 'created' };
+          },
         };
       },
       {
@@ -218,11 +324,17 @@ export const usePlanStore = create<PlanState>()(
       // v2: workstream status + allocation kind. v3: weekly values snapped to 0/25/50/100.
       // v4: one row per person per workstream (presales/delivery come from the start date).
       // v5: separate yellow/red thresholds (criticalThreshold).
-      version: 5,
-      partialize: (s) => ({ plan: s.plan }),
+      // v6: multiple named plans; the existing one becomes "Default".
+      version: 6,
+      partialize: (s) => ({ plan: s.plan, meta: s.meta, library: s.library }),
       migrate: (persisted) => {
-        const state = persisted as { plan: PlanData };
-        return { ...state, plan: upgradePlan(state.plan) };
+        const state = persisted as { plan: PlanData; meta?: PlanMeta; library?: StoredPlan[] };
+        return {
+          ...state,
+          plan: upgradePlan(state.plan),
+          meta: state.meta ?? defaultMeta(),
+          library: (state.library ?? []).map((p) => ({ ...p, plan: upgradePlan(p.plan) })),
+        };
       },
     },
   ),
@@ -230,6 +342,10 @@ export const usePlanStore = create<PlanState>()(
 
 export function usePlan(): PlanData {
   return usePlanStore((s) => s.plan);
+}
+
+export function usePlanMeta(): PlanMeta {
+  return usePlanStore((s) => s.meta);
 }
 
 export function useHistory() {

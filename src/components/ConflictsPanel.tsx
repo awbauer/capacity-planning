@@ -1,7 +1,7 @@
 import type { Overallocation } from '../domain/conflicts';
 import { currentWeek, formatWeekRange } from '../domain/weeks';
 import { usePlan } from '../store/planStore';
-import { useUIStore } from '../store/uiStore';
+import { clientGroupKey, levelGroupKey, useUIStore } from '../store/uiStore';
 import { useDerived } from '../store/useDerived';
 
 /** Lists current/future overallocations, pipeline risks and skill gaps; clicking one jumps to the row. */
@@ -12,6 +12,9 @@ export function ConflictsPanel() {
   const s = usePlan().settings;
   const upcoming = d.overallocations.filter((o) => o.to >= thisWeek);
   const pastCount = d.overallocations.length - upcoming.length;
+  const toResource = (id: string, week?: string) =>
+    jumpTo('resources', `r:${id}`, week, [levelGroupKey(d.resourcesById.get(id)?.level)]);
+  const toProject = (id: string) => jumpTo('projects', `p:${id}`, undefined, [clientGroupKey(d.projectsById.get(id)?.client)]);
   const name = {
     resource: (id: string) => d.resourcesById.get(id)?.name ?? 'Unknown',
     project: (id: string) => d.projectsById.get(id)?.name ?? 'Unknown',
@@ -29,7 +32,7 @@ export function ConflictsPanel() {
       <ul>
         {items.map((o) => (
           <li key={`${o.resourceId}-${o.severity}-${o.from}`}>
-            <button type="button" onClick={() => jumpTo('resources', `r:${o.resourceId}`, o.from)}>
+            <button type="button" onClick={() => toResource(o.resourceId, o.from)}>
               <span className="conflict-title">
                 {name.resource(o.resourceId)}{' '}
                 <span className={`pill-${o.severity}`}>{o.peak}%</span>
@@ -70,7 +73,7 @@ export function ConflictsPanel() {
           {d.skillIssues.map((i) =>
             i.kind === 'mismatch' ? (
               <li key={i.assignmentId}>
-                <button type="button" onClick={() => jumpTo('projects', `p:${i.projectId}`)}>
+                <button type="button" onClick={() => toProject(i.projectId)}>
                   <span className="conflict-title">{name.resource(i.resourceId)}</span>
                   <span className="small">
                     on {name.project(i.projectId)}: has none of{' '}
@@ -80,7 +83,7 @@ export function ConflictsPanel() {
               </li>
             ) : (
               <li key={`u-${i.projectId}`}>
-                <button type="button" onClick={() => jumpTo('projects', `p:${i.projectId}`)}>
+                <button type="button" onClick={() => toProject(i.projectId)}>
                   <span className="conflict-title">{name.project(i.projectId)}</span>
                   <span className="small">Nobody covers {i.tagIds.map(name.tag).join(', ')}</span>
                 </button>

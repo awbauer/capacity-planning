@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { DEFAULT_PLAN_NAME, type PlanFile } from './plans';
 import { CAREER_LEVELS, type Assignment, type PlanData } from './types';
 import { snapWeekly } from './steps';
 import { normalizeWeek } from './weeks';
@@ -10,6 +11,9 @@ const weekKey = z.string().refine(isMonday, 'weeks must be Mondays in yyyy-MM-dd
 const planSchema = z.object({
   // v1 predates workstream status; v2 had separate presales/delivery rows. Both are upgraded.
   version: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+  // Files exported before named plans have neither; they import as "Default".
+  name: z.string().trim().min(1).optional(),
+  revision: z.number().int().min(0).optional(),
   tags: z.array(z.object({ id, name: z.string().min(1), color: z.string() })),
   sellers: z.array(z.object({ id, name: z.string().min(1), email: z.string().optional() })),
   resources: z.array(
@@ -51,15 +55,21 @@ const planSchema = z.object({
 
 /** Validates an imported plan, including references between entities. Throws on error. */
 export function parsePlan(input: unknown): PlanData {
+  return parsePlanFile(input).plan;
+}
+
+/** Like parsePlan, plus the plan's name and revision from the file. */
+export function parsePlanFile(input: unknown): PlanFile {
   const result = planSchema.safeParse(input);
   if (!result.success) {
     const issue = result.error.issues[0];
     throw new Error(`Invalid plan file at ${issue.path.join('.') || '(root)'}: ${issue.message}`);
   }
+  const { name, revision, ...data } = result.data;
   const plan: PlanData = {
-    ...result.data,
+    ...data,
     version: 3,
-    assignments: mergeAssignments(result.data.assignments),
+    assignments: mergeAssignments(data.assignments),
   };
   const tagIds = new Set(plan.tags.map((t) => t.id));
   const sellerIds = new Set(plan.sellers.map((s) => s.id));
@@ -83,7 +93,7 @@ export function parsePlan(input: unknown): PlanData {
     if (!projectIds.has(a.projectId)) missing('workstream', a.projectId, `assignment ${a.id}`);
     if (!resourceIds.has(a.resourceId)) missing('resource', a.resourceId, `assignment ${a.id}`);
   }
-  return plan;
+  return { name: name ?? DEFAULT_PLAN_NAME, revision: revision ?? 0, plan };
 }
 
 type StoredAssignment = Omit<Assignment, 'weekly'> & { weekly?: Record<string, number>; kind?: string };

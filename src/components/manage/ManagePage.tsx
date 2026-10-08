@@ -1,27 +1,32 @@
 import { useState } from 'react';
+import { useShallow } from 'zustand/react/shallow';
+import { hashString } from '../../domain/hash';
 import { TAG_COLORS } from '../../domain/ids';
 import { CAREER_LEVELS, type CareerLevel, type Resource } from '../../domain/types';
 import { normalizeWeek } from '../../domain/weeks';
-import { usePlan, usePlanStore } from '../../store/planStore';
+import { allPlans, usePlan, usePlanMeta, usePlanStore } from '../../store/planStore';
+import { useUIStore, type ManageTab } from '../../store/uiStore';
 import { useDerived } from '../../store/useDerived';
+import { createPlanInteractively } from '../planActions';
 import { SellerPicker } from '../SellerPicker';
 import { StatusSelect } from '../StatusControls';
 import { TagPicker } from '../TagPicker';
 import { AddRow, InlineText } from './InlineText';
 
-type Tab = 'resources' | 'projects' | 'tags' | 'sellers' | 'settings';
-const TABS: { id: Tab; label: string }[] = [
+const TABS: { id: ManageTab; label: string }[] = [
   { id: 'resources', label: 'Resources' },
   { id: 'projects', label: 'Workstreams' },
   { id: 'tags', label: 'Capabilities' },
   { id: 'sellers', label: 'Sellers' },
+  { id: 'plans', label: 'Plans' },
   { id: 'settings', label: 'Settings & data' },
 ];
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 export function ManagePage() {
-  const [tab, setTab] = useState<Tab>('resources');
+  const tab = useUIStore((s) => s.manageTab);
+  const setTab = useUIStore((s) => s.openManage);
   return (
     <div className="manage">
       <nav className="tabs" aria-label="Manage">
@@ -35,6 +40,7 @@ export function ManagePage() {
       {tab === 'projects' && <ProjectsTable />}
       {tab === 'tags' && <TagsTable />}
       {tab === 'sellers' && <SellersTable />}
+      {tab === 'plans' && <PlansTable />}
       {tab === 'settings' && <SettingsPanel />}
     </div>
   );
@@ -332,8 +338,111 @@ function SellersTable() {
   );
 }
 
+function PlansTable() {
+  const { plan: openPlan, meta: openMeta, library } = usePlanStore(
+    useShallow((s) => ({ plan: s.plan, meta: s.meta, library: s.library })),
+  );
+  const plans = allPlans({ plan: openPlan, meta: openMeta, library });
+  const activeId = openMeta.id;
+  const s = usePlanStore();
+  const ui = useUIStore();
+  // Bumped to reset a name input after a rejected rename.
+  const [resets, setResets] = useState(0);
+  return (
+    <section>
+      <p className="muted">
+        Plans saved in this browser. Export saves the open plan as JSON and increments its version; importing a file
+        overwrites the plan with the same name, or adds a new plan.
+      </p>
+      <div className="button-row">
+        <button type="button" className="btn btn-primary" onClick={createPlanInteractively}>
+          + New plan
+        </button>
+      </div>
+      <table className="table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Version</th>
+            <th>Workstreams</th>
+            <th>People</th>
+            <th>Last export</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {plans.map(({ meta, plan }) => {
+            const open = meta.id === activeId;
+            const exp = ui.exports[meta.id];
+            const empty = plan.projects.length + plan.resources.length === 0;
+            const unsaved = !empty && exp?.hash !== hashString(JSON.stringify(plan));
+            return (
+              <tr key={meta.id} className={open ? 'current' : undefined}>
+                <td>
+                  <InlineText
+                    key={`${meta.id}-${resets}`}
+                    ariaLabel="Plan name"
+                    required
+                    value={meta.name}
+                    onCommit={(name) => {
+                      if (!s.renamePlan(meta.id, name)) {
+                        window.alert(`A plan called "${name}" already exists.`);
+                        setResets((n) => n + 1);
+                      }
+                    }}
+                  />
+                </td>
+                <td>v{meta.revision}</td>
+                <td>{plan.projects.length}</td>
+                <td>{plan.resources.length}</td>
+                <td>
+                  {exp ? new Date(exp.at).toLocaleString() : <span className="muted">Never</span>}
+                  {unsaved && <span className="muted small"> · unsaved changes</span>}
+                </td>
+                <td className="actions">
+                  {open ? (
+                    <span className="badge">Open</span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn btn-small"
+                      onClick={() => {
+                        s.switchPlan(meta.id);
+                        ui.resetFilters();
+                      }}
+                    >
+                      Open
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    aria-label={`Delete plan ${meta.name}`}
+                    title={plans.length === 1 ? "The only plan can't be deleted" : 'Delete plan'}
+                    disabled={plans.length === 1}
+                    onClick={() => {
+                      const warn = unsaved ? ' It has changes that were never exported.' : '';
+                      if (window.confirm(`Delete plan "${meta.name}"?${warn} This can't be undone.`)) {
+                        s.deletePlan(meta.id);
+                        if (open) ui.resetFilters();
+                      }
+                    }}
+                  >
+                    ×
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
 function SettingsPanel() {
   const plan = usePlan();
+  const meta = usePlanMeta();
   const s = usePlanStore();
   return (
     <section className="settings">
@@ -370,20 +479,21 @@ function SettingsPanel() {
       </label>
       <div className="callout">
         <strong>Your data lives only in this browser.</strong> Clearing site data or switching browsers loses it. Use
-        Export in the toolbar to save a JSON backup, and Import to restore or move it.
+        Export in the toolbar to save a JSON backup of the open plan, and Import to restore or move it. Thresholds
+        and the buttons below apply to the open plan only.
       </div>
       <div className="button-row">
         <button
           type="button"
           className="btn"
-          onClick={() => window.confirm('Replace everything with the sample plan? You can undo.') && s.resetToSample()}
+          onClick={() => window.confirm(`Replace the contents of plan "${meta.name}" with the sample data? You can undo.`) && s.resetToSample()}
         >
           Load sample data
         </button>
         <button
           type="button"
           className="btn btn-danger"
-          onClick={() => window.confirm('Delete all workstreams, people, sellers and capabilities? You can undo.') && s.clearAll()}
+          onClick={() => window.confirm(`Delete all workstreams, people, sellers and capabilities from plan "${meta.name}"? You can undo.`) && s.clearAll()}
         >
           Start empty
         </button>

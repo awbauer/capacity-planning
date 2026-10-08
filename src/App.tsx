@@ -5,6 +5,7 @@ import { ManagePage } from './components/manage/ManagePage';
 import { ProjectView } from './components/ProjectView';
 import { ResourceView } from './components/ResourceView';
 import { Toolbar } from './components/Toolbar';
+import { UtilizationPanel } from './components/UtilizationPanel';
 import { buckets as makeBuckets } from './domain/weeks';
 import { redo, undo } from './store/planStore';
 import { useUIStore } from './store/uiStore';
@@ -21,6 +22,7 @@ export function App() {
   const zoom = useUIStore((s) => s.zoom);
   const anchor = useUIStore((s) => s.anchor);
   const showConflicts = useUIStore((s) => s.showConflicts);
+  const showUtilization = useUIStore((s) => s.showUtilization);
   const showHelp = useUIStore((s) => s.showHelp);
   const setShowHelp = useUIStore((s) => s.setShowHelp);
   const buckets = useMemo(() => makeBuckets(zoom, anchor), [zoom, anchor]);
@@ -61,6 +63,7 @@ export function App() {
             <div className="grid-area">
               {view === 'projects' ? <ProjectView buckets={buckets} /> : <ResourceView buckets={buckets} />}
             </div>
+            {view === 'projects' && showUtilization && <UtilizationPanel />}
             {showConflicts && <ConflictsPanel />}
           </main>
           <footer className="legend">

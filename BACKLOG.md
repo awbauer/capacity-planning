@@ -11,6 +11,9 @@ Deferred from v1. Roughly in priority order.
 
 - Probability-weighted *team-level* demand forecast, e.g. "Data Cloud FTE needed next quarter". Workstream status and the presales/delivery split are done. Per-person load deliberately doesn't use probability.
 
+- **Duplicate plan** ("Save as…") for what-if scenarios. Today a copy means Export, editing the `name` in the file, then Import.
+- Sync plans to a shared location so import-by-name isn't the only way to share a plan.
+
 - Archive resources and workstreams instead of deleting them, so history is kept for people who leave and workstreams that close.
 - CSV export of allocations, for sharing with finance or leadership.
 - Copy/paste of cell ranges, including from and to spreadsheets.
