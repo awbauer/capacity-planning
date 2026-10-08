@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createEmptyPlan, createSamplePlan } from '../domain/sampleData';
-import { parsePlan } from '../domain/schema';
-import { redo, undo, usePlanStore } from './planStore';
+import { defaultMeta, serializePlan } from '../domain/plans';
+import { parsePlan, parsePlanFile } from '../domain/schema';
+import { allPlans, redo, undo, usePlanStore } from './planStore';
 
 const store = () => usePlanStore.getState();
 
 describe('planStore', () => {
   beforeEach(() => {
+    usePlanStore.setState({ meta: defaultMeta(), library: [] });
     store().importPlan(createSamplePlan('2026-10-05'));
     usePlanStore.temporal.getState().clear();
   });
@@ -90,5 +92,73 @@ describe('planStore', () => {
     expect(contoso).toHaveLength(1);
     // The sample's presales weeks and delivery weeks for Alex on Contoso share that row.
     expect(Object.values(contoso[0].weekly)).toEqual(expect.arrayContaining([25, 100]));
+  });
+
+  describe('plans', () => {
+    const names = () => allPlans(store()).map((p) => p.meta.name);
+
+    it('starts as "Default"', () => {
+      expect(store().meta).toEqual({ id: 'default', name: 'Default', revision: 0 });
+    });
+
+    it('creates, switches and keeps each plan separate', () => {
+      const sampleProjects = store().plan.projects.length;
+      const scenario = store().newPlan('Scenario B');
+      expect(store().plan.projects).toHaveLength(0);
+      expect(names()).toEqual(['Default', 'Scenario B']);
+      expect(usePlanStore.temporal.getState().pastStates).toHaveLength(0);
+
+      store().switchPlan('default');
+      expect(store().plan.projects).toHaveLength(sampleProjects);
+      store().switchPlan(scenario.id);
+      expect(store().meta.name).toBe('Scenario B');
+    });
+
+    it('refuses duplicate names (case-insensitive)', () => {
+      const b = store().newPlan('B');
+      expect(store().renamePlan(b.id, 'default')).toBe(false);
+      expect(store().renamePlan('default', 'Base')).toBe(true);
+      expect(names()).toEqual(['B', 'Base']);
+    });
+
+    it('deletes plans but never the last one', () => {
+      store().deletePlan('default');
+      expect(store().meta.id).toBe('default');
+      store().newPlan('B');
+      store().deletePlan(store().meta.id);
+      expect(names()).toEqual(['Default']);
+    });
+
+    it('bumps the revision without an undo step', () => {
+      expect(store().bumpRevision().revision).toBe(1);
+      expect(usePlanStore.temporal.getState().pastStates).toHaveLength(0);
+    });
+
+    it('imports over the plan with the same name, else as a new plan', () => {
+      const exported = parsePlanFile(JSON.parse(serializePlan({ ...store().meta, revision: 4 }, createEmptyPlan())));
+      expect(exported.name).toBe('Default');
+
+      // Same name as the open plan: replaced in place, undoable.
+      expect(store().importPlanFile(exported).outcome).toBe('replaced-open');
+      expect(store().plan.projects).toHaveLength(0);
+      expect(store().meta.revision).toBe(4);
+      undo();
+      expect(store().plan.projects.length).toBeGreaterThan(0);
+
+      // Same name as a closed plan: that plan is replaced and opened.
+      store().newPlan('Other');
+      expect(store().importPlanFile({ ...exported, name: 'DEFAULT' }).outcome).toBe('replaced-other');
+      expect(store().meta.id).toBe('default');
+      expect(names()).toEqual(['DEFAULT', 'Other']);
+
+      // New name: a new plan.
+      expect(store().importPlanFile({ ...exported, name: 'Imported' }).outcome).toBe('created');
+      expect(names()).toEqual(['DEFAULT', 'Imported', 'Other']);
+    });
+
+    it('imports old files without a name as "Default"', () => {
+      const legacy = JSON.parse(JSON.stringify(createSamplePlan('2026-10-05')));
+      expect(parsePlanFile(legacy)).toMatchObject({ name: 'Default', revision: 0 });
+    });
   });
 });

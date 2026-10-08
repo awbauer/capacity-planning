@@ -1,13 +1,14 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { bucketStats, totalsGetter } from '../domain/aggregate';
 import { assignmentFlagWeeks, resourceLoadFlagged } from '../domain/conflicts';
 import type { Derived } from '../domain/derive';
 import { STATUS_LABELS } from '../domain/labels';
 import { severity, totalIsCritical } from '../domain/load';
 import { CAREER_LEVELS, type CareerLevel, type Resource } from '../domain/types';
-import type { Bucket } from '../domain/weeks';
+import { LOOKAHEAD_WEEKS, lookaheadWeeks, utilizationByResource, utilizationOf } from '../domain/utilization';
+import { currentWeek, type Bucket } from '../domain/weeks';
 import { usePlan, usePlanStore } from '../store/planStore';
-import { isExpanded, useUIStore, type Filters } from '../store/uiStore';
+import { isExpanded, levelGroupKey, useUIStore, type Filters } from '../store/uiStore';
 import { useDerived } from '../store/useDerived';
 import { AddAssignmentDialog } from './AddAssignmentDialog';
 import { TagChips } from './Chips';
@@ -18,8 +19,9 @@ interface Props {
   buckets: Bucket[];
 }
 
-function matchesFilters(r: Resource, f: Filters, d: Derived, hasConflict: boolean): boolean {
+function matchesFilters(r: Resource, f: Filters, d: Derived, hasConflict: boolean, underutilized: boolean): boolean {
   if (f.conflictsOnly && !hasConflict) return false;
+  if (f.underutilized && !underutilized) return false;
   if (f.tagId && !r.tagIds.includes(f.tagId)) return false;
   const assignments = d.assignmentsByResource.get(r.id) ?? [];
   if (f.sellerId && !assignments.some((a) => d.projectsById.get(a.projectId)?.sellerId === f.sellerId)) {
@@ -44,6 +46,13 @@ export function ResourceView({ buckets }: Props) {
 
   const threshold = plan.settings.overallocationThreshold;
   const visibleWeeks = buckets.flatMap((b) => b.weeks);
+  const thisWeek = currentWeek();
+  const util = useMemo(
+    () => utilizationByResource(plan, d.loads, lookaheadWeeks(thisWeek)),
+    [plan, d.loads, thisWeek],
+  );
+  // Underutilized: committed work (presales + won delivery) averages under capacity over the next 10 weeks.
+  const isUnder = (id: string) => utilizationOf(util, id).committed < threshold;
   const resources = plan.resources
     .filter((r) =>
       matchesFilters(
@@ -53,6 +62,7 @@ export function ResourceView({ buckets }: Props) {
         // A conflict is an over/at-risk week in the visible range, or a skill mismatch on any of their workstreams.
         resourceLoadFlagged(r.id, visibleWeeks, d.loads, plan.settings) ||
           (d.assignmentsByResource.get(r.id) ?? []).some((a) => d.mismatchedAssignmentIds.has(a.id)),
+        isUnder(r.id),
       ),
     )
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -68,6 +78,7 @@ export function ResourceView({ buckets }: Props) {
     const stretchCount = visibleWeeks.filter((w) => sevOf(w) === 'stretch').length;
     const riskCount = visibleWeeks.filter((w) => sevOf(w) === 'risk').length;
     const weeksText = (n: number) => `${n}w`;
+    const u = utilizationOf(util, r.id);
     const assignments = [...(d.assignmentsByResource.get(r.id) ?? [])].sort(
       (a, b) =>
         (d.projectsById.get(a.projectId)?.name ?? '').localeCompare(d.projectsById.get(b.projectId)?.name ?? ''),
@@ -95,6 +106,14 @@ export function ResourceView({ buckets }: Props) {
               {r.role && <span className="muted small"> · {r.role}</span>}
             </div>
             <div className="row-meta">
+            {filters.underutilized && (
+              <span
+                className="badge badge-under"
+                title={`Committed work averages ${Math.round(u.committed)}% over the next ${LOOKAHEAD_WEEKS} weeks (+${Math.round(u.pipeline - u.presales)}% if pipeline is won)`}
+              >
+                {Math.round(u.committed)}% next {LOOKAHEAD_WEEKS}w
+              </span>
+            )}
             {(overCount > 0 || stretchCount > 0 || riskCount > 0) && (
               <span className="row-badges">
                 {overCount > 0 && (
@@ -202,7 +221,7 @@ export function ResourceView({ buckets }: Props) {
     .map((level) => ({ level, people: resources.filter((r) => r.level === level) }))
     .filter((g) => g.people.length > 0);
   for (const { level, people } of groups) {
-    const key = `g:${level ?? 'none'}`;
+    const key = levelGroupKey(level);
     const open = isExpanded(expanded, key);
     const committedOf = (w: string) => people.reduce((n, r) => n + (d.loads.committed.get(r.id)?.get(w) ?? 0), 0);
     const tentativeOf = (w: string) => people.reduce((n, r) => n + (d.loads.tentative.get(r.id)?.get(w) ?? 0), 0);
@@ -250,7 +269,7 @@ export function ResourceView({ buckets }: Props) {
   }
 
   const resourceKeys = resources.map((r) => `r:${r.id}`);
-  const groupKeys = groups.map((g) => `g:${g.level ?? 'none'}`);
+  const groupKeys = groups.map((g) => levelGroupKey(g.level));
 
   return (
     <>
@@ -277,9 +296,11 @@ export function ResourceView({ buckets }: Props) {
         empty={
           plan.resources.length === 0
             ? 'No resources yet. Add people under Manage → Resources.'
-            : filters.conflictsOnly
+            : filters.conflictsOnly && !filters.underutilized
               ? 'Nobody has a conflict in this view. 🎉'
-              : 'No resources match the filters.'
+              : filters.underutilized && !filters.conflictsOnly
+                ? `Nobody is under ${threshold}% over the next ${LOOKAHEAD_WEEKS} weeks.`
+                : 'No resources match the filters.'
         }
       />
       {adding && <AddAssignmentDialog resourceId={adding} onClose={() => setAdding(null)} />}

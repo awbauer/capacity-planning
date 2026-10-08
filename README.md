@@ -3,10 +3,13 @@
 A browser-based planner for allocating people (resources) to workstreams by % per week. A workstream is any body of work someone can be allocated to: a sold project, or a pursuit still in presales.
 
 - **Workstreams view**: one row per workstream, expandable to the people on it. Double-click a weekly cell to cycle 0 → 25 → 50 → 100%. Badges flag overallocated people (red/orange/yellow counts), skill mismatches and capability gaps (hover a badge for details).
+  - **By client** (corner, on by default) groups workstreams under their client (case-insensitive), with workstreams that have no client last. A client row shows total FTE per period and how many of its workstreams have a conflict. **Clients only** collapses to one row per client.
+  - **Utilization** (toolbar) opens a sidebar with everyone's average allocation over the **next 10 weeks**, from the current week regardless of scrolling, as two numbers. *Delivery* is work on *Won* workstreams. *Pipeline* is work on *Pipeline* workstreams: presales effort, plus delivery that only happens if the deal is won. The team figure averages over everyone, so idle people count as 0%. People are listed least-utilized first.
 - **Resources view**: one row per person, showing their total load per week as a heat map (red means over the threshold). Expand a person to edit their allocations workstream by workstream.
   - People are grouped by career level: D, SM, M, SA, A, then anyone without a level. Each group can be collapsed.
   - A group's row shows its people's average % per week, plus `+N` for pipeline work. **Levels only** collapses the view to one row per level.
   - Set levels under Manage → Resources.
+  - **Underutilized** (toolbar) shows only people whose *committed* work (presales + won delivery) averages under the yellow threshold (100%) over the next 10 weeks, with that average as a badge. Pipeline delivery doesn't count, because it might not happen. Each week is capped at 100% per person before averaging, so a 150% week can't offset an idle one (150% then 50% averages 75%). The Delivery/Pipeline numbers in the sidebar are not capped.
 - **Zoom**: Week, Month or Quarter. In month and quarter view a cell shows the *average* for the period, and is flagged red if *any* week in it is over capacity. Typing into an aggregated cell sets every week in that period.
 - **Conflicts panel**: lists current and upcoming overallocations, at-risk weeks and skill gaps. Click an item to jump to the row.
   - **⚠ Conflicts only** (toolbar) shows just the people on the Resources tab, or the workstreams on the Workstreams tab, that have a conflict: someone over or at risk in the visible weeks, a skill mismatch, or (workstreams) an uncovered capability. It combines with the other filters.
@@ -72,9 +75,21 @@ Everything is stored in your browser's `localStorage`. There is no server.
 - Data is **per browser**. It doesn't sync between machines or people.
 - Clearing site data wipes it.
 
-Use **Export** to save a JSON backup, and **Import** to restore it or move it to another browser. The toolbar shows when you last exported and whether there are unexported changes.
+### Plans
 
-The first launch loads a sample plan. Replace it under Manage → Settings & data → *Start empty*.
+You can keep several independent **plans** (e.g. scenarios) in one browser. Pick one from the dropdown next to the title, or choose *＋ New plan…*. Rename and delete plans under Manage → Plans. Undo history is per plan and starts fresh when you switch.
+
+- Each plan has a **name** (unique, case-insensitive) and a **version**.
+- **Export** saves the open plan as JSON (`<name>-v<version>-<date>.json`) and increments its version.
+- **Import** matches on the name inside the file:
+  - A file with the same name **overwrites** that plan. You're warned if the file's version is older than yours, or if your copy has changes that were never exported. Overwriting the open plan can be undone; overwriting another one can't.
+  - A file with a new name is added as a **new plan**.
+  - Files exported before plans existed have no name and import as *Default*.
+- Data saved before plans existed becomes a plan called **Default**.
+
+The toolbar shows when the open plan was last exported and whether it has unexported changes.
+
+A new browser starts with an empty *Default* plan. To try the app, use Manage → Settings & data → *Load sample data*.
 
 ## Development
 
@@ -100,8 +115,10 @@ The UI says *workstream*. The code, saved data and export files still use `Proje
   - `load.ts`: classifies each allocation as committed, tentative or excluded.
   - `conflicts.ts`: overallocation, at-risk and skill checks.
   - `schema.ts`: validates imported files.
+  - `plans.ts`: plan names, versions and the export format.
+  - `utilization.ts`: next-10-weeks delivery/pipeline utilization.
 - `src/store/`: Zustand stores.
-  - `planStore.ts`: the plan itself. Persisted, with undo history.
+  - `planStore.ts`: the open plan (persisted, with undo history) and the library of other saved plans.
   - `uiStore.ts`: view state.
 - `src/components/`: React UI. `grid/TimeGrid.tsx` is the shared spreadsheet-style grid.
 

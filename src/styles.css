@@ -263,7 +263,11 @@ button:focus-visible {
 }
 
 .search {
-  min-width: 220px;
+  width: 170px;
+}
+
+.toolbar-row select:not(.plan-switcher) {
+  max-width: 140px;
 }
 
 .export-status {
@@ -1511,7 +1515,9 @@ kbd {
 }
 
 .grid tr.group-row + tr.resource-row th.label,
-.grid tr.group-row + tr.resource-row td {
+.grid tr.group-row + tr.resource-row td,
+.grid tr.group-row + tr.project-row th.label,
+.grid tr.group-row + tr.project-row td {
   border-top: none;
 }
 
@@ -1636,4 +1642,108 @@ kbd {
   border-color: var(--accent);
   color: var(--accent);
   font-weight: 600;
+}
+
+/* ---------- Plans ---------- */
+
+.plan-switcher {
+  max-width: 220px;
+  font-weight: 600;
+}
+
+.table tr.current td {
+  background: var(--accent-soft);
+}
+
+.table td.actions {
+  white-space: nowrap;
+}
+
+.table td.actions > * + * {
+  margin-left: 6px;
+}
+
+/* ---------- Utilization ---------- */
+
+.badge-under {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.utilization .util-team {
+  display: flex;
+  gap: 20px;
+  margin: 4px 0 6px;
+}
+
+.utilization .util-team > div {
+  display: flex;
+  flex-direction: column;
+}
+
+.util-big {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.util-big.util-pipeline {
+  color: var(--presales);
+}
+
+.util-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin-top: 8px;
+}
+
+.util-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 2px 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.util-table td {
+  padding: 3px 4px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.util-table th:not(:first-child),
+.util-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  width: 44px;
+}
+
+.util-table .link {
+  font-weight: 600;
+}
+
+.util-over td.num:nth-child(2) {
+  color: var(--stretch);
+  font-weight: 700;
+}
+
+/* Delivery (solid) and pipeline (light) on a 0–150% track. */
+.util-bar {
+  display: flex;
+  height: 4px;
+  margin-top: 3px;
+  border-radius: 2px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.util-bar-delivery {
+  background: var(--accent);
+}
+
+.util-bar-pipeline {
+  background: var(--presales);
+  opacity: 0.45;
 }

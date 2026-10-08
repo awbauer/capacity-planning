@@ -1,15 +1,18 @@
 import { useMemo, useRef } from 'react';
-import { allWorkstreamsCsv } from '../domain/csv';
+import { allWorkstreamsCsv, slug } from '../domain/csv';
 import { hashString } from '../domain/hash';
 import { STATUS_LABELS } from '../domain/labels';
-import { parsePlan } from '../domain/schema';
+import { serializePlan } from '../domain/plans';
+import { parsePlanFile } from '../domain/schema';
 import type { ProjectStatus, Zoom } from '../domain/types';
+import { LOOKAHEAD_WEEKS } from '../domain/utilization';
 import { currentWeek, shiftAnchor, type Bucket } from '../domain/weeks';
-import { redo, undo, useHistory, usePlan, usePlanStore } from '../store/planStore';
+import { findPlanByName, redo, undo, useHistory, usePlan, usePlanMeta, usePlanStore } from '../store/planStore';
 import { useUIStore, type View } from '../store/uiStore';
 import { useDerived } from '../store/useDerived';
 import { downloadText, today } from './download';
 import { Pie } from './grid/Pie';
+import { PlanSwitcher } from './PlanSwitcher';
 
 const VIEWS: { id: View; label: string }[] = [
   { id: 'projects', label: 'Workstreams' },
@@ -33,34 +36,56 @@ function relative(iso: string): string {
 
 export function Toolbar({ buckets }: { buckets: Bucket[] }) {
   const plan = usePlan();
+  const meta = usePlanMeta();
   const d = useDerived();
-  const importPlan = usePlanStore((s) => s.importPlan);
+  const importPlanFile = usePlanStore((s) => s.importPlanFile);
+  const bumpRevision = usePlanStore((s) => s.bumpRevision);
   const { canUndo, canRedo } = useHistory();
   const ui = useUIStore();
   const fileRef = useRef<HTMLInputElement>(null);
 
   const planHash = useMemo(() => hashString(JSON.stringify(plan)), [plan]);
-  const dirty = ui.lastExportedHash !== planHash;
+  const lastExport = ui.exports[meta.id];
+  const dirty = lastExport?.hash !== planHash;
   const thisWeek = currentWeek();
   const conflictCount = d.overallocations.filter((o) => o.to >= thisWeek).length + d.skillIssues.length;
   const isGrid = ui.view !== 'manage';
 
   const exportPlan = () => {
-    downloadText(`capacity-plan-${today()}.json`, JSON.stringify(plan, null, 2), 'application/json');
-    ui.markExported(planHash);
+    const next = bumpRevision();
+    downloadText(`${slug(next.name)}-v${next.revision}-${today()}.json`, serializePlan(next, plan), 'application/json');
+    ui.markExported(next.id, planHash);
   };
 
   const exportCsv = () => downloadText(`staffing-all-workstreams-${today()}.csv`, allWorkstreamsCsv(plan), 'text/csv');
 
   const onImportFile = async (file: File) => {
     try {
-      const next = parsePlan(JSON.parse(await file.text()));
-      const msg =
-        `Replace the current plan (${plan.projects.length} workstreams, ${plan.resources.length} resources) ` +
-        `with ${file.name} (${next.projects.length} workstreams, ${next.resources.length} resources)? You can undo with Ctrl+Z.`;
+      const incoming = parsePlanFile(JSON.parse(await file.text()));
+      const size = (p: typeof plan) => `${p.projects.length} workstreams, ${p.resources.length} resources`;
+      const target = findPlanByName(usePlanStore.getState(), incoming.name);
+      let msg: string;
+      if (!target) {
+        msg = `Import ${file.name} as a new plan "${incoming.name}" (v${incoming.revision}, ${size(incoming.plan)})?`;
+      } else {
+        const isOpen = target.meta.id === meta.id;
+        const warnings = [
+          incoming.revision < target.meta.revision &&
+            `⚠ The file is OLDER (v${incoming.revision}) than your copy (v${target.meta.revision}).`,
+          ui.exports[target.meta.id]?.hash !== hashString(JSON.stringify(target.plan)) &&
+            `⚠ Your copy has changes that were never exported; they will be lost.`,
+        ].filter(Boolean);
+        msg = [
+          `Overwrite plan "${target.meta.name}" (v${target.meta.revision}, ${size(target.plan)}) ` +
+            `with ${file.name} (v${incoming.revision}, ${size(incoming.plan)})?`,
+          ...warnings,
+          isOpen ? 'You can undo with Ctrl+Z.' : "This can't be undone.",
+        ].join('\n\n');
+      }
       if (window.confirm(msg)) {
-        importPlan(next);
-        ui.markExported(hashString(JSON.stringify(next)));
+        const { meta: imported, outcome } = importPlanFile(incoming);
+        ui.markExported(imported.id, hashString(JSON.stringify(incoming.plan)));
+        if (outcome !== 'replaced-open') ui.resetFilters();
       }
     } catch (err) {
       window.alert(err instanceof Error ? err.message : String(err));
@@ -75,6 +100,7 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
     <header className="toolbar">
       <div className="toolbar-row">
         <h1 className="brand">Capacity Planner</h1>
+        <PlanSwitcher />
         <nav className="segmented" aria-label="View">
           {VIEWS.map((v) => (
             <button key={v.id} type="button" aria-pressed={ui.view === v.id} onClick={() => ui.setView(v.id)}>
@@ -90,13 +116,18 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
           ↷ Redo
         </button>
         <span className={dirty ? 'export-status dirty' : 'export-status'} title="Data lives only in this browser. Export regularly.">
-          {ui.lastExportedAt ? `Exported ${relative(ui.lastExportedAt)}` : 'Never exported'}
+          {lastExport ? `v${meta.revision} exported ${relative(lastExport.at)}` : 'Never exported'}
           {dirty && ' · unsaved changes'}
         </span>
         <button type="button" className="btn" onClick={() => ui.setShowHelp(true)} title="Interactions and shortcuts (?)">
           ? Help
         </button>
-        <button type="button" className="btn" onClick={exportPlan}>
+        <button
+          type="button"
+          className="btn"
+          onClick={exportPlan}
+          title={`Download "${meta.name}" as v${meta.revision + 1} (JSON). Each export increments the version.`}
+        >
           Export
         </button>
         <button
@@ -107,7 +138,12 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
         >
           CSV
         </button>
-        <button type="button" className="btn" onClick={() => fileRef.current?.click()}>
+        <button
+          type="button"
+          className="btn"
+          onClick={() => fileRef.current?.click()}
+          title="Import a JSON export. It overwrites the plan with the same name, or becomes a new plan."
+        >
           Import
         </button>
         <input
@@ -224,6 +260,28 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
           >
             ⚠ Conflicts only
           </button>
+          {ui.view === 'resources' && (
+            <button
+              type="button"
+              className="btn"
+              aria-pressed={ui.filters.underutilized}
+              title={`Show only people whose committed work (presales + won delivery) averages under ${plan.settings.overallocationThreshold}% over the next ${LOOKAHEAD_WEEKS} weeks`}
+              onClick={() => ui.setFilters({ underutilized: !ui.filters.underutilized })}
+            >
+              Underutilized
+            </button>
+          )}
+          {ui.view === 'projects' && (
+            <button
+              type="button"
+              className="btn"
+              aria-pressed={ui.showUtilization}
+              title={`Everyone's projected utilization over the next ${LOOKAHEAD_WEEKS} weeks, split into delivery and pipeline`}
+              onClick={ui.toggleUtilization}
+            >
+              Utilization
+            </button>
+          )}
           <button
             type="button"
             className={conflictCount ? 'btn btn-conflicts has' : 'btn btn-conflicts'}
