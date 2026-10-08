@@ -213,6 +213,19 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
           </select>
           <button
             type="button"
+            className="btn"
+            aria-pressed={ui.filters.conflictsOnly}
+            title={
+              ui.view === 'projects'
+                ? 'Show only workstreams with a conflict: someone over/at risk in the visible weeks, a skill mismatch or an uncovered capability'
+                : 'Show only people with a conflict: over/at risk in the visible weeks, or a skill mismatch'
+            }
+            onClick={() => ui.setFilters({ conflictsOnly: !ui.filters.conflictsOnly })}
+          >
+            ⚠ Conflicts only
+          </button>
+          <button
+            type="button"
             className={conflictCount ? 'btn btn-conflicts has' : 'btn btn-conflicts'}
             aria-pressed={ui.showConflicts}
             onClick={ui.toggleConflicts}

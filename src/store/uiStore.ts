@@ -13,6 +13,8 @@ export interface Filters {
   tagId: string | null;
   sellerId: string | null;
   status: ProjectStatus | null;
+  /** Show only people / workstreams that have a conflict. */
+  conflictsOnly: boolean;
 }
 
 /** Row keys: `p:<projectId>` (workstreams), `r:<resourceId>` (people), `g:<level>` (level groups). */
@@ -57,7 +59,7 @@ export const useUIStore = create<UIState>()(
       view: 'projects',
       zoom: 'week',
       anchor: todayAnchor(),
-      filters: { text: '', tagId: null, sellerId: null, status: null },
+      filters: { text: '', tagId: null, sellerId: null, status: null, conflictsOnly: false },
       expanded: {},
       showConflicts: true,
       showHelp: false,
@@ -84,7 +86,7 @@ export const useUIStore = create<UIState>()(
           view,
           focusRow: row,
           expanded: { ...s.expanded, [row]: true },
-          filters: { text: '', tagId: null, sellerId: null, status: null },
+          filters: { text: '', tagId: null, sellerId: null, status: null, conflictsOnly: false },
           anchor: week ? addWeeks(week, -2) : s.anchor,
         })),
       clearFocusRow: () => set({ focusRow: null }),

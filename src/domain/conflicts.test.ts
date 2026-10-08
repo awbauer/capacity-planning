@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { assignmentFlagWeeks, findOverallocations, findSkillIssues, isSkillMismatch, uncoveredTags } from './conflicts';
+import {
+  assignmentFlagWeeks,
+  findOverallocations,
+  findSkillIssues,
+  isSkillMismatch,
+  resourceLoadFlagged,
+  uncoveredTags,
+} from './conflicts';
 import { splitLoads, weekKind } from './load';
 import { createEmptyPlan, createSamplePlan } from './sampleData';
 import type { Assignment, PlanData, Project, ProjectStatus } from './types';
@@ -197,5 +204,23 @@ describe('sample plan', () => {
     const issues = findSkillIssues(p);
     expect(issues).toContainEqual(expect.objectContaining({ kind: 'mismatch', resourceId: 'res-riley', projectId: 'proj-globex' }));
     expect(issues).toContainEqual({ kind: 'uncovered', projectId: 'proj-northwind', tagIds: ['tag-af'] });
+  });
+});
+
+describe('resourceLoadFlagged', () => {
+  it('is true only when a visible week is over, stretched or at risk', () => {
+    const projects = [project('won'), project('pipe', 'pipeline')];
+    const p = plan({
+      projects,
+      assignments: [
+        alloc('a', 'won', { '2026-10-05': 100, '2026-10-12': 60 }),
+        alloc('b', 'pipe', { '2026-10-12': 60 }),
+      ],
+    });
+    const loads = splitLoads(p);
+    // 100% committed is fine; 60 + 60 pipeline = 120% is at risk.
+    expect(resourceLoadFlagged('r', ['2026-10-05'], loads, p.settings)).toBe(false);
+    expect(resourceLoadFlagged('r', ['2026-10-05', '2026-10-12'], loads, p.settings)).toBe(true);
+    expect(resourceLoadFlagged('nobody', ['2026-10-12'], loads, p.settings)).toBe(false);
   });
 });
