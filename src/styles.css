@@ -1630,3 +1630,10 @@ kbd {
 .cells-pie .cell.risk-critical {
   --pie: var(--danger);
 }
+
+.toolbar .btn[aria-pressed='true'] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}

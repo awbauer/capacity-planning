@@ -9,6 +9,7 @@ A browser-based planner for allocating people (resources) to workstreams by % pe
   - Set levels under Manage → Resources.
 - **Zoom**: Week, Month or Quarter. In month and quarter view a cell shows the *average* for the period, and is flagged red if *any* week in it is over capacity. Typing into an aggregated cell sets every week in that period.
 - **Conflicts panel**: lists current and upcoming overallocations, at-risk weeks and skill gaps. Click an item to jump to the row.
+  - **⚠ Conflicts only** (toolbar) shows just the people on the Resources tab, or the workstreams on the Workstreams tab, that have a conflict: someone over or at risk in the visible weeks, a skill mismatch, or (workstreams) an uncovered capability. It combines with the other filters.
 - **Presales vs. delivery, pipeline vs. won**:
   - Each workstream has a status: *Pipeline*, *Won* or *Lost*.
   - Each person has **one row per workstream**. The workstream's start date decides what each week is:

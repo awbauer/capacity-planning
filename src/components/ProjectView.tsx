@@ -19,7 +19,8 @@ interface Props {
   buckets: Bucket[];
 }
 
-function matchesFilters(p: Project, f: Filters, d: Derived): boolean {
+function matchesFilters(p: Project, f: Filters, d: Derived, hasConflict: boolean): boolean {
+  if (f.conflictsOnly && !hasConflict) return false;
   if (f.tagId && !p.tagIds.includes(f.tagId)) return false;
   if (f.sellerId && p.sellerId !== f.sellerId) return false;
   if (f.status && p.status !== f.status) return false;
@@ -58,7 +59,16 @@ export function ProjectView({ buckets }: Props) {
   const [editing, setEditing] = useState<Project | 'new' | null>(null);
 
   const visibleWeeks = buckets.flatMap((b) => b.weeks);
-  const projects = sortProjects(plan.projects.filter((p) => matchesFilters(p, filters, d)));
+  // A workstream has a conflict if someone on it is over/at risk in the visible range,
+  // someone on it has none of its required skills, or a required capability is uncovered.
+  const hasConflict = (p: Project) =>
+    d.uncoveredByProject.has(p.id) ||
+    (d.assignmentsByProject.get(p.id) ?? []).some((a) => {
+      if (d.mismatchedAssignmentIds.has(a.id)) return true;
+      const flags = assignmentFlagWeeks(a, visibleWeeks, d.loads, plan.settings);
+      return flags.over.length + flags.stretch.length + flags.risk.length > 0;
+    });
+  const projects = sortProjects(plan.projects.filter((p) => matchesFilters(p, filters, d, hasConflict(p))));
 
   const rows: GridRow[] = [];
   for (const p of projects) {
@@ -260,6 +270,8 @@ export function ProjectView({ buckets }: Props) {
                 Create one
               </button>
             </span>
+          ) : filters.conflictsOnly ? (
+            'No workstream has a conflict in this view. 🎉'
           ) : (
             'No workstreams match the filters.'
           )

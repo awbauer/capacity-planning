@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { bucketStats, totalsGetter } from '../domain/aggregate';
-import { assignmentFlagWeeks } from '../domain/conflicts';
+import { assignmentFlagWeeks, resourceLoadFlagged } from '../domain/conflicts';
 import type { Derived } from '../domain/derive';
 import { STATUS_LABELS } from '../domain/labels';
 import { severity, totalIsCritical } from '../domain/load';
@@ -18,7 +18,8 @@ interface Props {
   buckets: Bucket[];
 }
 
-function matchesFilters(r: Resource, f: Filters, d: Derived): boolean {
+function matchesFilters(r: Resource, f: Filters, d: Derived, hasConflict: boolean): boolean {
+  if (f.conflictsOnly && !hasConflict) return false;
   if (f.tagId && !r.tagIds.includes(f.tagId)) return false;
   const assignments = d.assignmentsByResource.get(r.id) ?? [];
   if (f.sellerId && !assignments.some((a) => d.projectsById.get(a.projectId)?.sellerId === f.sellerId)) {
@@ -44,7 +45,16 @@ export function ResourceView({ buckets }: Props) {
   const threshold = plan.settings.overallocationThreshold;
   const visibleWeeks = buckets.flatMap((b) => b.weeks);
   const resources = plan.resources
-    .filter((r) => matchesFilters(r, filters, d))
+    .filter((r) =>
+      matchesFilters(
+        r,
+        filters,
+        d,
+        // A conflict is an over/at-risk week in the visible range, or a skill mismatch on any of their workstreams.
+        resourceLoadFlagged(r.id, visibleWeeks, d.loads, plan.settings) ||
+          (d.assignmentsByResource.get(r.id) ?? []).some((a) => d.mismatchedAssignmentIds.has(a.id)),
+      ),
+    )
     .sort((a, b) => a.name.localeCompare(b.name));
 
   const rows: GridRow[] = [];
@@ -267,7 +277,9 @@ export function ResourceView({ buckets }: Props) {
         empty={
           plan.resources.length === 0
             ? 'No resources yet. Add people under Manage → Resources.'
-            : 'No resources match the filters.'
+            : filters.conflictsOnly
+              ? 'Nobody has a conflict in this view. 🎉'
+              : 'No resources match the filters.'
         }
       />
       {adding && <AddAssignmentDialog resourceId={adding} onClose={() => setAdding(null)} />}

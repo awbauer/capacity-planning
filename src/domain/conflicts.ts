@@ -143,3 +143,15 @@ export function findSkillIssues(plan: PlanData): SkillIssue[] {
   }
   return issues;
 }
+
+/** True when the person is over (or at risk of being over) capacity in any of the given weeks. */
+export function resourceLoadFlagged(
+  resourceId: string,
+  weeks: WeekKey[],
+  loads: SplitLoads,
+  settings: PlanData['settings'],
+): boolean {
+  const committed = loads.committed.get(resourceId);
+  const tentative = loads.tentative.get(resourceId);
+  return weeks.some((w) => severity(committed?.get(w) ?? 0, tentative?.get(w) ?? 0, settings) !== null);
+}
