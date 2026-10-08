@@ -184,6 +184,15 @@ describe('skills', () => {
     expect(uncoveredTags(pr, { resources: [resource], assignments: [] })).toEqual([]);
   });
 
+  it('treats a capability on an open role as covered (the gap is planned)', () => {
+    const pr = project('p', 'won', ['dc', 'mc']);
+    const assignments = [alloc('a', 'p', {})];
+    const roles = [{ id: 'o', projectId: 'p', name: 'MC dev', tagIds: ['mc'], weekly: {} }];
+    expect(uncoveredTags(pr, { resources: [resource], assignments, roles })).toEqual([]);
+    // A role alone also counts as staffing.
+    expect(uncoveredTags(pr, { resources: [resource], assignments: [], roles })).toEqual(['dc']);
+  });
+
   it('ignores skill issues on lost projects', () => {
     const p = plan({
       resources: [resource],

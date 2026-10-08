@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addWeeks, buckets, normalizeWeek, shiftAnchor, toWeekKey, weekMonth, weeksBetween } from './weeks';
+import { addWeeks, buckets, normalizeWeek, shiftAnchor, shiftWeekly, toWeekKey, weekMonth, weeksApart, weeksBetween } from './weeks';
 
 describe('weeks', () => {
   it('keys weeks by their Monday', () => {
@@ -54,5 +54,24 @@ describe('weeks', () => {
     expect(shiftAnchor('week', '2026-10-05', 1)).toBe('2026-11-02');
     expect(weekMonth(shiftAnchor('month', '2026-10-05', 1))).toEqual({ year: 2027, month: 0 });
     expect(weekMonth(shiftAnchor('quarter', '2026-10-05', -1))).toEqual({ year: 2026, month: 3 });
+  });
+});
+
+describe('shifting', () => {
+  it('counts weeks apart', () => {
+    expect(weeksApart('2026-10-05', '2026-10-26')).toBe(3);
+    expect(weeksApart('2026-10-26', '2026-10-05')).toBe(-3);
+    // Across the DST change.
+    expect(weeksApart('2026-10-19', '2026-11-09')).toBe(3);
+  });
+
+  it('moves weeks from the given week on, leaving earlier weeks', () => {
+    const weekly = { '2026-09-28': 25, '2026-10-05': 50, '2026-10-12': 100 };
+    expect(shiftWeekly(weekly, '2026-10-05', 2)).toEqual({ '2026-09-28': 25, '2026-10-19': 50, '2026-10-26': 100 });
+  });
+
+  it('lets moved weeks overwrite earlier weeks when shifting back', () => {
+    const weekly = { '2026-09-28': 25, '2026-10-05': 50 };
+    expect(shiftWeekly(weekly, '2026-10-05', -1)).toEqual({ '2026-09-28': 50 });
   });
 });

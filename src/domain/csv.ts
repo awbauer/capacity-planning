@@ -25,7 +25,7 @@ export function slug(name: string): string {
  * allocation outside them. Empty if it has neither dates nor allocations.
  */
 export function workstreamWeeks(plan: PlanData, project: Project): string[] {
-  const allocated = plan.assignments
+  const allocated = [...plan.assignments, ...plan.roles]
     .filter((a) => a.projectId === project.id)
     .flatMap((a) => Object.keys(a.weekly).filter((w) => a.weekly[w]));
   const bounds = [...allocated, project.startWeek, project.endWeek].filter((w): w is string => !!w).sort();
@@ -36,6 +36,7 @@ export function workstreamWeeks(plan: PlanData, project: Project): string[] {
  * One workstream's staffing plan, laid out for people to read: a details
  * block, then one row per person with a column per week (% allocation), a
  * Phase row (presales before the start date, delivery from it) and an FTE total.
+ * Open roles follow the people as "Open: <role>", with their own FTE total.
  */
 export function workstreamCsv(plan: PlanData, projectId: string): string {
   const project = plan.projects.find((p) => p.id === projectId);
@@ -70,6 +71,16 @@ export function workstreamCsv(plan: PlanData, projectId: string): string {
       ...weeks.map((w) => a.weekly[w] ?? 0),
     ]);
   }
+  const roles = plan.roles.filter((r) => r.projectId === project.id).sort((x, y) => x.name.localeCompare(y.name));
+  for (const role of roles) {
+    out.push([
+      `Open: ${role.name}`,
+      role.level,
+      'Open role',
+      role.tagIds.map((t) => tags.get(t)).filter(Boolean).join('; '),
+      ...weeks.map((w) => role.weekly[w] ?? 0),
+    ]);
+  }
   out.push([
     'Total FTE',
     '',
@@ -77,6 +88,15 @@ export function workstreamCsv(plan: PlanData, projectId: string): string {
     '',
     ...weeks.map((w) => rows.reduce((sum, { a }) => sum + (a.weekly[w] ?? 0), 0) / 100),
   ]);
+  if (roles.length) {
+    out.push([
+      'Open FTE',
+      '',
+      '',
+      '',
+      ...weeks.map((w) => roles.reduce((sum, r) => sum + (r.weekly[w] ?? 0), 0) / 100),
+    ]);
+  }
   return toCsv(out);
 }
 
@@ -106,6 +126,25 @@ export function allWorkstreamsCsv(plan: PlanData): string {
         r?.name ?? '(deleted)',
         r?.level,
         r?.role,
+        w,
+        weekKind(p, w) === 'presales' ? 'Presales' : 'Delivery',
+        pct,
+      ]);
+    }
+  }
+  for (const role of plan.roles) {
+    const p = projects.get(role.projectId);
+    if (!p) continue;
+    for (const [w, pct] of Object.entries(role.weekly)) {
+      if (!pct) continue;
+      lines.push([
+        p.name,
+        p.client,
+        p.sellerId ? sellers.get(p.sellerId) : '',
+        STATUS_LABELS[p.status],
+        `Open: ${role.name}`,
+        role.level,
+        'Open role',
         w,
         weekKind(p, w) === 'presales' ? 'Presales' : 'Delivery',
         pct,

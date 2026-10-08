@@ -3,13 +3,15 @@ import type { Derived } from '../domain/derive';
 import { assignmentFlagWeeks } from '../domain/conflicts';
 import { slug, workstreamCsv } from '../domain/csv';
 import { weekKind, type Severity } from '../domain/load';
-import type { Project } from '../domain/types';
+import type { OpenRole, Project } from '../domain/types';
 import type { Bucket } from '../domain/weeks';
 import { usePlan, usePlanStore } from '../store/planStore';
 import { clientGroupKey, isExpanded, useUIStore, type Filters } from '../store/uiStore';
 import { useDerived } from '../store/useDerived';
 import { AddAssignmentDialog } from './AddAssignmentDialog';
 import { downloadText, today } from './download';
+import { FillRoleDialog } from './FillRoleDialog';
+import { RoleDialog } from './RoleDialog';
 import { TagChips } from './Chips';
 import { TimeGrid, type GridRow } from './grid/TimeGrid';
 import { ProjectDialog } from './ProjectDialog';
@@ -56,15 +58,21 @@ export function ProjectView({ buckets }: Props) {
   const groupByClient = useUIStore((s) => s.groupByClient);
   const setGroupByClient = useUIStore((s) => s.setGroupByClient);
   const removeAssignment = usePlanStore((s) => s.removeAssignment);
+  const removeRole = usePlanStore((s) => s.removeRole);
+  const [roleDialog, setRoleDialog] = useState<{ projectId: string } | { role: OpenRole } | null>(null);
+  const [filling, setFilling] = useState<OpenRole | null>(null);
+  const upcomingRoleProjects = new Set(d.upcomingRoles.map((u) => u.role.projectId));
   const updateProject = usePlanStore((s) => s.updateProject);
   const [adding, setAdding] = useState<string | null>(null);
   const [editing, setEditing] = useState<Project | 'new' | null>(null);
 
   const visibleWeeks = buckets.flatMap((b) => b.weeks);
   // A workstream has a conflict if someone on it is over/at risk in the visible range,
-  // someone on it has none of its required skills, or a required capability is uncovered.
+  // someone on it has none of its required skills, a required capability is uncovered,
+  // or it has an open role still to fill.
   const hasConflict = (p: Project) =>
     d.uncoveredByProject.has(p.id) ||
+    upcomingRoleProjects.has(p.id) ||
     (d.assignmentsByProject.get(p.id) ?? []).some((a) => {
       if (d.mismatchedAssignmentIds.has(a.id)) return true;
       const flags = assignmentFlagWeeks(a, visibleWeeks, d.loads, plan.settings);
@@ -91,6 +99,7 @@ export function ProjectView({ buckets }: Props) {
     const stretchPeople = [...flagged('stretch')].filter((id) => !overPeople.has(id));
     const riskPeople = [...flagged('risk')].filter((id) => !overPeople.has(id) && !stretchPeople.includes(id));
     const uncovered = d.uncoveredByProject.get(p.id) ?? [];
+    const roles = [...(d.rolesByProject.get(p.id) ?? [])].sort((a, b) => a.name.localeCompare(b.name));
     const seller = p.sellerId ? d.sellersById.get(p.sellerId) : undefined;
     const totals = d.projectLoad.get(p.id);
 
@@ -119,13 +128,14 @@ export function ProjectView({ buckets }: Props) {
             </div>
             <div className="row-meta">
               <StatusSelect compact value={p.status} onChange={(status) => updateProject(p.id, { status })} />
-              <span className="seller" title="Seller">
+              <span className="seller" title={seller ? `Seller: ${seller.name}` : 'No seller'}>
                 {seller ? seller.name : <em className="muted">No seller</em>}
               </span>
             {(overPeople.size > 0 ||
               stretchPeople.length > 0 ||
               riskPeople.length > 0 ||
               uncovered.length > 0 ||
+              roles.length > 0 ||
               assignments.length === 0) && (
               <span className="row-badges">
                 {overPeople.size > 0 && (
@@ -148,7 +158,12 @@ export function ProjectView({ buckets }: Props) {
                     Gap{uncovered.length > 1 ? ` ${uncovered.length}` : ''}
                   </span>
                 )}
-                {assignments.length === 0 && <span className="badge">Unstaffed</span>}
+                {roles.length > 0 && (
+                  <span className="badge badge-open" title={`Open roles: ${roles.map((r) => r.name).join(', ')}`}>
+                    Open {roles.length}
+                  </span>
+                )}
+                {assignments.length === 0 && roles.length === 0 && <span className="badge">Unstaffed</span>}
               </span>
             )}
               <TagChips tagIds={p.tagIds} tagsById={d.tagsById} />
@@ -157,6 +172,14 @@ export function ProjectView({ buckets }: Props) {
           <div className="row-actions">
             <button type="button" className="btn btn-small" onClick={() => setAdding(p.id)}>
               + Person
+            </button>
+            <button
+              type="button"
+              className="btn btn-small"
+              title="Add demand you haven't chosen a person for yet"
+              onClick={() => setRoleDialog({ projectId: p.id })}
+            >
+              + Role
             </button>
             <button
               type="button"
@@ -183,8 +206,11 @@ export function ProjectView({ buckets }: Props) {
               : worst === 'risk'
                 ? ' · someone is at risk if pipeline work is won'
                 : '';
+        const openFte = b.weeks.reduce((n, w) => n + roles.reduce((m, r) => m + (r.weekly[w] ?? 0), 0), 0) / b.weeks.length;
+        const openNote = openFte ? ` · +${(openFte / 100).toFixed(2)} FTE in open roles` : '';
         return {
           text: avg ? (avg / 100).toFixed(1) : '',
+          extra: openFte ? `+${(openFte / 100).toFixed(1)}` : undefined,
           className: [
             'fte',
             worst ? `has-${worst}` : '',
@@ -192,7 +218,10 @@ export function ProjectView({ buckets }: Props) {
               ? 'has-presales'
               : '',
           ].join(' '),
-          title: avg ? `${(avg / 100).toFixed(2)} FTE${b.weeks.length > 1 ? ' (average)' : ''}${note}` : undefined,
+          title:
+            avg || openFte
+              ? `${(avg / 100).toFixed(2)} FTE staffed${b.weeks.length > 1 ? ' (average)' : ''}${openNote}${note}`
+              : undefined,
         };
       },
     });
@@ -232,6 +261,50 @@ export function ProjectView({ buckets }: Props) {
                   removeAssignment(a.id);
                 }
               }}
+            >
+              ×
+            </button>
+          </div>
+        ),
+      });
+    }
+    for (const role of roles) {
+      rows.push({
+        key: `o:${role.id}`,
+        depth: 1,
+        assignmentId: role.id,
+        className: 'role-row',
+        range: { start: p.startWeek, end: p.endWeek },
+        label: (
+          <div className="row-label">
+            <div className="row-main">
+              <div className="row-title">
+                <span className="badge badge-open">Open</span>
+                <button
+                  type="button"
+                  className="link row-name"
+                  title={`Edit role${role.tagIds.length ? ` · needs ${role.tagIds.map((t) => d.tagsById.get(t)?.name).join(', ')}` : ''}`}
+                  onClick={() => setRoleDialog({ role })}
+                >
+                  {role.name}
+                </button>
+                {role.level && <span className="level-badge">{role.level}</span>}
+              </div>
+            </div>
+            <button
+              type="button"
+              className="btn btn-small"
+              title="Choose the person for this role"
+              onClick={() => setFilling(role)}
+            >
+              Fill…
+            </button>
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label={`Remove open role ${role.name}`}
+              title="Remove open role"
+              onClick={() => removeRole(role.id)}
             >
               ×
             </button>
@@ -360,6 +433,8 @@ export function ProjectView({ buckets }: Props) {
         }
       />
       {adding && <AddAssignmentDialog projectId={adding} onClose={() => setAdding(null)} />}
+      {roleDialog && <RoleDialog {...roleDialog} onClose={() => setRoleDialog(null)} />}
+      {filling && <FillRoleDialog role={filling} onClose={() => setFilling(null)} />}
       {editing && (
         <ProjectDialog project={editing === 'new' ? undefined : editing} onClose={() => setEditing(null)} />
       )}

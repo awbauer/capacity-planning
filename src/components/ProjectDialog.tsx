@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Project } from '../domain/types';
-import { normalizeWeek } from '../domain/weeks';
+import { addWeeks, formatWeek, normalizeWeek, weeksApart } from '../domain/weeks';
 import { usePlanStore } from '../store/planStore';
 import { useDerived } from '../store/useDerived';
 import { Modal } from './Modal';
@@ -23,13 +23,33 @@ export function ProjectDialog({ project, onClose }: Props) {
     project ?? { name: '', client: '', sellerId: null, status: 'pipeline', tagIds: [], notes: '' },
   );
   const set = (patch: Partial<Omit<Project, 'id'>>) => setDraft((p) => ({ ...p, ...patch }));
-  const datesInvalid = !!draft.startWeek && !!draft.endWeek && draft.endWeek < draft.startWeek;
+  const [moveStaffing, setMoveStaffing] = useState(true);
+
+  // A slipped (or pulled-in) start date: offer to move the delivery staffing with it.
+  const oldStart = project?.startWeek;
+  const slip = oldStart && draft.startWeek && draft.startWeek !== oldStart ? weeksApart(oldStart, draft.startWeek) : 0;
+  const rowsToMove = project
+    ? [...(d.assignmentsByProject.get(project.id) ?? []), ...(d.rolesByProject.get(project.id) ?? [])].filter((a) =>
+        Object.keys(a.weekly).some((w) => w >= oldStart! && a.weekly[w] > 0),
+      )
+    : [];
+  const offerShift = slip !== 0 && rowsToMove.length > 0;
+  const shiftEnd = offerShift && moveStaffing && !!project?.endWeek && draft.endWeek === project.endWeek;
+  const effectiveDraft = shiftEnd ? { ...draft, endWeek: addWeeks(project!.endWeek!, slip) } : draft;
+
+  const datesInvalid =
+    !!effectiveDraft.startWeek && !!effectiveDraft.endWeek && effectiveDraft.endWeek < effectiveDraft.startWeek;
   const canSave = draft.name.trim() !== '' && !datesInvalid;
 
   const save = () => {
     if (!canSave) return;
-    const clean = { ...draft, name: draft.name.trim(), client: draft.client?.trim() || undefined, notes: draft.notes?.trim() || undefined };
-    if (project) updateProject(project.id, clean);
+    const clean = {
+      ...effectiveDraft,
+      name: draft.name.trim(),
+      client: draft.client?.trim() || undefined,
+      notes: draft.notes?.trim() || undefined,
+    };
+    if (project) updateProject(project.id, clean, offerShift && moveStaffing ? { from: oldStart!, weeks: slip } : undefined);
     else addProject(clean);
     onClose();
   };
@@ -120,6 +140,21 @@ export function ProjectDialog({ project, onClose }: Props) {
             />
           </label>
         </div>
+        {offerShift && (
+          <label className="checkbox-row shift-offer">
+            <input type="checkbox" checked={moveStaffing} onChange={(e) => setMoveStaffing(e.target.checked)} />
+            <span>
+              Move the delivery staffing too: shift the weeks from {formatWeek(oldStart!)} on for{' '}
+              {rowsToMove.length} {rowsToMove.length === 1 ? 'row' : 'rows'} by {slip > 0 ? '+' : '−'}
+              {Math.abs(slip)} {Math.abs(slip) === 1 ? 'week' : 'weeks'}
+              {shiftEnd && <>, and the end date to {formatWeek(effectiveDraft.endWeek!)}</>}.{' '}
+              <span className="muted small">
+                Presales weeks before {formatWeek(oldStart!)} stay put. Unticked, only the date moves and staffed weeks
+                before the new start count as presales.
+              </span>
+            </span>
+          </label>
+        )}
         {datesInvalid && <p className="warn-text">End must be on or after start.</p>}
         <label>
           Notes

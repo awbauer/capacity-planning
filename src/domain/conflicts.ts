@@ -105,12 +105,14 @@ export function isSkillMismatch(resource: Resource, project: Project): boolean {
 }
 
 /**
- * Required tags that no resource assigned to the project has. Projects with no
- * assignments yet return [] — they're unstaffed, which the grid already shows.
+ * Required tags that neither an assigned resource nor an open role has. An
+ * open role counts as covering its capabilities: the gap is planned. Projects
+ * with nobody and no roles yet return [] — they're unstaffed, which the grid
+ * already shows.
  */
 export function uncoveredTags(
   project: Project,
-  plan: Pick<PlanData, 'assignments' | 'resources'>,
+  plan: Pick<PlanData, 'assignments' | 'resources'> & Partial<Pick<PlanData, 'roles'>>,
 ): string[] {
   const resourcesById = new Map(plan.resources.map((r) => [r.id, r]));
   const covered = new Set<string>();
@@ -119,6 +121,11 @@ export function uncoveredTags(
     if (a.projectId !== project.id) continue;
     staffed = true;
     for (const t of resourcesById.get(a.resourceId)?.tagIds ?? []) covered.add(t);
+  }
+  for (const r of plan.roles ?? []) {
+    if (r.projectId !== project.id) continue;
+    staffed = true;
+    for (const t of r.tagIds) covered.add(t);
   }
   if (!staffed) return [];
   return project.tagIds.filter((t) => !covered.has(t));

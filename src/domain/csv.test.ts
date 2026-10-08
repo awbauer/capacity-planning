@@ -39,20 +39,28 @@ describe('csv', () => {
     expect(phase[start]).toBe('Delivery');
     const alex = lines.find((l) => l.startsWith('Alex Rivera,'))!.split(',');
     expect(alex[header.indexOf('2026-10-05')]).toBe('25');
-    const total = lines[lines.length - 1].split(',');
-    expect(total[0]).toBe('Total FTE');
+    const total = lines.find((l) => l.startsWith('Total FTE,'))!.split(',');
     // Alex 25 + Jamie 25 presales in week 0.
     expect(total[header.indexOf('2026-10-05')]).toBe('0.5');
+    // The open Agentforce Architect role (50% from week 4) follows the people, with its own total.
+    const role = lines.find((l) => l.startsWith('Open: Agentforce Architect,'))!.split(',');
+    expect(role[header.indexOf('2026-11-02')]).toBe('50');
+    const open = lines[lines.length - 1].split(',');
+    expect(open[0]).toBe('Open FTE');
+    expect(open[header.indexOf('2026-11-02')]).toBe('0.5');
   });
 
   it('writes every allocated week of every workstream as one long table', () => {
     const plan = createSamplePlan('2026-10-05');
     const lines = parse(allWorkstreamsCsv(plan));
     expect(lines[0]).toBe('Workstream,Client,Seller,Status,Person,Level,Role,Week of,Phase,Allocation %');
-    const total = plan.assignments.reduce((n, a) => n + Object.values(a.weekly).filter(Boolean).length, 0);
+    const total = [...plan.assignments, ...plan.roles].reduce((n, a) => n + Object.values(a.weekly).filter(Boolean).length, 0);
     expect(lines).toHaveLength(total + 1);
     expect(lines).toContain(
       'Agentforce Service Pilot,Contoso,Marcus Chen,Pipeline,Alex Rivera,SM,Solution Architect,2026-10-05,Presales,25',
+    );
+    expect(lines).toContain(
+      'Agentforce Service Pilot,Contoso,Marcus Chen,Pipeline,Open: Agentforce Architect,SM,Open role,2026-11-02,Delivery,50',
     );
   });
 });

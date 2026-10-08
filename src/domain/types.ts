@@ -63,11 +63,35 @@ export interface Assignment {
   weekly: Record<WeekKey, number>;
 }
 
+/**
+ * Demand on a workstream that no one has been chosen for yet ("Data Cloud
+ * Architect at 50% from January"). It's nobody's load until filled.
+ */
+export interface OpenRole {
+  id: string;
+  projectId: string;
+  /** What the role is, e.g. "Data Cloud Architect". */
+  name: string;
+  level?: CareerLevel;
+  /** Capabilities the person filling it should have. */
+  tagIds: string[];
+  weekly: Record<WeekKey, number>;
+}
+
+/** Either kind of row with weekly allocations on a workstream. */
+export type AllocationRow = Assignment | OpenRole;
+
+export function isOpenRole(row: AllocationRow): row is OpenRole {
+  return !('resourceId' in row);
+}
+
 export interface PlanSettings {
   /** Committed weekly load above this % is flagged yellow ("stretched"). */
   overallocationThreshold: number;
   /** Committed weekly load above this % is flagged red ("overallocated"). */
   criticalThreshold: number;
+  /** Expected utilization % by career level; missing levels use the defaults (see utilization.ts). */
+  utilizationTargets?: Partial<Record<CareerLevel, number>>;
 }
 
 export interface PlanData {
@@ -77,5 +101,6 @@ export interface PlanData {
   resources: Resource[];
   projects: Project[];
   assignments: Assignment[];
+  roles: OpenRole[];
   settings: PlanSettings;
 }

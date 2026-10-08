@@ -9,8 +9,8 @@ import {
 } from 'react';
 import { bucketStats } from '../../domain/aggregate';
 import { assignmentFlagWeeks } from '../../domain/conflicts';
-import { totalIsCritical, weekKind, type Severity } from '../../domain/load';
-import type { WeekKey, Zoom } from '../../domain/types';
+import { totalIsCritical, weekClass, weekKind, type Severity } from '../../domain/load';
+import { isOpenRole, type AllocationRow, type WeekKey, type Zoom } from '../../domain/types';
 import { nextStep } from '../../domain/steps';
 import { currentWeek, formatWeek, type Bucket } from '../../domain/weeks';
 import { usePlan, usePlanStore, type AllocationEdit } from '../../store/planStore';
@@ -102,7 +102,11 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const editRows = useMemo(() => rows.filter((r) => r.assignmentId), [rows]);
   const editIndex = useMemo(() => new Map(editRows.map((r, i) => [r.key, i])), [editRows]);
-  const assignmentsById = useMemo(() => new Map(plan.assignments.map((a) => [a.id, a])), [plan.assignments]);
+  // People's rows and open roles edit the same way.
+  const assignmentsById = useMemo(
+    () => new Map<string, AllocationRow>([...plan.assignments, ...plan.roles].map((a) => [a.id, a])),
+    [plan.assignments, plan.roles],
+  );
 
   const [anchor, setAnchor] = useState<Pos | null>(null);
   const [focus, setFocus] = useState<Pos | null>(null);
@@ -269,8 +273,13 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     // A month/quarter cell can straddle the start date; style it by its first allocated week.
     const repWeek = b.weeks.find((w) => a.weekly[w]) ?? b.weeks[0];
     const kind = weekKind(d.projectsById.get(a.projectId), repWeek);
-    const cls = d.loads.classAt(a, repWeek);
-    const flags = assignmentFlagWeeks(a, b.weeks, d.loads, plan.settings);
+    const cls = weekClass(d.projectsById.get(a.projectId), repWeek);
+    const role = isOpenRole(a) ? a : null;
+    const person = isOpenRole(a) ? null : a;
+    // An open role is nobody's load, so it's never flagged.
+    const flags = person
+      ? assignmentFlagWeeks(person, b.weeks, d.loads, plan.settings)
+      : { over: [] as WeekKey[], stretch: [] as WeekKey[], risk: [] as WeekKey[] };
     const flag: Severity | null = flags.over.length ? 'over' : flags.stretch.length ? 'stretch' : flags.risk.length ? 'risk' : null;
     const flagWeek = flag ? flags[flag][0] : undefined;
     const selected = inSelection(r, c);
@@ -281,11 +290,12 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     if (flag) classes.push(flag);
     // Pipeline-driven overload past the red threshold is drawn red, like an overallocation.
     if (
+      person &&
       flag === 'risk' &&
       flags.risk.some((w) =>
         totalIsCritical(
-          d.loads.committed.get(a.resourceId)?.get(w) ?? 0,
-          d.loads.tentative.get(a.resourceId)?.get(w) ?? 0,
+          d.loads.committed.get(person.resourceId)?.get(w) ?? 0,
+          d.loads.tentative.get(person.resourceId)?.get(w) ?? 0,
           plan.settings,
         ),
       )
@@ -296,9 +306,11 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     if (cls === 'excluded') classes.push('excluded');
     if (b.weeks.includes(thisWeek)) classes.push('today');
     if (st.avg > 0) classes.push('filled');
+    if (role) classes.push('open-role');
 
     let title: string | undefined;
-    if (flag && flagWeek) title = `This row: ${Math.round(st.avg)}%. ${loadTitle(a.resourceId, flagWeek, flag)}`;
+    if (person && flag && flagWeek) title = `This row: ${Math.round(st.avg)}%. ${loadTitle(person.resourceId, flagWeek, flag)}`;
+    else if (role && st.avg > 0) title = `Open role: ${Math.round(st.avg)}% needed${st.mixed ? ' (average)' : ''}. Not anyone's load until filled.`;
     else if (cls === 'excluded' && st.avg > 0) title = 'Delivery on a lost workstream: not counted toward load.';
     else if (st.mixed) title = `Varies by week: avg ${Math.round(st.avg)}%, peak ${st.peak}%. Double-clicking or typing sets every week.`;
     else if (st.avg > 0) title = `${Math.round(st.avg)}%`;

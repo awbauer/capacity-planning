@@ -2,7 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { splitLoads } from './load';
 import { createEmptyPlan } from './sampleData';
 import type { PlanData } from './types';
-import { lookaheadWeeks, teamUtilization, utilizationByResource, utilizationOf } from './utilization';
+import {
+  DEFAULT_TARGETS,
+  demandByCapability,
+  lookaheadWeeks,
+  teamUtilization,
+  utilizationByResource,
+  utilizationOf,
+  utilizationTarget,
+} from './utilization';
 
 const W1 = '2026-10-05';
 const W2 = '2026-10-12';
@@ -61,5 +69,36 @@ describe('utilization', () => {
     const team = teamUtilization(map, ['r', 'idle']);
     expect(team.delivery).toBe(37.5);
     expect(team.pipeline).toBe(18.75);
+  });
+
+  it('uses level targets, with per-plan overrides', () => {
+    expect(utilizationTarget({}, 'D')).toBe(DEFAULT_TARGETS.D);
+    expect(utilizationTarget({ utilizationTargets: { D: 55 } }, 'D')).toBe(55);
+    expect(utilizationTarget({ utilizationTargets: { D: 55 } }, 'A')).toBe(DEFAULT_TARGETS.A);
+    expect(utilizationTarget({}, undefined)).toBe(100);
+  });
+
+  it('compares open-role demand per capability with free capacity of people who have it', () => {
+    const p: PlanData = {
+      ...createEmptyPlan(),
+      projects: [
+        { id: 'won', name: 'won', sellerId: null, status: 'won', tagIds: [] },
+        { id: 'pipe', name: 'pipe', sellerId: null, status: 'pipeline', tagIds: [], startWeek: W1 },
+        { id: 'lost', name: 'lost', sellerId: null, status: 'lost', tagIds: [], startWeek: W1 },
+      ],
+      resources: [
+        { id: 'r1', name: 'r1', tagIds: ['dc'] },
+        { id: 'r2', name: 'r2', tagIds: ['mc'] },
+      ],
+      assignments: [{ id: 'a', projectId: 'won', resourceId: 'r1', weekly: { [W1]: 50, [W2]: 100 } }],
+      roles: [
+        { id: 'o1', projectId: 'won', name: 'x', tagIds: ['dc'], weekly: { [W1]: 100, [W2]: 100 } },
+        { id: 'o2', projectId: 'pipe', name: 'y', tagIds: ['dc'], weekly: { [W1]: 50 } },
+        // Lost delivery isn't demand.
+        { id: 'o3', projectId: 'lost', name: 'z', tagIds: ['mc'], weekly: { [W1]: 100 } },
+      ],
+    };
+    const rows = demandByCapability(p, splitLoads(p), [W1, W2]);
+    expect(rows).toEqual([{ tagId: 'dc', won: 1, pipeline: 0.25, available: 0.25 }]);
   });
 });

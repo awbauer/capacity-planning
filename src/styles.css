@@ -1573,6 +1573,14 @@ kbd {
   flex-shrink: 0;
 }
 
+.row-meta > .seller {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .row-meta > .chips {
   flex-wrap: nowrap;
   flex-shrink: 1;
@@ -1724,13 +1732,20 @@ kbd {
   font-weight: 600;
 }
 
-.util-over td.num:nth-child(2) {
-  color: var(--stretch);
+.util-under td.gap,
+.util-under-text {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.util-short td:last-child {
+  color: var(--danger);
   font-weight: 700;
 }
 
 /* Delivery (solid) and pipeline (light) on a 0–150% track. */
 .util-bar {
+  position: relative;
   display: flex;
   height: 4px;
   margin-top: 3px;
@@ -1746,4 +1761,85 @@ kbd {
 .util-bar-pipeline {
   background: var(--presales);
   opacity: 0.45;
+}
+
+/* ---------- Slip: move staffing with the start date ---------- */
+
+.checkbox-row {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+  align-items: flex-start;
+  font-weight: normal;
+}
+
+.checkbox-row input {
+  margin-top: 3px;
+}
+
+.shift-offer {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--accent-soft);
+}
+
+/* Target marker on a utilization bar. */
+.util-bar-target {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--text);
+}
+
+/* ---------- Open roles ---------- */
+
+.badge-open {
+  background: var(--warn-bg);
+  color: var(--warn);
+  border: 1px dashed var(--warn);
+}
+
+.grid tr.role-row th.label {
+  font-style: italic;
+}
+
+.grid td.cell.open-role.filled {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent 0 4px,
+    color-mix(in srgb, var(--warn) 18%, transparent) 4px 6px
+  );
+}
+
+/* ---------- Utilization targets ---------- */
+
+.targets {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px 12px;
+}
+
+.targets legend {
+  font-weight: 600;
+  padding: 0 4px;
+}
+
+.targets-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.targets-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-weight: 600;
+}
+
+.targets-row input {
+  width: 64px;
 }

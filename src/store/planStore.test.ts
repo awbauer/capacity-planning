@@ -94,6 +94,79 @@ describe('planStore', () => {
     expect(Object.values(contoso[0].weekly)).toEqual(expect.arrayContaining([25, 100]));
   });
 
+  describe('slipped deals', () => {
+    it('moves delivery weeks with the start date in one undo step, leaving presales', () => {
+      // Contoso: presales from week 0, delivery from week 4 (2026-11-02).
+      const before = store().plan;
+      const alex = () => store().plan.assignments.find((a) => a.projectId === 'proj-contoso' && a.resourceId === 'res-alex')!;
+      expect(alex().weekly['2026-10-05']).toBe(25);
+      expect(alex().weekly['2026-11-16']).toBe(100);
+      store().updateProject('proj-contoso', { startWeek: '2026-11-23' }, { from: '2026-11-02', weeks: 3 });
+      expect(store().plan.projects.find((p) => p.id === 'proj-contoso')!.startWeek).toBe('2026-11-23');
+      expect(alex().weekly['2026-10-05']).toBe(25); // presales untouched
+      expect(alex().weekly['2026-11-16']).toBeUndefined(); // old delivery week now empty
+      expect(alex().weekly['2026-12-07']).toBe(100); // moved +3
+      const role = store().plan.roles.find((r) => r.id === 'sample-role1')!;
+      expect(role.weekly['2026-11-02']).toBeUndefined();
+      expect(role.weekly['2026-11-23']).toBe(50);
+      undo();
+      expect(store().plan).toBe(before);
+    });
+
+    it('only changes dates without a shift', () => {
+      const weekly = store().plan.assignments.find((a) => a.projectId === 'proj-contoso')!.weekly;
+      store().updateProject('proj-contoso', { startWeek: '2026-11-23' });
+      expect(store().plan.assignments.find((a) => a.projectId === 'proj-contoso')!.weekly).toBe(weekly);
+    });
+  });
+
+  describe('open roles', () => {
+    it('adds a role with a filled range', () => {
+      const role = store().addRole('proj-acme', { name: 'Architect', tagIds: [] }, { percent: 50, from: '2026-10-05', to: '2026-10-12' });
+      expect(role.weekly).toEqual({ '2026-10-05': 50, '2026-10-12': 50 });
+    });
+
+    it('edits role cells like any other row', () => {
+      store().setAllocations([{ assignmentId: 'sample-role1', weeks: ['2026-10-05'], percent: 100 }]);
+      expect(store().plan.roles.find((r) => r.id === 'sample-role1')!.weekly['2026-10-05']).toBe(100);
+    });
+
+    it('fills a role onto a new row for the person, in one undo step', () => {
+      const role = store().plan.roles.find((r) => r.id === 'sample-role2')!;
+      store().fillRole(role.id, 'res-morgan');
+      expect(store().plan.roles.some((r) => r.id === role.id)).toBe(false);
+      const row = store().plan.assignments.find((a) => a.projectId === 'proj-initech' && a.resourceId === 'res-morgan')!;
+      expect(row.weekly).toEqual(role.weekly);
+      undo();
+      expect(store().plan.roles.some((r) => r.id === role.id)).toBe(true);
+    });
+
+    it('adds a filled role to the person\'s existing row, snapped to a step', () => {
+      // Sam is already on Initech at 50% in weeks 8–14; the role is 100% in weeks 8–20.
+      store().fillRole('sample-role2', 'res-sam');
+      const rows = store().plan.assignments.filter((a) => a.projectId === 'proj-initech' && a.resourceId === 'res-sam');
+      expect(rows).toHaveLength(1);
+      expect(rows[0].weekly['2026-11-30']).toBe(100); // 50 + 100, capped at the top step
+      expect(rows[0].weekly['2027-02-22']).toBe(100); // week 20: role only
+    });
+
+    it('removes roles with their workstream and strips deleted tags', () => {
+      store().deleteTag('tag-af');
+      expect(store().plan.roles.find((r) => r.id === 'sample-role1')!.tagIds).toEqual([]);
+      store().deleteProject('proj-contoso');
+      expect(store().plan.roles.some((r) => r.projectId === 'proj-contoso')).toBe(false);
+    });
+  });
+
+  it('sets and resets utilization targets per level', () => {
+    store().setUtilizationTarget('D', 55);
+    expect(store().plan.settings.utilizationTargets).toEqual({ D: 55 });
+    store().setUtilizationTarget('D', 150);
+    expect(store().plan.settings.utilizationTargets?.D).toBe(100);
+    store().setUtilizationTarget('D', null);
+    expect(store().plan.settings.utilizationTargets).toEqual({});
+  });
+
   describe('plans', () => {
     const names = () => allPlans(store()).map((p) => p.meta.name);
 

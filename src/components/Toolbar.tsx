@@ -48,7 +48,8 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
   const lastExport = ui.exports[meta.id];
   const dirty = lastExport?.hash !== planHash;
   const thisWeek = currentWeek();
-  const conflictCount = d.overallocations.filter((o) => o.to >= thisWeek).length + d.skillIssues.length;
+  const conflictCount =
+    d.overallocations.filter((o) => o.to >= thisWeek).length + d.skillIssues.length + d.upcomingRoles.length;
   const isGrid = ui.view !== 'manage';
 
   const exportPlan = () => {
@@ -253,7 +254,7 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
             aria-pressed={ui.filters.conflictsOnly}
             title={
               ui.view === 'projects'
-                ? 'Show only workstreams with a conflict: someone over/at risk in the visible weeks, a skill mismatch or an uncovered capability'
+                ? 'Show only workstreams with a conflict: someone over/at risk in the visible weeks, a skill mismatch, an uncovered capability or an open role to fill'
                 : 'Show only people with a conflict: over/at risk in the visible weeks, or a skill mismatch'
             }
             onClick={() => ui.setFilters({ conflictsOnly: !ui.filters.conflictsOnly })}
@@ -265,7 +266,7 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
               type="button"
               className="btn"
               aria-pressed={ui.filters.underutilized}
-              title={`Show only people whose committed work (presales + won delivery) averages under ${plan.settings.overallocationThreshold}% over the next ${LOOKAHEAD_WEEKS} weeks`}
+              title={`Show only people whose committed work (presales + won delivery) averages under their level's utilization target over the next ${LOOKAHEAD_WEEKS} weeks (targets: Manage → Settings)`}
               onClick={() => ui.setFilters({ underutilized: !ui.filters.underutilized })}
             >
               Underutilized
