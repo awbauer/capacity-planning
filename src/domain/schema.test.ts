@@ -29,7 +29,7 @@ describe('parsePlan', () => {
     const v1 = JSON.parse(JSON.stringify({ ...plan, version: 1 }));
     for (const p of v1.projects) delete p.status;
     const parsed = parsePlan(v1);
-    expect(parsed.version).toBe(3);
+    expect(parsed.version).toBe(4);
     expect(parsed.projects.every((p) => p.status === 'won')).toBe(true);
     expect(upgradePlan(v1)).toEqual(parsed);
   });
@@ -62,12 +62,31 @@ describe('parsePlan', () => {
     expect(() => parsePlan(bad)).toThrow(/level/);
   });
 
-  it('loads files without open roles, and checks role references', () => {
+  it('upgrades version 3 files: people’s rows become roles named after their title, open roles fold in', () => {
+    const v3 = {
+      ...JSON.parse(JSON.stringify(createSamplePlan('2026-10-05'))),
+      version: 3,
+      assignments: [{ id: 'a1', projectId: 'proj-acme', resourceId: 'res-alex', weekly: { '2026-10-05': 50 } }],
+      roles: [{ id: 'o1', projectId: 'proj-acme', name: 'Architect', tagIds: ['tag-dc'], weekly: { '2026-10-05': 100 } }],
+    };
+    const parsed = parsePlan(v3);
+    expect(parsed.assignments).toEqual([
+      { id: 'a1', projectId: 'proj-acme', resourceId: 'res-alex', name: 'Solution Architect', tagIds: [], weekly: { '2026-10-05': 50 } },
+      { id: 'o1', projectId: 'proj-acme', resourceId: null, name: 'Architect', tagIds: ['tag-dc'], weekly: { '2026-10-05': 100 } },
+    ]);
+    expect(upgradePlan(v3).assignments).toEqual(parsed.assignments);
+  });
+
+  it('keeps two roles for the same person on a workstream from v4 on', () => {
     const plan = createSamplePlan('2026-10-05');
-    const { roles: _roles, ...old } = JSON.parse(JSON.stringify(plan));
-    expect(parsePlan(old).roles).toEqual([]);
-    const bad = JSON.parse(JSON.stringify(plan));
-    bad.roles[0].projectId = 'nowhere';
+    const a = plan.assignments[0];
+    plan.assignments.push({ ...a, id: 'second', name: 'Delivery Lead' });
+    expect(parsePlan(JSON.parse(JSON.stringify(plan))).assignments.filter((x) => x.resourceId === a.resourceId && x.projectId === a.projectId)).toHaveLength(2);
+  });
+
+  it('checks open role references', () => {
+    const bad = JSON.parse(JSON.stringify(createSamplePlan('2026-10-05')));
+    bad.assignments.find((a: { resourceId: string | null }) => a.resourceId === null).projectId = 'nowhere';
     expect(() => parsePlan(bad)).toThrow(/unknown workstream "nowhere"/);
   });
 });

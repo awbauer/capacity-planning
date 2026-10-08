@@ -1,4 +1,4 @@
-import type { Overallocation } from '../domain/conflicts';
+import { requiredTags, type Overallocation } from '../domain/conflicts';
 import { currentWeek, formatWeek, formatWeekRange } from '../domain/weeks';
 import { usePlan } from '../store/planStore';
 import { clientGroupKey, levelGroupKey, useUIStore } from '../store/uiStore';
@@ -102,7 +102,11 @@ export function ConflictsPanel() {
                   <span className="conflict-title">{name.resource(i.resourceId)}</span>
                   <span className="small">
                     on {name.project(i.projectId)}: has none of{' '}
-                    {d.projectsById.get(i.projectId)?.tagIds.map(name.tag).join(', ')}
+                    {(() => {
+                      const role = d.assignmentsByProject.get(i.projectId)?.find((a) => a.id === i.assignmentId);
+                      const project = d.projectsById.get(i.projectId);
+                      return role && project ? requiredTags(role, project).map(name.tag).join(', ') : '';
+                    })()}
                   </span>
                 </button>
               </li>

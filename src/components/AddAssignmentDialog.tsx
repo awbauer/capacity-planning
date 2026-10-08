@@ -64,6 +64,7 @@ export function AddAssignmentDialog({ projectId, resourceId, onClose }: Props) {
   const [range, setRange] = useState<{ from: WeekKey; to: WeekKey } | null>(null);
 
   const fixedProject = projectId ? d.projectsById.get(projectId) : undefined;
+  const openRoles = fixedProject ? (d.assignmentsByProject.get(fixedProject.id) ?? []).filter((a) => a.resourceId === null) : [];
   const fixedResource = resourceId ? d.resourcesById.get(resourceId) : undefined;
   const pickedProjects = fixedProject ? [] : picked.flatMap((id) => d.projectsById.get(id) ?? []);
   const pickedResources = fixedResource ? [] : picked.flatMap((id) => d.resourcesById.get(id) ?? []);
@@ -265,6 +266,20 @@ export function AddAssignmentDialog({ projectId, resourceId, onClose }: Props) {
             : `${shownWeeks.length} week${shownWeeks.length === 1 ? '' : 's'}`}
         </span>
       </div>
+      <p className="muted small form-note">
+        Each person goes into a role named after their title (or the role they already have there). Rename it, or set the
+        level and capabilities it needs, by clicking the role on the row.
+        {fixedProject && openRoles.length > 0 && (
+          <>
+            {' '}
+            <strong>
+              {fixedProject.name} has {openRoles.length === 1 ? 'an open role' : `${openRoles.length} open roles`} (
+              {openRoles.map((r) => r.name || 'unnamed').join(', ')}): to put someone in it, use <em>Fill…</em> on its row
+              instead.
+            </strong>
+          </>
+        )}
+      </p>
       {noteProject && <p className="muted small form-note">{rangeNote(noteProject, weeksBetween(rangeFor(noteProject).from, rangeFor(noteProject).to))}</p>}
       <input
         type="search"

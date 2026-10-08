@@ -3,7 +3,7 @@ import type { Derived } from '../domain/derive';
 import { assignmentFlagWeeks } from '../domain/conflicts';
 import { slug, workstreamCsv } from '../domain/csv';
 import { weekKind, type Severity } from '../domain/load';
-import type { OpenRole, Project } from '../domain/types';
+import { isFilled, type Assignment, type Project } from '../domain/types';
 import type { Bucket } from '../domain/weeks';
 import { usePlan, usePlanStore } from '../store/planStore';
 import { clientGroupKey, isExpanded, useUIStore, type Filters } from '../store/uiStore';
@@ -32,7 +32,11 @@ function matchesFilters(p: Project, f: Filters, d: Derived, hasConflict: boolean
     p.name,
     p.client ?? '',
     p.sellerId ? (d.sellersById.get(p.sellerId)?.name ?? '') : '',
-    ...(d.assignmentsByProject.get(p.id) ?? []).map((a) => d.resourcesById.get(a.resourceId)?.name ?? ''),
+    // People and role names, so "architect" finds workstreams with that role, open or filled.
+    ...(d.assignmentsByProject.get(p.id) ?? []).flatMap((a) => [
+      a.name,
+      a.resourceId ? (d.resourcesById.get(a.resourceId)?.name ?? '') : '',
+    ]),
   ];
   return haystack.some((s) => s.toLowerCase().includes(q));
 }
@@ -58,9 +62,8 @@ export function ProjectView({ buckets }: Props) {
   const groupByClient = useUIStore((s) => s.groupByClient);
   const setGroupByClient = useUIStore((s) => s.setGroupByClient);
   const removeAssignment = usePlanStore((s) => s.removeAssignment);
-  const removeRole = usePlanStore((s) => s.removeRole);
-  const [roleDialog, setRoleDialog] = useState<{ projectId: string } | { role: OpenRole } | null>(null);
-  const [filling, setFilling] = useState<OpenRole | null>(null);
+  const [roleDialog, setRoleDialog] = useState<{ projectId: string } | { role: Assignment } | null>(null);
+  const [filling, setFilling] = useState<Assignment | null>(null);
   const upcomingRoleProjects = new Set(d.upcomingRoles.map((u) => u.role.projectId));
   const updateProject = usePlanStore((s) => s.updateProject);
   const [adding, setAdding] = useState<string | null>(null);
@@ -85,10 +88,16 @@ export function ProjectView({ buckets }: Props) {
   const pushProject = (p: Project) => {
     const key = `p:${p.id}`;
     const open = isExpanded(expanded, key);
-    const assignments = [...(d.assignmentsByProject.get(p.id) ?? [])].sort(
+    const personName = (a: Assignment) => (a.resourceId ? (d.resourcesById.get(a.resourceId)?.name ?? '') : '');
+    // Every row is a role: people's roles by role then person, then open roles.
+    const all = [...(d.assignmentsByProject.get(p.id) ?? [])].sort(
       (a, b) =>
-        (d.resourcesById.get(a.resourceId)?.name ?? '').localeCompare(d.resourcesById.get(b.resourceId)?.name ?? ''),
+        Number(!isFilled(a)) - Number(!isFilled(b)) ||
+        a.name.localeCompare(b.name) ||
+        personName(a).localeCompare(personName(b)),
     );
+    const assignments = all.filter(isFilled);
+    const roles = all.filter((a) => !isFilled(a));
     const flagsByAssignment = new Map(
       assignments.map((a) => [a.id, assignmentFlagWeeks(a, visibleWeeks, d.loads, plan.settings)]),
     );
@@ -99,7 +108,6 @@ export function ProjectView({ buckets }: Props) {
     const stretchPeople = [...flagged('stretch')].filter((id) => !overPeople.has(id));
     const riskPeople = [...flagged('risk')].filter((id) => !overPeople.has(id) && !stretchPeople.includes(id));
     const uncovered = d.uncoveredByProject.get(p.id) ?? [];
-    const roles = [...(d.rolesByProject.get(p.id) ?? [])].sort((a, b) => a.name.localeCompare(b.name));
     const seller = p.sellerId ? d.sellersById.get(p.sellerId) : undefined;
     const totals = d.projectLoad.get(p.id);
 
@@ -227,84 +235,76 @@ export function ProjectView({ buckets }: Props) {
     });
 
     if (!open) return;
-    for (const a of assignments) {
-      const r = d.resourcesById.get(a.resourceId);
-      if (!r) continue;
-      const mismatch = d.mismatchedAssignmentIds.has(a.id);
-      const flags = flagsByAssignment.get(a.id)!;
-      const rowWorst: Severity | null = flags.over.length ? 'over' : flags.stretch.length ? 'stretch' : flags.risk.length ? 'risk' : null;
+    for (const a of all) {
+      const r = a.resourceId ? d.resourcesById.get(a.resourceId) : undefined;
+      const flags = flagsByAssignment.get(a.id);
+      const rowWorst: Severity | null = !flags
+        ? null
+        : flags.over.length
+          ? 'over'
+          : flags.stretch.length
+            ? 'stretch'
+            : flags.risk.length
+              ? 'risk'
+              : null;
+      const needs = (a.tagIds.length ? a.tagIds : p.tagIds).map((t) => d.tagsById.get(t)?.name).join(', ');
+      const roleLabel = a.name || 'Unnamed role';
       rows.push({
         key: `a:${a.id}`,
         depth: 1,
         assignmentId: a.id,
+        className: r ? 'role-row' : 'role-row open',
         range: { start: p.startWeek, end: p.endWeek },
         label: (
           <div className="row-label">
             <div className="row-main">
               <div className="row-title">
-                <span className="row-name">
-                  {r.name}
-                  {r.level && <span className="level-badge">{r.level}</span>}
-                  {r.role && <span className="muted small"> · {r.role}</span>}
-                </span>
-                <AssignmentBadges worst={rowWorst} mismatch={mismatch} />
+                <button
+                  type="button"
+                  className={a.name ? 'link role-name' : 'link role-name unnamed'}
+                  title={`Edit role${a.level ? ` · ${a.level}` : ''}${needs ? ` · needs ${needs}` : ''}`}
+                  onClick={() => setRoleDialog({ role: a })}
+                >
+                  {roleLabel}
+                </button>
+                {r ? (
+                  <>
+                    <button
+                      type="button"
+                      className="link person-name"
+                      title={`${r.name}${r.role ? `, ${r.role}` : ''}. Change who's in this role`}
+                      onClick={() => setFilling(a)}
+                    >
+                      {r.name}
+                    </button>
+                    {r.level && <span className="level-badge">{r.level}</span>}
+                    <AssignmentBadges worst={rowWorst} mismatch={d.mismatchedAssignmentIds.has(a.id)} />
+                  </>
+                ) : (
+                  <>
+                    <span className="badge badge-open">Open</span>
+                    {a.level && <span className="level-badge">{a.level}</span>}
+                  </>
+                )}
               </div>
             </div>
+            {!r && (
+              <button type="button" className="btn btn-small" title="Choose the person for this role" onClick={() => setFilling(a)}>
+                Fill…
+              </button>
+            )}
             <button
               type="button"
               className="icon-btn"
-              aria-label={`Remove ${r.name} from ${p.name}`}
-              title="Remove from workstream"
+              aria-label={`Remove role ${roleLabel}${r ? ` (${r.name})` : ''} from ${p.name}`}
+              title={r ? 'Remove this role (to keep the role but free the person, click their name)' : 'Remove this open role'}
               onClick={() => {
                 const weeks = Object.keys(a.weekly).length;
-                if (weeks === 0 || window.confirm(`Remove ${r.name} from ${p.name}? This clears ${weeks} week(s) of allocation (undo with Ctrl+Z).`)) {
+                const who = r ? ` and take ${r.name} off ${p.name}` : '';
+                if (weeks === 0 || window.confirm(`Remove the ${roleLabel} role${who}? This clears ${weeks} week(s) of allocation (undo with Ctrl+Z).`)) {
                   removeAssignment(a.id);
                 }
               }}
-            >
-              ×
-            </button>
-          </div>
-        ),
-      });
-    }
-    for (const role of roles) {
-      rows.push({
-        key: `o:${role.id}`,
-        depth: 1,
-        assignmentId: role.id,
-        className: 'role-row',
-        range: { start: p.startWeek, end: p.endWeek },
-        label: (
-          <div className="row-label">
-            <div className="row-main">
-              <div className="row-title">
-                <span className="badge badge-open">Open</span>
-                <button
-                  type="button"
-                  className="link row-name"
-                  title={`Edit role${role.tagIds.length ? ` · needs ${role.tagIds.map((t) => d.tagsById.get(t)?.name).join(', ')}` : ''}`}
-                  onClick={() => setRoleDialog({ role })}
-                >
-                  {role.name}
-                </button>
-                {role.level && <span className="level-badge">{role.level}</span>}
-              </div>
-            </div>
-            <button
-              type="button"
-              className="btn btn-small"
-              title="Choose the person for this role"
-              onClick={() => setFilling(role)}
-            >
-              Fill…
-            </button>
-            <button
-              type="button"
-              className="icon-btn"
-              aria-label={`Remove open role ${role.name}`}
-              title="Remove open role"
-              onClick={() => removeRole(role.id)}
             >
               ×
             </button>

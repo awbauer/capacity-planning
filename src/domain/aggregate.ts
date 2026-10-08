@@ -8,10 +8,11 @@ function addInto(totals: WeekTotals, weekly: Record<WeekKey, number>) {
   }
 }
 
-/** Total % per week for each resource, across all projects. */
+/** Total % per week for each resource, across all projects. Open roles are nobody's load. */
 export function resourceLoad(assignments: Assignment[]): Map<string, WeekTotals> {
   const load = new Map<string, WeekTotals>();
   for (const a of assignments) {
+    if (a.resourceId === null) continue;
     let totals = load.get(a.resourceId);
     if (!totals) load.set(a.resourceId, (totals = new Map()));
     addInto(totals, a.weekly);
@@ -19,7 +20,7 @@ export function resourceLoad(assignments: Assignment[]): Map<string, WeekTotals>
   return load;
 }
 
-/** Total % per week for each project (sum over its assignments). */
+/** Total % per week for each project (sum over the rows passed in). */
 export function projectLoad(assignments: Assignment[]): Map<string, WeekTotals> {
   const load = new Map<string, WeekTotals>();
   for (const a of assignments) {

@@ -2,15 +2,18 @@
 
 A browser-based planner for allocating people (resources) to workstreams by % per week. A workstream is any body of work someone can be allocated to: a sold project, or a pursuit still in presales.
 
-- **Workstreams view**: one row per workstream, expandable to the people on it. Double-click a weekly cell to cycle 0 → 25 → 50 → 100%. Badges flag overallocated people (red/orange/yellow counts), skill mismatches and capability gaps (hover a badge for details).
+- **Workstreams view**: one row per workstream, expandable to its **roles**. Every row under a workstream is a role (a seat) with the person in it, shown as *Role › Person*, or *Role › Open* when nobody's been chosen yet. A person is always in a role, even if it's just a shell named after their title. Double-click a weekly cell to cycle 0 → 25 → 50 → 100%. Badges flag overallocated people (red/orange/yellow counts), skill mismatches and capability gaps (hover a badge for details).
   - **By client** (corner, on by default) groups workstreams under their client (case-insensitive), with workstreams that have no client last. A client row shows total FTE per period and how many of its workstreams have a conflict. **Clients only** collapses to one row per client.
-  - **Open roles** (**+ Role** on a workstream): demand you haven't picked a person for yet, e.g. "Agentforce Architect, SM, 50% from January". A role has a name, an optional level, capabilities and weekly cells you edit like anyone else's.
-    - It's nobody's load, so it never causes an overallocation. Its weeks follow the workstream's presales/delivery and pipeline/won rules.
-    - The workstream shows an *Open N* badge, and its FTE total gets a `+N` for open-role FTE.
-    - The Conflicts panel lists roles with demand from this week on. *⚠ Conflicts only* includes workstreams that have them.
-    - A capability an open role covers no longer counts as a gap.
-    - **Fill…** ranks people by matching capabilities, closeness to the role's level, then free capacity. Picking someone moves the role's weeks onto their row on the workstream (added to anything they already have, capped at 100%) and removes the role. One undo step.
-  - **Deal slips**: move the workstream's start date and keep *Move the delivery staffing too* ticked. Every person's and open role's weeks from the old start date on move by the same number of weeks, and so does the end date unless you changed it. Presales weeks before the old start stay where they are. Unticked, only the date moves, and staffed weeks before the new start become presales, which counts as committed.
+  - **Roles**:
+    - **+ Role** adds a role: a name (e.g. "Agentforce Architect"), an optional level, the capabilities it needs (defaults to the workstream's), a % over dates, and optionally who's in it. Leave the person out for an **open role**: demand you haven't picked anyone for.
+    - **+ Person** is the quick way to staff someone: each person goes into a role named after their title (or the role they already have there), which you can rename later.
+    - Click a **role name** to rename it or change its level and capabilities. Skill mismatches are checked against the role's capabilities when it has its own, otherwise the workstream's.
+    - Click a **person** to swap someone else into the role, or **Leave open** to free them and keep the role and its weeks as demand. **Fill…** on an open role does the same. Candidates are ranked by matching capabilities, closeness to the role's level, then free capacity. The role keeps its weeks and name; one undo step.
+    - **×** removes the role. Deleting a person under Manage leaves their roles behind as open roles.
+    - A person can hold more than one role on a workstream, e.g. presales lead then delivery architect.
+    - An open role is nobody's load, so it never causes an overallocation. Its weeks follow the workstream's presales/delivery and pipeline/won rules.
+    - Open roles show as an *Open N* badge on the workstream, a `+N` on its FTE total and a list in the Conflicts panel. *⚠ Conflicts only* includes workstreams that have them. A capability an open role covers no longer counts as a gap.
+  - **Deal slips**: move the workstream's start date and keep *Move the delivery staffing too* ticked. Every role's weeks from the old start date on move by the same number of weeks, and so does the end date unless you changed it. Presales weeks before the old start stay where they are. Unticked, only the date moves, and staffed weeks before the new start become presales, which counts as committed.
   - **Utilization** (toolbar) opens a sidebar with everyone's average allocation over the **next 10 weeks**, from the current week regardless of scrolling, as two numbers. *Delivery* is work on *Won* workstreams. *Pipeline* is work on *Pipeline* workstreams: presales effort, plus delivery that only happens if the deal is won. The team figure averages over everyone, so idle people count as 0%.
     - Each person shows *vs tgt*: committed utilization minus their level's target, furthest below target first. The bar's tick marks the target.
     - **Open demand vs bench** compares, per capability, open-role FTE (won / pipeline) with the free FTE of people who have that capability (100% minus committed work). It's red where demand exceeds free capacity. People and roles with several capabilities count under each.
@@ -24,7 +27,7 @@ A browser-based planner for allocating people (resources) to workstreams by % pe
   - **⚠ Conflicts only** (toolbar) shows just the people on the Resources tab, or the workstreams on the Workstreams tab, that have a conflict: someone over or at risk in the visible weeks, a skill mismatch, or (workstreams) an uncovered capability. It combines with the other filters.
 - **Presales vs. delivery, pipeline vs. won**:
   - Each workstream has a status: *Pipeline*, *Won* or *Lost*.
-  - Each person has **one row per workstream**. The workstream's start date decides what each week is:
+  - A role runs across the workstream's whole life on one row. The workstream's start date decides what each week is:
     - Weeks **before the start date** are **presales**.
     - Weeks **from the start date** on are **delivery**.
     - With no start date, a *Pipeline* or *Lost* workstream is all presales and a *Won* one is all delivery.
@@ -70,10 +73,10 @@ Older saved data and imported files with other values (e.g. 60%) are rounded to 
 
 - **One workstream:** click **⤓ CSV** on its row. The file has:
   - a block of details: client, seller, status, dates and required capabilities
-  - one row per person, with a column per week holding 0/25/50/100
+  - one row per role (role, person or *Open*, level, capabilities needed), with a column per week holding 0/25/50/100
   - a *Phase* row marking each week as Presales or Delivery
-  - a *Total FTE* row
-- **Everything:** click **CSV** in the toolbar. The file is one long table, with one line per person per allocated week and columns for workstream, client, seller, status, person, role, week, phase and %. It's ready for a pivot table.
+  - a *Total FTE* row for staffed roles, and an *Open FTE* row when there are open roles
+- **Everything:** click **CSV** in the toolbar. The file is one long table, with one line per role per allocated week and columns for workstream, client, seller, status, role, person (or *Open*), level, week, phase and %. It's ready for a pivot table.
 
 Files are UTF-8 with a byte-order mark, so Excel opens names with accents correctly.
 

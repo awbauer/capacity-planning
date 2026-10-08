@@ -1,19 +1,21 @@
 import { useState } from 'react';
 import { CLICK_STEPS } from '../domain/steps';
-import { CAREER_LEVELS, type CareerLevel, type OpenRole, type WeekKey } from '../domain/types';
+import { CAREER_LEVELS, type Assignment, type CareerLevel, type WeekKey } from '../domain/types';
 import { addWeeks, currentWeek, normalizeWeek, weeksBetween } from '../domain/weeks';
-import { usePlanStore } from '../store/planStore';
+import { usePlan, usePlanStore } from '../store/planStore';
 import { useDerived } from '../store/useDerived';
 import { Modal } from './Modal';
 import { TagPicker } from './TagPicker';
 
-type Props = { onClose: () => void } & ({ projectId: string; role?: never } | { role: OpenRole; projectId?: never });
+type Props = { onClose: () => void } & ({ projectId: string; role?: never } | { role: Assignment; projectId?: never });
 
 /**
- * Adds an open role to a workstream (what's needed, at what %, when), or
- * edits an existing role's description. Its weeks are edited in the grid.
+ * Adds a role to a workstream (what's needed, at what %, when, and
+ * optionally who), or edits an existing role's description. Its weeks are
+ * edited in the grid; who's in it is changed from the row.
  */
 export function RoleDialog({ projectId, role, onClose }: Props) {
+  const plan = usePlan();
   const d = useDerived();
   const addRole = usePlanStore((s) => s.addRole);
   const updateRole = usePlanStore((s) => s.updateRole);
@@ -23,6 +25,7 @@ export function RoleDialog({ projectId, role, onClose }: Props) {
   const [level, setLevel] = useState<CareerLevel | undefined>(role?.level);
   const [tagIds, setTagIds] = useState<string[]>(role?.tagIds ?? project?.tagIds ?? []);
   const [percent, setPercent] = useState(50);
+  const [resourceId, setResourceId] = useState<string | null>(null);
   const defaultFrom = project?.startWeek ?? currentWeek();
   const [range, setRange] = useState<{ from: WeekKey; to: WeekKey }>({
     from: defaultFrom,
@@ -36,13 +39,13 @@ export function RoleDialog({ projectId, role, onClose }: Props) {
   const save = () => {
     if (!canSave || !project) return;
     if (role) updateRole(role.id, { name: finalName, level, tagIds });
-    else addRole(project.id, { name: finalName, level, tagIds }, { percent, ...range });
+    else addRole(project.id, { name: finalName, level, tagIds, resourceId }, { percent, ...range });
     onClose();
   };
 
   return (
     <Modal
-      title={role ? 'Edit open role' : `Add an open role to ${project?.name ?? 'workstream'}`}
+      title={role ? 'Edit role' : `Add a role to ${project?.name ?? 'workstream'}`}
       onClose={onClose}
       footer={
         <>
@@ -51,7 +54,7 @@ export function RoleDialog({ projectId, role, onClose }: Props) {
             Cancel
           </button>
           <button type="submit" form="role-form" className="btn btn-primary" disabled={!canSave}>
-            {role ? 'Save' : 'Add role'}
+            {role ? 'Save' : resourceId ? 'Add role' : 'Add open role'}
           </button>
         </>
       }
@@ -65,8 +68,8 @@ export function RoleDialog({ projectId, role, onClose }: Props) {
         }}
       >
         <p className="muted small form-note">
-          Demand you haven&apos;t picked a person for yet. It shows on the workstream and in demand vs bench, but isn&apos;t
-          anyone&apos;s load until you fill it.
+          A seat on the workstream. Leave it open to show demand you haven&apos;t picked a person for yet (it isn&apos;t
+          anyone&apos;s load until filled), or put someone in it now.
         </p>
         <div className="form-row">
           <label>
@@ -93,6 +96,22 @@ export function RoleDialog({ projectId, role, onClose }: Props) {
           Capabilities needed
           <TagPicker value={tagIds} onChange={setTagIds} />
         </div>
+        {!role && (
+          <label>
+            Person
+            <select aria-label="Person" value={resourceId ?? ''} onChange={(e) => setResourceId(e.target.value || null)}>
+              <option value="">Leave open</option>
+              {[...plan.resources]
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name}
+                    {r.level ? ` (${r.level})` : ''}
+                  </option>
+                ))}
+            </select>
+          </label>
+        )}
         {!role && (
           <div className="form-row">
             <div className="label-like">

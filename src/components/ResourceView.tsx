@@ -192,9 +192,9 @@ export function ResourceView({ buckets }: Props) {
           <div className="row-label">
             <div className="row-main">
               <div className="row-title">
-                <span className="row-name">
+                <span className="row-name" title={`${a.name || 'Unnamed role'} on ${p.name}${p.client ? ` (${p.client})` : ''}`}>
                   {p.name}
-                  {p.client && <span className="muted small"> · {p.client}</span>}
+                  <span className="muted small"> · {a.name || <em>Unnamed role</em>}</span>
                   <span className={`status-text status-${p.status}`}> · {STATUS_LABELS[p.status]}</span>
                 </span>
                 <AssignmentBadges
@@ -207,7 +207,7 @@ export function ResourceView({ buckets }: Props) {
               type="button"
               className="icon-btn"
               aria-label={`Remove ${r.name} from ${p.name}`}
-              title="Remove from workstream"
+              title="Remove this role from the workstream"
               onClick={() => {
                 const weeks = Object.keys(a.weekly).length;
                 if (weeks === 0 || window.confirm(`Remove ${r.name} from ${p.name}? This clears ${weeks} week(s) of allocation (undo with Ctrl+Z).`)) {

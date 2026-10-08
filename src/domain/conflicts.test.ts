@@ -25,7 +25,7 @@ const alloc = (
   projectId: string,
   weekly: Record<string, number>,
   resourceId = 'r',
-): Assignment => ({ id, projectId, resourceId, weekly });
+): Assignment => ({ id, projectId, resourceId, name: '', tagIds: [], weekly });
 
 function plan(patch: Partial<PlanData>): PlanData {
   return { ...createEmptyPlan(), projects: [project('p1'), project('p2')], ...patch };
@@ -187,10 +187,10 @@ describe('skills', () => {
   it('treats a capability on an open role as covered (the gap is planned)', () => {
     const pr = project('p', 'won', ['dc', 'mc']);
     const assignments = [alloc('a', 'p', {})];
-    const roles = [{ id: 'o', projectId: 'p', name: 'MC dev', tagIds: ['mc'], weekly: {} }];
-    expect(uncoveredTags(pr, { resources: [resource], assignments, roles })).toEqual([]);
-    // A role alone also counts as staffing.
-    expect(uncoveredTags(pr, { resources: [resource], assignments: [], roles })).toEqual(['dc']);
+    const open = { id: 'o', projectId: 'p', resourceId: null, name: 'MC dev', tagIds: ['mc'], weekly: {} };
+    expect(uncoveredTags(pr, { resources: [resource], assignments: [...assignments, open] })).toEqual([]);
+    // An open role alone also counts as staffing.
+    expect(uncoveredTags(pr, { resources: [resource], assignments: [open] })).toEqual(['dc']);
   });
 
   it('ignores skill issues on lost projects', () => {
@@ -231,5 +231,14 @@ describe('resourceLoadFlagged', () => {
     expect(resourceLoadFlagged('r', ['2026-10-05'], loads, p.settings)).toBe(false);
     expect(resourceLoadFlagged('r', ['2026-10-05', '2026-10-12'], loads, p.settings)).toBe(true);
     expect(resourceLoadFlagged('nobody', ['2026-10-12'], loads, p.settings)).toBe(false);
+  });
+});
+
+describe('role capabilities', () => {
+  it('checks a person against the role\'s capabilities when it has its own', () => {
+    const p = project('p', 'won', ['dc']);
+    const person = { id: 'r', name: 'r', tagIds: ['mc'] };
+    expect(isSkillMismatch(person, p)).toBe(true);
+    expect(isSkillMismatch(person, p, { tagIds: ['mc'] })).toBe(false);
   });
 });

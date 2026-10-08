@@ -1,4 +1,5 @@
 import { STATUS_LABELS } from './labels';
+import { requiredTags } from './conflicts';
 import { weekKind } from './load';
 import type { PlanData, Project } from './types';
 import { weeksBetween } from './weeks';
@@ -25,18 +26,28 @@ export function slug(name: string): string {
  * allocation outside them. Empty if it has neither dates nor allocations.
  */
 export function workstreamWeeks(plan: PlanData, project: Project): string[] {
-  const allocated = [...plan.assignments, ...plan.roles]
+  const allocated = plan.assignments
     .filter((a) => a.projectId === project.id)
     .flatMap((a) => Object.keys(a.weekly).filter((w) => a.weekly[w]));
   const bounds = [...allocated, project.startWeek, project.endWeek].filter((w): w is string => !!w).sort();
   return bounds.length ? weeksBetween(bounds[0], bounds[bounds.length - 1]) : [];
 }
 
+/** People's roles first (by role, then person), then open roles. */
+function byRole(resources: Map<string, { name: string }>) {
+  return (x: PlanData['assignments'][number], y: PlanData['assignments'][number]) =>
+    Number(x.resourceId === null) - Number(y.resourceId === null) ||
+    x.name.localeCompare(y.name) ||
+    (x.resourceId ? (resources.get(x.resourceId)?.name ?? '') : '').localeCompare(
+      y.resourceId ? (resources.get(y.resourceId)?.name ?? '') : '',
+    );
+}
+
 /**
  * One workstream's staffing plan, laid out for people to read: a details
- * block, then one row per person with a column per week (% allocation), a
- * Phase row (presales before the start date, delivery from it) and an FTE total.
- * Open roles follow the people as "Open: <role>", with their own FTE total.
+ * block, then one row per role (who's in it, or "Open") with a column per
+ * week (% allocation), a Phase row (presales before the start date, delivery
+ * from it), and FTE totals for staffed and open roles.
  */
 export function workstreamCsv(plan: PlanData, projectId: string): string {
   const project = plan.projects.find((p) => p.id === projectId);
@@ -45,10 +56,8 @@ export function workstreamCsv(plan: PlanData, projectId: string): string {
   const resources = new Map(plan.resources.map((r) => [r.id, r]));
   const seller = plan.sellers.find((s) => s.id === project.sellerId);
   const weeks = workstreamWeeks(plan, project);
-  const rows = plan.assignments
-    .filter((a) => a.projectId === project.id)
-    .map((a) => ({ a, r: resources.get(a.resourceId) }))
-    .sort((x, y) => (x.r?.name ?? '').localeCompare(y.r?.name ?? ''));
+  const rows = plan.assignments.filter((a) => a.projectId === project.id).sort(byRole(resources));
+  const sum = (list: typeof rows, w: string) => list.reduce((n, a) => n + (a.weekly[w] ?? 0), 0) / 100;
 
   const out: Cell[][] = [
     ['Workstream', project.name],
@@ -59,49 +68,28 @@ export function workstreamCsv(plan: PlanData, projectId: string): string {
     ['End (week of)', project.endWeek],
     ['Required capabilities', project.tagIds.map((t) => tags.get(t)).filter(Boolean).join('; ')],
     [],
-    ['Person', 'Level', 'Role', 'Capabilities', ...weeks],
+    ['Role', 'Person', 'Level', 'Capabilities needed', ...weeks],
     ['Phase', '', '', '', ...weeks.map((w) => (weekKind(project, w) === 'presales' ? 'Presales' : 'Delivery'))],
   ];
-  for (const { a, r } of rows) {
+  for (const a of rows) {
+    const r = a.resourceId ? resources.get(a.resourceId) : undefined;
     out.push([
-      r?.name ?? '(deleted)',
-      r?.level,
-      r?.role,
-      (r?.tagIds ?? []).map((t) => tags.get(t)).filter(Boolean).join('; '),
+      a.name,
+      a.resourceId === null ? 'Open' : (r?.name ?? '(deleted)'),
+      r?.level ?? a.level,
+      requiredTags(a, project).map((t) => tags.get(t)).filter(Boolean).join('; '),
       ...weeks.map((w) => a.weekly[w] ?? 0),
     ]);
   }
-  const roles = plan.roles.filter((r) => r.projectId === project.id).sort((x, y) => x.name.localeCompare(y.name));
-  for (const role of roles) {
-    out.push([
-      `Open: ${role.name}`,
-      role.level,
-      'Open role',
-      role.tagIds.map((t) => tags.get(t)).filter(Boolean).join('; '),
-      ...weeks.map((w) => role.weekly[w] ?? 0),
-    ]);
-  }
-  out.push([
-    'Total FTE',
-    '',
-    '',
-    '',
-    ...weeks.map((w) => rows.reduce((sum, { a }) => sum + (a.weekly[w] ?? 0), 0) / 100),
-  ]);
-  if (roles.length) {
-    out.push([
-      'Open FTE',
-      '',
-      '',
-      '',
-      ...weeks.map((w) => roles.reduce((sum, r) => sum + (r.weekly[w] ?? 0), 0) / 100),
-    ]);
-  }
+  const staffed = rows.filter((a) => a.resourceId !== null);
+  const open = rows.filter((a) => a.resourceId === null);
+  out.push(['Total FTE', '', '', '', ...weeks.map((w) => sum(staffed, w))]);
+  if (open.length) out.push(['Open FTE', '', '', '', ...weeks.map((w) => sum(open, w))]);
   return toCsv(out);
 }
 
 /**
- * Every workstream's staffing in one long table (one line per person per
+ * Every workstream's staffing in one long table (one line per role per
  * allocated week), which pivots cleanly in Excel or Sheets.
  */
 export function allWorkstreamsCsv(plan: PlanData): string {
@@ -109,12 +97,12 @@ export function allWorkstreamsCsv(plan: PlanData): string {
   const projects = new Map(plan.projects.map((p) => [p.id, p]));
   const sellers = new Map(plan.sellers.map((s) => [s.id, s.name]));
   const out: Cell[][] = [
-    ['Workstream', 'Client', 'Seller', 'Status', 'Person', 'Level', 'Role', 'Week of', 'Phase', 'Allocation %'],
+    ['Workstream', 'Client', 'Seller', 'Status', 'Role', 'Person', 'Level', 'Week of', 'Phase', 'Allocation %'],
   ];
   const lines: Cell[][] = [];
   for (const a of plan.assignments) {
     const p = projects.get(a.projectId);
-    const r = resources.get(a.resourceId);
+    const r = a.resourceId ? resources.get(a.resourceId) : undefined;
     if (!p) continue;
     for (const [w, pct] of Object.entries(a.weekly)) {
       if (!pct) continue;
@@ -123,28 +111,9 @@ export function allWorkstreamsCsv(plan: PlanData): string {
         p.client,
         p.sellerId ? sellers.get(p.sellerId) : '',
         STATUS_LABELS[p.status],
-        r?.name ?? '(deleted)',
-        r?.level,
-        r?.role,
-        w,
-        weekKind(p, w) === 'presales' ? 'Presales' : 'Delivery',
-        pct,
-      ]);
-    }
-  }
-  for (const role of plan.roles) {
-    const p = projects.get(role.projectId);
-    if (!p) continue;
-    for (const [w, pct] of Object.entries(role.weekly)) {
-      if (!pct) continue;
-      lines.push([
-        p.name,
-        p.client,
-        p.sellerId ? sellers.get(p.sellerId) : '',
-        STATUS_LABELS[p.status],
-        `Open: ${role.name}`,
-        role.level,
-        'Open role',
+        a.name,
+        a.resourceId === null ? 'Open' : (r?.name ?? '(deleted)'),
+        r?.level ?? a.level,
         w,
         weekKind(p, w) === 'presales' ? 'Presales' : 'Delivery',
         pct,
@@ -152,7 +121,10 @@ export function allWorkstreamsCsv(plan: PlanData): string {
     }
   }
   lines.sort((x, y) =>
-    String(x[0]).localeCompare(String(y[0])) || String(x[4]).localeCompare(String(y[4])) || String(x[7]).localeCompare(String(y[7])),
+    String(x[0]).localeCompare(String(y[0])) ||
+    String(x[4]).localeCompare(String(y[4])) ||
+    String(x[5]).localeCompare(String(y[5])) ||
+    String(x[7]).localeCompare(String(y[7])),
   );
   return toCsv([...out, ...lines]);
 }

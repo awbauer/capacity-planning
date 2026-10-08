@@ -1,5 +1,5 @@
-import { mergeAssignments } from './schema';
-import type { Assignment, PlanData, WeekKey } from './types';
+import { toRoles } from './schema';
+import type { PlanData, Resource, WeekKey } from './types';
 import { addWeeks, currentWeek, weeksBetween } from './weeks';
 
 /**
@@ -15,21 +15,28 @@ import { addWeeks, currentWeek, weeksBetween } from './weeks';
 export function createSamplePlan(today: WeekKey = currentWeek()): PlanData {
   const w = (offset: number) => addWeeks(today, offset);
   let n = 0;
-  const assign = (
-    projectId: string,
-    resourceId: string,
-    percent: number,
-    from: number,
-    to: number,
-  ): Assignment => ({
+  const weeks = (percent: number, from: number, to: number) =>
+    Object.fromEntries(weeksBetween(w(from), w(to)).map((k) => [k, percent]));
+  const assign = (projectId: string, resourceId: string, percent: number, from: number, to: number) => ({
     id: `sample-a${++n}`,
     projectId,
     resourceId,
-    weekly: Object.fromEntries(weeksBetween(w(from), w(to)).map((k) => [k, percent])),
+    weekly: weeks(percent, from, to),
   });
 
+  const resources: Resource[] = [
+    { id: 'res-alex', level: 'SM', name: 'Alex Rivera', role: 'Solution Architect', tagIds: ['tag-dc', 'tag-af'] },
+    { id: 'res-sam', level: 'SA', name: 'Sam Patel', role: 'Data Cloud Consultant', tagIds: ['tag-dc', 'tag-mule'] },
+    { id: 'res-taylor', level: 'A', name: 'Taylor Brooks', role: 'Marketing Cloud Developer', tagIds: ['tag-mc'] },
+    { id: 'res-morgan', level: 'M', name: 'Morgan Kim', role: 'Marketing Strategist', tagIds: ['tag-mc', 'tag-dc'] },
+    { id: 'res-casey', level: 'SA', name: 'Casey Nguyen', role: 'Sales Cloud Consultant', tagIds: ['tag-sales', 'tag-service'] },
+    { id: 'res-jamie', level: 'A', name: 'Jamie Ortiz', role: 'Service Cloud Developer', tagIds: ['tag-service', 'tag-af'] },
+    { id: 'res-riley', level: 'SA', name: 'Riley Thompson', role: 'Integration Engineer', tagIds: ['tag-mule'] },
+    { id: 'res-drew', level: 'M', name: 'Drew Okafor', role: 'Analytics Consultant', tagIds: ['tag-tableau', 'tag-dc'] },
+  ];
+
   return {
-    version: 3,
+    version: 4,
     settings: { overallocationThreshold: 100, criticalThreshold: 149 },
     tags: [
       { id: 'tag-dc', name: 'Data Cloud', color: '#2563eb' },
@@ -45,16 +52,7 @@ export function createSamplePlan(today: WeekKey = currentWeek()): PlanData {
       { id: 'seller-priya', name: 'Priya Shah' },
       { id: 'seller-marcus', name: 'Marcus Chen' },
     ],
-    resources: [
-      { id: 'res-alex', level: 'SM', name: 'Alex Rivera', role: 'Solution Architect', tagIds: ['tag-dc', 'tag-af'] },
-      { id: 'res-sam', level: 'SA', name: 'Sam Patel', role: 'Data Cloud Consultant', tagIds: ['tag-dc', 'tag-mule'] },
-      { id: 'res-taylor', level: 'A', name: 'Taylor Brooks', role: 'Marketing Cloud Developer', tagIds: ['tag-mc'] },
-      { id: 'res-morgan', level: 'M', name: 'Morgan Kim', role: 'Marketing Strategist', tagIds: ['tag-mc', 'tag-dc'] },
-      { id: 'res-casey', level: 'SA', name: 'Casey Nguyen', role: 'Sales Cloud Consultant', tagIds: ['tag-sales', 'tag-service'] },
-      { id: 'res-jamie', level: 'A', name: 'Jamie Ortiz', role: 'Service Cloud Developer', tagIds: ['tag-service', 'tag-af'] },
-      { id: 'res-riley', level: 'SA', name: 'Riley Thompson', role: 'Integration Engineer', tagIds: ['tag-mule'] },
-      { id: 'res-drew', level: 'M', name: 'Drew Okafor', role: 'Analytics Consultant', tagIds: ['tag-tableau', 'tag-dc'] },
-    ],
+    resources,
     projects: [
       {
         id: 'proj-acme',
@@ -117,8 +115,10 @@ export function createSamplePlan(today: WeekKey = currentWeek()): PlanData {
         endWeek: w(10),
       },
     ],
-    // Rows for the same person and workstream (e.g. presales then delivery) merge into one.
-    assignments: mergeAssignments([
+    // Each person is in one role per workstream, named after their title; rows for the same
+    // person (e.g. presales then delivery) merge into that role. The two open roles are demand
+    // nobody has been chosen for yet.
+    assignments: toRoles(3, [
       assign('proj-acme', 'res-alex', 50, -2, 14),
       assign('proj-acme', 'res-sam', 100, 0, 10),
       assign('proj-acme', 'res-riley', 50, 2, 8),
@@ -135,38 +135,24 @@ export function createSamplePlan(today: WeekKey = currentWeek()): PlanData {
       assign('proj-contoso', 'res-jamie', 25, 0, 3),
       assign('proj-fabrikam', 'res-morgan', 25, -4, -1),
       assign('proj-fabrikam', 'res-morgan', 50, 2, 10),
-    ]),
-    // Demand that nobody has been chosen for yet.
-    roles: [
-      {
-        id: 'sample-role1',
-        projectId: 'proj-contoso',
-        name: 'Agentforce Architect',
-        level: 'SM',
-        tagIds: ['tag-af'],
-        weekly: Object.fromEntries(weeksBetween(w(4), w(16)).map((k) => [k, 50])),
-      },
-      {
-        id: 'sample-role2',
-        projectId: 'proj-initech',
-        name: 'Data Cloud Consultant',
-        level: 'SA',
-        tagIds: ['tag-dc'],
-        weekly: Object.fromEntries(weeksBetween(w(8), w(20)).map((k) => [k, 100])),
-      },
-    ],
+      ],
+      [
+        { id: 'sample-role1', projectId: 'proj-contoso', name: 'Agentforce Architect', level: 'SM', tagIds: ['tag-af'], weekly: weeks(50, 4, 16) },
+        { id: 'sample-role2', projectId: 'proj-initech', name: 'Data Cloud Consultant', level: 'SA', tagIds: ['tag-dc'], weekly: weeks(100, 8, 20) },
+      ],
+      resources,
+    ),
   };
 }
 
 export function createEmptyPlan(): PlanData {
   return {
-    version: 3,
+    version: 4,
     settings: { overallocationThreshold: 100, criticalThreshold: 149 },
     tags: [],
     sellers: [],
     resources: [],
     projects: [],
     assignments: [],
-    roles: [],
   };
 }

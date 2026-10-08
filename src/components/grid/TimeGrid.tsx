@@ -10,7 +10,7 @@ import {
 import { bucketStats } from '../../domain/aggregate';
 import { assignmentFlagWeeks } from '../../domain/conflicts';
 import { totalIsCritical, weekClass, weekKind, type Severity } from '../../domain/load';
-import { isOpenRole, type AllocationRow, type WeekKey, type Zoom } from '../../domain/types';
+import { isFilled, type Assignment, type WeekKey, type Zoom } from '../../domain/types';
 import { nextStep } from '../../domain/steps';
 import { currentWeek, formatWeek, type Bucket } from '../../domain/weeks';
 import { usePlan, usePlanStore, type AllocationEdit } from '../../store/planStore';
@@ -102,10 +102,9 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const editRows = useMemo(() => rows.filter((r) => r.assignmentId), [rows]);
   const editIndex = useMemo(() => new Map(editRows.map((r, i) => [r.key, i])), [editRows]);
-  // People's rows and open roles edit the same way.
   const assignmentsById = useMemo(
-    () => new Map<string, AllocationRow>([...plan.assignments, ...plan.roles].map((a) => [a.id, a])),
-    [plan.assignments, plan.roles],
+    () => new Map<string, Assignment>(plan.assignments.map((a) => [a.id, a])),
+    [plan.assignments],
   );
 
   const [anchor, setAnchor] = useState<Pos | null>(null);
@@ -274,8 +273,8 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     const repWeek = b.weeks.find((w) => a.weekly[w]) ?? b.weeks[0];
     const kind = weekKind(d.projectsById.get(a.projectId), repWeek);
     const cls = weekClass(d.projectsById.get(a.projectId), repWeek);
-    const role = isOpenRole(a) ? a : null;
-    const person = isOpenRole(a) ? null : a;
+    const person = isFilled(a) ? a : null;
+    const role = person ? null : a;
     // An open role is nobody's load, so it's never flagged.
     const flags = person
       ? assignmentFlagWeeks(person, b.weeks, d.loads, plan.settings)

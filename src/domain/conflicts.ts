@@ -88,6 +88,7 @@ export function assignmentFlagWeeks(
   settings: PlanData['settings'],
 ): Record<Severity, WeekKey[]> {
   const flags: Record<Severity, WeekKey[]> = { over: [], stretch: [], risk: [] };
+  if (a.resourceId === null) return flags; // An open role is nobody's load.
   const committed = loads.committed.get(a.resourceId);
   const tentative = loads.tentative.get(a.resourceId);
   for (const w of weeks) {
@@ -98,34 +99,33 @@ export function assignmentFlagWeeks(
   return flags;
 }
 
-/** True when the project requires capabilities and the resource has none of them. */
-export function isSkillMismatch(resource: Resource, project: Project): boolean {
-  if (project.tagIds.length === 0) return false;
-  return !resource.tagIds.some((t) => project.tagIds.includes(t));
+/** Capabilities a role needs: its own, or else its workstream's. */
+export function requiredTags(role: Pick<Assignment, 'tagIds'>, project: Pick<Project, 'tagIds'>): string[] {
+  return role.tagIds.length ? role.tagIds : project.tagIds;
+}
+
+/** True when the role (or its workstream) requires capabilities and the person has none of them. */
+export function isSkillMismatch(resource: Resource, project: Project, role: Pick<Assignment, 'tagIds'> = { tagIds: [] }): boolean {
+  const need = requiredTags(role, project);
+  if (need.length === 0) return false;
+  return !resource.tagIds.some((t) => need.includes(t));
 }
 
 /**
- * Required tags that neither an assigned resource nor an open role has. An
- * open role counts as covering its capabilities: the gap is planned. Projects
- * with nobody and no roles yet return [] — they're unstaffed, which the grid
+ * Required tags that neither a person on the workstream nor an open role has.
+ * An open role counts as covering its capabilities: the gap is planned.
+ * Projects with no roles yet return [] — they're unstaffed, which the grid
  * already shows.
  */
-export function uncoveredTags(
-  project: Project,
-  plan: Pick<PlanData, 'assignments' | 'resources'> & Partial<Pick<PlanData, 'roles'>>,
-): string[] {
+export function uncoveredTags(project: Project, plan: Pick<PlanData, 'assignments' | 'resources'>): string[] {
   const resourcesById = new Map(plan.resources.map((r) => [r.id, r]));
   const covered = new Set<string>();
   let staffed = false;
   for (const a of plan.assignments) {
     if (a.projectId !== project.id) continue;
     staffed = true;
-    for (const t of resourcesById.get(a.resourceId)?.tagIds ?? []) covered.add(t);
-  }
-  for (const r of plan.roles ?? []) {
-    if (r.projectId !== project.id) continue;
-    staffed = true;
-    for (const t of r.tagIds) covered.add(t);
+    const tags = a.resourceId === null ? a.tagIds : (resourcesById.get(a.resourceId)?.tagIds ?? []);
+    for (const t of tags) covered.add(t);
   }
   if (!staffed) return [];
   return project.tagIds.filter((t) => !covered.has(t));
@@ -137,9 +137,9 @@ export function findSkillIssues(plan: PlanData): SkillIssue[] {
   const projectsById = new Map(plan.projects.map((p) => [p.id, p]));
   const issues: SkillIssue[] = [];
   for (const a of plan.assignments) {
-    const r = resourcesById.get(a.resourceId);
+    const r = a.resourceId === null ? undefined : resourcesById.get(a.resourceId);
     const p = projectsById.get(a.projectId);
-    if (r && p && p.status !== 'lost' && isSkillMismatch(r, p)) {
+    if (r && p && p.status !== 'lost' && isSkillMismatch(r, p, a)) {
       issues.push({ kind: 'mismatch', assignmentId: a.id, projectId: p.id, resourceId: r.id });
     }
   }

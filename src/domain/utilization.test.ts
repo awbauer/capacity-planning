@@ -24,11 +24,11 @@ function plan(): PlanData {
       { id: 'lost', name: 'lost', sellerId: null, status: 'lost', tagIds: [], startWeek: W1 },
     ],
     assignments: [
-      { id: 'a', projectId: 'won', resourceId: 'r', weekly: { [W1]: 100, [W2]: 50 } },
+      { id: 'a', projectId: 'won', resourceId: 'r', name: '', tagIds: [], weekly: { [W1]: 100, [W2]: 50 } },
       // Presales in W1 (before start), tentative delivery in W2.
-      { id: 'b', projectId: 'pipe', resourceId: 'r', weekly: { [W1]: 25, [W2]: 50 } },
+      { id: 'b', projectId: 'pipe', resourceId: 'r', name: '', tagIds: [], weekly: { [W1]: 25, [W2]: 50 } },
       // Lost delivery is excluded.
-      { id: 'c', projectId: 'lost', resourceId: 'r', weekly: { [W1]: 100 } },
+      { id: 'c', projectId: 'lost', resourceId: 'r', name: '', tagIds: [], weekly: { [W1]: 100 } },
     ],
   };
 }
@@ -54,8 +54,8 @@ describe('utilization', () => {
       ...createEmptyPlan(),
       projects: [{ id: 'won', name: 'won', sellerId: null, status: 'won', tagIds: [] }],
       assignments: [
-        { id: 'a', projectId: 'won', resourceId: 'r', weekly: { [W1]: 100 } },
-        { id: 'b', projectId: 'won', resourceId: 'r', weekly: { [W1]: 50, [W2]: 50 } },
+        { id: 'a', projectId: 'won', resourceId: 'r', name: '', tagIds: [], weekly: { [W1]: 100 } },
+        { id: 'b', projectId: 'won', resourceId: 'r', name: '', tagIds: [], weekly: { [W1]: 50, [W2]: 50 } },
       ],
     };
     const u = utilizationOf(utilizationByResource(p, splitLoads(p), [W1, W2]), 'r');
@@ -90,12 +90,13 @@ describe('utilization', () => {
         { id: 'r1', name: 'r1', tagIds: ['dc'] },
         { id: 'r2', name: 'r2', tagIds: ['mc'] },
       ],
-      assignments: [{ id: 'a', projectId: 'won', resourceId: 'r1', weekly: { [W1]: 50, [W2]: 100 } }],
-      roles: [
-        { id: 'o1', projectId: 'won', name: 'x', tagIds: ['dc'], weekly: { [W1]: 100, [W2]: 100 } },
-        { id: 'o2', projectId: 'pipe', name: 'y', tagIds: ['dc'], weekly: { [W1]: 50 } },
+      assignments: [
+        { id: 'a', projectId: 'won', resourceId: 'r1', name: '', tagIds: [], weekly: { [W1]: 50, [W2]: 100 } },
+        // Open roles.
+        { id: 'o1', projectId: 'won', resourceId: null, name: 'x', tagIds: ['dc'], weekly: { [W1]: 100, [W2]: 100 } },
+        { id: 'o2', projectId: 'pipe', resourceId: null, name: 'y', tagIds: ['dc'], weekly: { [W1]: 50 } },
         // Lost delivery isn't demand.
-        { id: 'o3', projectId: 'lost', name: 'z', tagIds: ['mc'], weekly: { [W1]: 100 } },
+        { id: 'o3', projectId: 'lost', resourceId: null, name: 'z', tagIds: ['mc'], weekly: { [W1]: 100 } },
       ],
     };
     const rows = demandByCapability(p, splitLoads(p), [W1, W2]);

@@ -39,9 +39,9 @@ describe('planStore', () => {
     expect(plan.projects.some((p) => p.tagIds.includes('tag-dc'))).toBe(false);
   });
 
-  it('removes assignments with their resource or project, and unsets deleted sellers', () => {
+  it('frees a deleted person\'s roles, removes a deleted project\'s, and unsets deleted sellers', () => {
     store().deleteResource('res-alex');
-    expect(store().plan.assignments.some((a) => a.resourceId === 'res-alex')).toBe(false);
+    expect(store().plan.assignments.some((a) => a.resourceId === 'res-alex')).toBe(false); // their roles are open now
     store().deleteProject('proj-acme');
     expect(store().plan.assignments.some((a) => a.projectId === 'proj-acme')).toBe(false);
     store().deleteSeller('seller-jordan');
@@ -106,7 +106,7 @@ describe('planStore', () => {
       expect(alex().weekly['2026-10-05']).toBe(25); // presales untouched
       expect(alex().weekly['2026-11-16']).toBeUndefined(); // old delivery week now empty
       expect(alex().weekly['2026-12-07']).toBe(100); // moved +3
-      const role = store().plan.roles.find((r) => r.id === 'sample-role1')!;
+      const role = store().plan.assignments.find((r) => r.id === 'sample-role1')!;
       expect(role.weekly['2026-11-02']).toBeUndefined();
       expect(role.weekly['2026-11-23']).toBe(50);
       undo();
@@ -120,41 +120,60 @@ describe('planStore', () => {
     });
   });
 
-  describe('open roles', () => {
-    it('adds a role with a filled range', () => {
-      const role = store().addRole('proj-acme', { name: 'Architect', tagIds: [] }, { percent: 50, from: '2026-10-05', to: '2026-10-12' });
-      expect(role.weekly).toEqual({ '2026-10-05': 50, '2026-10-12': 50 });
+  describe('roles', () => {
+    const role = (id: string) => store().plan.assignments.find((a) => a.id === id)!;
+
+    it('puts a person in a role named after their title', () => {
+      const a = store().addAssignment('proj-acme', 'res-drew', { percent: 50, from: '2026-10-05', to: '2026-10-05' });
+      expect(a).toMatchObject({ resourceId: 'res-drew', name: 'Analytics Consultant', tagIds: [] });
     });
 
-    it('edits role cells like any other row', () => {
+    it('adds an open role, or one with a person in it', () => {
+      const open = store().addRole('proj-acme', { name: ' Architect ', tagIds: [] }, { percent: 50, from: '2026-10-05', to: '2026-10-12' });
+      expect(open).toMatchObject({ resourceId: null, name: 'Architect', weekly: { '2026-10-05': 50, '2026-10-12': 50 } });
+      const filled = store().addRole('proj-acme', { name: 'Lead', tagIds: [], resourceId: 'res-drew' });
+      expect(filled.resourceId).toBe('res-drew');
+    });
+
+    it('edits open role cells like any other row', () => {
       store().setAllocations([{ assignmentId: 'sample-role1', weeks: ['2026-10-05'], percent: 100 }]);
-      expect(store().plan.roles.find((r) => r.id === 'sample-role1')!.weekly['2026-10-05']).toBe(100);
+      expect(role('sample-role1').weekly['2026-10-05']).toBe(100);
     });
 
-    it('fills a role onto a new row for the person, in one undo step', () => {
-      const role = store().plan.roles.find((r) => r.id === 'sample-role2')!;
-      store().fillRole(role.id, 'res-morgan');
-      expect(store().plan.roles.some((r) => r.id === role.id)).toBe(false);
-      const row = store().plan.assignments.find((a) => a.projectId === 'proj-initech' && a.resourceId === 'res-morgan')!;
-      expect(row.weekly).toEqual(role.weekly);
+    it('fills, swaps and frees a role, keeping its weeks', () => {
+      const weekly = role('sample-role2').weekly;
+      store().assignRole('sample-role2', 'res-morgan');
+      expect(role('sample-role2')).toMatchObject({ resourceId: 'res-morgan', name: 'Data Cloud Consultant' });
+      expect(role('sample-role2').weekly).toBe(weekly);
+      store().assignRole('sample-role2', 'res-drew');
+      expect(role('sample-role2').resourceId).toBe('res-drew');
+      store().assignRole('sample-role2', null);
+      expect(role('sample-role2').resourceId).toBeNull();
       undo();
-      expect(store().plan.roles.some((r) => r.id === role.id)).toBe(true);
+      expect(role('sample-role2').resourceId).toBe('res-drew');
     });
 
-    it('adds a filled role to the person\'s existing row, snapped to a step', () => {
-      // Sam is already on Initech at 50% in weeks 8–14; the role is 100% in weeks 8–20.
-      store().fillRole('sample-role2', 'res-sam');
-      const rows = store().plan.assignments.filter((a) => a.projectId === 'proj-initech' && a.resourceId === 'res-sam');
-      expect(rows).toHaveLength(1);
-      expect(rows[0].weekly['2026-11-30']).toBe(100); // 50 + 100, capped at the top step
-      expect(rows[0].weekly['2027-02-22']).toBe(100); // week 20: role only
+    it('lets a person hold a second role on a workstream they are already on', () => {
+      // Sam is already on Initech; filling the open role gives Sam a second, separate role.
+      store().assignRole('sample-role2', 'res-sam');
+      const sams = store().plan.assignments.filter((a) => a.projectId === 'proj-initech' && a.resourceId === 'res-sam');
+      expect(sams.map((a) => a.name).sort()).toEqual(['Data Cloud Consultant', 'Data Cloud Consultant']);
+      expect(sams).toHaveLength(2);
     });
 
-    it('removes roles with their workstream and strips deleted tags', () => {
+    it('renames a role and sets what it needs', () => {
+      store().updateRole('sample-role1', { name: ' Agentforce Lead ', level: 'M', tagIds: ['tag-af', 'tag-dc'] });
+      expect(role('sample-role1')).toMatchObject({ name: 'Agentforce Lead', level: 'M', tagIds: ['tag-af', 'tag-dc'] });
+    });
+
+    it('leaves a deleted person\'s roles open, and strips deleted tags', () => {
+      const alexRoles = store().plan.assignments.filter((a) => a.resourceId === 'res-alex').map((a) => a.id);
+      store().deleteResource('res-alex');
+      for (const id of alexRoles) expect(role(id).resourceId).toBeNull();
       store().deleteTag('tag-af');
-      expect(store().plan.roles.find((r) => r.id === 'sample-role1')!.tagIds).toEqual([]);
+      expect(role('sample-role1').tagIds).toEqual([]);
       store().deleteProject('proj-contoso');
-      expect(store().plan.roles.some((r) => r.projectId === 'proj-contoso')).toBe(false);
+      expect(store().plan.assignments.some((a) => a.projectId === 'proj-contoso')).toBe(false);
     });
   });
 
