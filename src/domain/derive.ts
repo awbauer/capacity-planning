@@ -1,7 +1,8 @@
 import { projectLoad, type WeekTotals } from './aggregate';
 import { findOverallocations, findSkillIssues, type Overallocation, type SkillIssue } from './conflicts';
 import { splitLoads, type SplitLoads } from './load';
-import type { Assignment, CapabilityTag, PlanData, Project, Resource, Seller } from './types';
+import type { Assignment, CapabilityTag, OpenRole, PlanData, Project, Resource, Seller } from './types';
+import { currentWeek } from './weeks';
 
 /** Lookups and conflict results computed once per plan version. */
 export interface Derived {
@@ -11,6 +12,9 @@ export interface Derived {
   projectsById: Map<string, Project>;
   assignmentsByProject: Map<string, Assignment[]>;
   assignmentsByResource: Map<string, Assignment[]>;
+  rolesByProject: Map<string, OpenRole[]>;
+  /** Open roles with demand this week or later, on workstreams that aren't lost; soonest first. */
+  upcomingRoles: { role: OpenRole; from: string }[];
   /** Per-resource weekly load, split into committed and tentative (pipeline delivery). */
   loads: SplitLoads;
   /** Per-project weekly total, excluding delivery on lost projects. */
@@ -34,6 +38,18 @@ function groupBy<T>(items: T[], key: (item: T) => string): Map<string, T[]> {
   return out;
 }
 
+function upcomingRoles(plan: PlanData): { role: OpenRole; from: string }[] {
+  const thisWeek = currentWeek();
+  const lost = new Set(plan.projects.filter((p) => p.status === 'lost').map((p) => p.id));
+  return plan.roles
+    .filter((r) => !lost.has(r.projectId))
+    .flatMap((role) => {
+      const weeks = Object.keys(role.weekly).filter((w) => w >= thisWeek && role.weekly[w] > 0).sort();
+      return weeks.length ? [{ role, from: weeks[0] }] : [];
+    })
+    .sort((a, b) => a.from.localeCompare(b.from) || a.role.name.localeCompare(b.role.name));
+}
+
 export function derive(plan: PlanData): Derived {
   const hit = cache.get(plan);
   if (hit) return hit;
@@ -46,6 +62,8 @@ export function derive(plan: PlanData): Derived {
     projectsById: new Map(plan.projects.map((p) => [p.id, p])),
     assignmentsByProject: groupBy(plan.assignments, (a) => a.projectId),
     assignmentsByResource: groupBy(plan.assignments, (a) => a.resourceId),
+    rolesByProject: groupBy(plan.roles, (r) => r.projectId),
+    upcomingRoles: upcomingRoles(plan),
     loads,
     projectLoad: projectLoad(
       plan.assignments.map((a) => ({

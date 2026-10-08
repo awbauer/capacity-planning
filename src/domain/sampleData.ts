@@ -136,6 +136,25 @@ export function createSamplePlan(today: WeekKey = currentWeek()): PlanData {
       assign('proj-fabrikam', 'res-morgan', 25, -4, -1),
       assign('proj-fabrikam', 'res-morgan', 50, 2, 10),
     ]),
+    // Demand that nobody has been chosen for yet.
+    roles: [
+      {
+        id: 'sample-role1',
+        projectId: 'proj-contoso',
+        name: 'Agentforce Architect',
+        level: 'SM',
+        tagIds: ['tag-af'],
+        weekly: Object.fromEntries(weeksBetween(w(4), w(16)).map((k) => [k, 50])),
+      },
+      {
+        id: 'sample-role2',
+        projectId: 'proj-initech',
+        name: 'Data Cloud Consultant',
+        level: 'SA',
+        tagIds: ['tag-dc'],
+        weekly: Object.fromEntries(weeksBetween(w(8), w(20)).map((k) => [k, 100])),
+      },
+    ],
   };
 }
 
@@ -148,5 +167,6 @@ export function createEmptyPlan(): PlanData {
     resources: [],
     projects: [],
     assignments: [],
+    roles: [],
   };
 }

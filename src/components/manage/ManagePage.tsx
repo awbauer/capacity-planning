@@ -3,6 +3,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { hashString } from '../../domain/hash';
 import { TAG_COLORS } from '../../domain/ids';
 import { CAREER_LEVELS, type CareerLevel, type Resource } from '../../domain/types';
+import { DEFAULT_TARGETS, LOOKAHEAD_WEEKS, NO_LEVEL_TARGET, utilizationTarget } from '../../domain/utilization';
 import { normalizeWeek } from '../../domain/weeks';
 import { allPlans, usePlan, usePlanMeta, usePlanStore } from '../../store/planStore';
 import { useUIStore, type ManageTab } from '../../store/uiStore';
@@ -477,6 +478,41 @@ function SettingsPanel() {
         />
         <span className="muted small">Committed weekly load above this is flagged red (overallocated).</span>
       </label>
+      <fieldset className="targets">
+        <legend>Utilization targets by level (%)</legend>
+        <p className="muted small">
+          Expected committed utilization (presales + won delivery) for each career level. People under their target over
+          the next {LOOKAHEAD_WEEKS} weeks show as Underutilized. People without a level use {NO_LEVEL_TARGET}%.
+        </p>
+        <div className="targets-row">
+          {CAREER_LEVELS.map((level) => (
+            <label key={level}>
+              {level}
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step={5}
+                aria-label={`Target for ${level}`}
+                value={utilizationTarget(plan.settings, level)}
+                onChange={(e) => {
+                  if (e.target.value === '') return;
+                  s.setUtilizationTarget(level, Number(e.target.value));
+                }}
+              />
+            </label>
+          ))}
+          <button
+            type="button"
+            className="btn btn-small"
+            disabled={!plan.settings.utilizationTargets || Object.keys(plan.settings.utilizationTargets).length === 0}
+            onClick={() => CAREER_LEVELS.forEach((l) => s.setUtilizationTarget(l, null))}
+            title={`Defaults: ${CAREER_LEVELS.map((l) => `${l} ${DEFAULT_TARGETS[l]}%`).join(', ')}`}
+          >
+            Reset to defaults
+          </button>
+        </div>
+      </fieldset>
       <div className="callout">
         <strong>Your data lives only in this browser.</strong> Clearing site data or switching browsers loses it. Use
         Export in the toolbar to save a JSON backup of the open plan, and Import to restore or move it. Thresholds

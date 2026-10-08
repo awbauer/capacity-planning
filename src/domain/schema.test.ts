@@ -61,4 +61,13 @@ describe('parsePlan', () => {
     bad.resources[0].level = 'VP';
     expect(() => parsePlan(bad)).toThrow(/level/);
   });
+
+  it('loads files without open roles, and checks role references', () => {
+    const plan = createSamplePlan('2026-10-05');
+    const { roles: _roles, ...old } = JSON.parse(JSON.stringify(plan));
+    expect(parsePlan(old).roles).toEqual([]);
+    const bad = JSON.parse(JSON.stringify(plan));
+    bad.roles[0].projectId = 'nowhere';
+    expect(() => parsePlan(bad)).toThrow(/unknown workstream "nowhere"/);
+  });
 });

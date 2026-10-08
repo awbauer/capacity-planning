@@ -2,6 +2,7 @@ import {
   addDays,
   addMonths,
   addWeeks as dfAddWeeks,
+  differenceInCalendarDays,
   format,
   getISOWeek,
   parseISO,
@@ -36,6 +37,26 @@ export function addWeeks(key: WeekKey, n: number): WeekKey {
 
 export function currentWeek(today: Date = new Date()): WeekKey {
   return toWeekKey(today);
+}
+
+/** Whole weeks from `from` to `to` (negative if `to` is earlier). */
+export function weeksApart(from: WeekKey, to: WeekKey): number {
+  return Math.round(differenceInCalendarDays(parseWeek(to), parseWeek(from)) / 7);
+}
+
+/**
+ * Moves every week on or after `from` by `delta` weeks; earlier weeks stay.
+ * Where a moved week lands on a week that stayed, the moved value wins.
+ */
+export function shiftWeekly(weekly: Record<WeekKey, number>, from: WeekKey, delta: number): Record<WeekKey, number> {
+  if (delta === 0) return weekly;
+  const kept: Record<WeekKey, number> = {};
+  const moved: Record<WeekKey, number> = {};
+  for (const [w, v] of Object.entries(weekly)) {
+    if (w >= from) moved[addWeeks(w, delta)] = v;
+    else kept[w] = v;
+  }
+  return { ...kept, ...moved };
 }
 
 /** Normalizes any yyyy-MM-dd date string to the Monday of its week. */

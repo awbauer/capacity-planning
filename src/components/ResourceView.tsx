@@ -5,7 +5,13 @@ import type { Derived } from '../domain/derive';
 import { STATUS_LABELS } from '../domain/labels';
 import { severity, totalIsCritical } from '../domain/load';
 import { CAREER_LEVELS, type CareerLevel, type Resource } from '../domain/types';
-import { LOOKAHEAD_WEEKS, lookaheadWeeks, utilizationByResource, utilizationOf } from '../domain/utilization';
+import {
+  LOOKAHEAD_WEEKS,
+  lookaheadWeeks,
+  utilizationByResource,
+  utilizationOf,
+  utilizationTarget,
+} from '../domain/utilization';
 import { currentWeek, type Bucket } from '../domain/weeks';
 import { usePlan, usePlanStore } from '../store/planStore';
 import { isExpanded, levelGroupKey, useUIStore, type Filters } from '../store/uiStore';
@@ -51,8 +57,8 @@ export function ResourceView({ buckets }: Props) {
     () => utilizationByResource(plan, d.loads, lookaheadWeeks(thisWeek)),
     [plan, d.loads, thisWeek],
   );
-  // Underutilized: committed work (presales + won delivery) averages under capacity over the next 10 weeks.
-  const isUnder = (id: string) => utilizationOf(util, id).committed < threshold;
+  // Underutilized: committed work (presales + won delivery) averages under the person's level target over the next 10 weeks.
+  const isUnder = (r: Resource) => utilizationOf(util, r.id).committed < utilizationTarget(plan.settings, r.level);
   const resources = plan.resources
     .filter((r) =>
       matchesFilters(
@@ -62,7 +68,7 @@ export function ResourceView({ buckets }: Props) {
         // A conflict is an over/at-risk week in the visible range, or a skill mismatch on any of their workstreams.
         resourceLoadFlagged(r.id, visibleWeeks, d.loads, plan.settings) ||
           (d.assignmentsByResource.get(r.id) ?? []).some((a) => d.mismatchedAssignmentIds.has(a.id)),
-        isUnder(r.id),
+        isUnder(r),
       ),
     )
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -79,6 +85,7 @@ export function ResourceView({ buckets }: Props) {
     const riskCount = visibleWeeks.filter((w) => sevOf(w) === 'risk').length;
     const weeksText = (n: number) => `${n}w`;
     const u = utilizationOf(util, r.id);
+    const target = utilizationTarget(plan.settings, r.level);
     const assignments = [...(d.assignmentsByResource.get(r.id) ?? [])].sort(
       (a, b) =>
         (d.projectsById.get(a.projectId)?.name ?? '').localeCompare(d.projectsById.get(b.projectId)?.name ?? ''),
@@ -109,9 +116,9 @@ export function ResourceView({ buckets }: Props) {
             {filters.underutilized && (
               <span
                 className="badge badge-under"
-                title={`Committed work averages ${Math.round(u.committed)}% over the next ${LOOKAHEAD_WEEKS} weeks (+${Math.round(u.pipeline - u.presales)}% if pipeline is won)`}
+                title={`Committed work averages ${Math.round(u.committed)}% over the next ${LOOKAHEAD_WEEKS} weeks against a ${target}% target for ${r.level ?? 'people without a level'} (+${Math.round(u.pipeline - u.presales)}% if pipeline is won)`}
               >
-                {Math.round(u.committed)}% next {LOOKAHEAD_WEEKS}w
+                {Math.round(u.committed)}% / {target}% target
               </span>
             )}
             {(overCount > 0 || stretchCount > 0 || riskCount > 0) && (
@@ -299,7 +306,7 @@ export function ResourceView({ buckets }: Props) {
             : filters.conflictsOnly && !filters.underutilized
               ? 'Nobody has a conflict in this view. 🎉'
               : filters.underutilized && !filters.conflictsOnly
-                ? `Nobody is under ${threshold}% over the next ${LOOKAHEAD_WEEKS} weeks.`
+                ? `Everyone is at or above their level's target over the next ${LOOKAHEAD_WEEKS} weeks.`
                 : 'No resources match the filters.'
         }
       />

@@ -47,9 +47,23 @@ const planSchema = z.object({
       weekly: z.record(z.string(), z.number().min(0)),
     }),
   ),
+  // Open roles (unfilled demand); files from before they existed have none.
+  roles: z
+    .array(
+      z.object({
+        id,
+        projectId: id,
+        name: z.string().min(1),
+        level: z.enum(CAREER_LEVELS).optional(),
+        tagIds: z.array(id),
+        weekly: z.record(z.string(), z.number().min(0)),
+      }),
+    )
+    .default([]),
   settings: z.object({
     overallocationThreshold: z.number().positive(),
     criticalThreshold: z.number().positive().default(149),
+    utilizationTargets: z.partialRecord(z.enum(CAREER_LEVELS), z.number().min(0).max(100)).optional(),
   }),
 });
 
@@ -70,6 +84,7 @@ export function parsePlanFile(input: unknown): PlanFile {
     ...data,
     version: 3,
     assignments: mergeAssignments(data.assignments),
+    roles: data.roles.map((r) => ({ ...r, weekly: snapWeekly(r.weekly) })),
   };
   const tagIds = new Set(plan.tags.map((t) => t.id));
   const sellerIds = new Set(plan.sellers.map((s) => s.id));
@@ -92,6 +107,12 @@ export function parsePlanFile(input: unknown): PlanFile {
     }
     if (!projectIds.has(a.projectId)) missing('workstream', a.projectId, `assignment ${a.id}`);
     if (!resourceIds.has(a.resourceId)) missing('resource', a.resourceId, `assignment ${a.id}`);
+  }
+  for (const r of plan.roles) {
+    const bad = Object.keys(r.weekly).find((k) => !isMonday(k));
+    if (bad) throw new Error(`Invalid plan file: role "${r.name}" has week "${bad}"; weeks must be Mondays (yyyy-MM-dd)`);
+    if (!projectIds.has(r.projectId)) missing('workstream', r.projectId, `role "${r.name}"`);
+    for (const t of r.tagIds) if (!tagIds.has(t)) missing('tag', t, `role "${r.name}"`);
   }
   return { name: name ?? DEFAULT_PLAN_NAME, revision: revision ?? 0, plan };
 }
@@ -128,10 +149,12 @@ export function upgradePlan(raw: unknown): PlanData {
     ...plan,
     version: 3,
     settings: {
+      ...plan.settings,
       overallocationThreshold: plan.settings?.overallocationThreshold ?? 100,
       criticalThreshold: plan.settings?.criticalThreshold ?? 149,
     },
     projects: (plan.projects ?? []).map((p) => ({ ...p, status: p.status ?? 'won' })),
     assignments: mergeAssignments(plan.assignments ?? []),
+    roles: plan.roles ?? [],
   };
 }

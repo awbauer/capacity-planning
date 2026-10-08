@@ -4,11 +4,13 @@ Deferred from v1. Roughly in priority order.
 
 ## Planned
 
-- **Unfilled role placeholders**: allocate "TBD – Data Cloud Architect @ 50%" to a workstream before a person is chosen. Show open demand by capability, and later swap a real person in.
 - **Per-person capacity & time off**: part-time FTE (e.g. 80%) and PTO/holiday weeks. Overallocation would then be measured against each person's actual availability instead of a flat threshold.
 
 ## Follow-ups
 
+- Fill an open role with more than one person (split it), and roles that aren't tied to a workstream (a hiring plan).
+- Per-person utilization targets, if level targets turn out too coarse. Billable vs non-billable work types.
+- A "shift ±N weeks" action on a workstream row, for slips that don't change the start date.
 - Probability-weighted *team-level* demand forecast, e.g. "Data Cloud FTE needed next quarter". Workstream status and the presales/delivery split are done. Per-person load deliberately doesn't use probability.
 
 - **Duplicate plan** ("Save as…") for what-if scenarios. Today a copy means Export, editing the `name` in the file, then Import.

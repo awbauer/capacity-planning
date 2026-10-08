@@ -1,5 +1,5 @@
 import type { Overallocation } from '../domain/conflicts';
-import { currentWeek, formatWeekRange } from '../domain/weeks';
+import { currentWeek, formatWeek, formatWeekRange } from '../domain/weeks';
 import { usePlan } from '../store/planStore';
 import { clientGroupKey, levelGroupKey, useUIStore } from '../store/uiStore';
 import { useDerived } from '../store/useDerived';
@@ -62,6 +62,31 @@ export function ConflictsPanel() {
       </h2>
       {list(risk, 'Pipeline delivery work causes no extra conflicts.')}
       {pastCount > 0 && <p className="muted small">{pastCount} past conflict(s) hidden.</p>}
+
+      <h2 title="Demand on workstreams that no one has been chosen for yet, from this week on">
+        Open roles <span className="count">{d.upcomingRoles.length}</span>
+      </h2>
+      {d.upcomingRoles.length === 0 ? (
+        <p className="muted small">Every role is filled.</p>
+      ) : (
+        <ul>
+          {d.upcomingRoles.map(({ role, from }) => (
+            <li key={role.id}>
+              <button type="button" onClick={() => toProject(role.projectId)}>
+                <span className="conflict-title">
+                  {role.name}
+                  {role.level && <span className="level-badge">{role.level}</span>}
+                </span>
+                <span className="muted small">from {formatWeek(from)}</span>
+                <span className="small">
+                  {name.project(role.projectId)}
+                  {role.tagIds.length > 0 && ` · ${role.tagIds.map(name.tag).join(', ')}`}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
 
       <h2>
         Skill gaps <span className="count">{d.skillIssues.length}</span>

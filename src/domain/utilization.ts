@@ -1,5 +1,5 @@
-import type { SplitLoads } from './load';
-import type { PlanData, WeekKey } from './types';
+import { weekClass, type SplitLoads } from './load';
+import type { CareerLevel, PlanData, PlanSettings, WeekKey } from './types';
 import { addWeeks, currentWeek } from './weeks';
 
 /** How far ahead "projected utilization" and "underutilized" look. */
@@ -85,4 +85,61 @@ export function teamUtilization(map: Map<string, Utilization>, resourceIds: stri
     sum.committed += u.committed / n;
   }
   return sum;
+}
+
+/** Default expected utilization by level: senior people are expected to sell and lead, not just deliver. */
+export const DEFAULT_TARGETS: Record<CareerLevel, number> = { D: 40, SM: 60, M: 80, SA: 90, A: 90 };
+/** Target for people without a level. */
+export const NO_LEVEL_TARGET = 100;
+
+export function utilizationTarget(settings: Pick<PlanSettings, 'utilizationTargets'>, level: CareerLevel | undefined): number {
+  if (!level) return NO_LEVEL_TARGET;
+  return settings.utilizationTargets?.[level] ?? DEFAULT_TARGETS[level];
+}
+
+export interface CapabilityDemand {
+  /** Tag id, or null for open roles without capabilities. */
+  tagId: string | null;
+  /** Average open-role FTE on won workstreams. */
+  won: number;
+  /** Average open-role FTE on pipeline workstreams (presales + delivery if won). */
+  pipeline: number;
+  /** Average free FTE among people with the capability: 100% minus committed work, per week. */
+  available: number;
+}
+
+/**
+ * Open demand vs free capacity per capability over the given weeks, for
+ * capabilities with open demand. A role needing two capabilities counts
+ * under each, and a person with two counts toward each, so rows don't sum.
+ */
+export function demandByCapability(
+  plan: Pick<PlanData, 'roles' | 'projects' | 'resources'>,
+  loads: SplitLoads,
+  weeks: WeekKey[],
+): CapabilityDemand[] {
+  if (weeks.length === 0) return [];
+  const projects = new Map(plan.projects.map((p) => [p.id, p]));
+  const out = new Map<string | null, CapabilityDemand>();
+  for (const role of plan.roles) {
+    const project = projects.get(role.projectId);
+    for (const w of weeks) {
+      const pct = role.weekly[w];
+      if (!pct || weekClass(project, w) === 'excluded') continue;
+      for (const tagId of role.tagIds.length ? role.tagIds : [null]) {
+        const row = out.get(tagId) ?? { tagId, won: 0, pipeline: 0, available: 0 };
+        if (project?.status === 'won') row.won += pct / 100 / weeks.length;
+        else row.pipeline += pct / 100 / weeks.length;
+        out.set(tagId, row);
+      }
+    }
+  }
+  for (const row of out.values()) {
+    const people = plan.resources.filter((r) => row.tagId === null || r.tagIds.includes(row.tagId));
+    for (const r of people) {
+      const committed = loads.committed.get(r.id);
+      for (const w of weeks) row.available += Math.max(0, 100 - (committed?.get(w) ?? 0)) / 100 / weeks.length;
+    }
+  }
+  return [...out.values()].sort((a, b) => b.won + b.pipeline - (a.won + a.pipeline));
 }
