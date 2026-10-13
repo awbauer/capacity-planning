@@ -8,7 +8,7 @@ import { openSharedPlan, refreshPlans } from '../store/sharedPlanStore';
 import { useCan } from '../store/useCan';
 import { useUIStore } from '../store/uiStore';
 import { createSharedPlanInteractively } from './sharedPlanActions';
-import { when } from './HistoryPanel';
+import { when } from './format';
 import { UploadLocalPlansDialog } from './UploadLocalPlansDialog';
 
 /** Manage → Plans in shared mode: every plan in the workspace. */

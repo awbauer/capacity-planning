@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { setPreferredMode, workLocallyThisSession } from '../store/mode';
 import { readLocalPlans } from '../store/localPlanStore';
 import { useCollabStore } from '../store/collabStore';
-import { bootShared, openSharedPlan, readPrefs } from '../store/sharedPlanStore';
+import { bootShared, openSharedPlan, readPrefs, RECENT_MS } from '../store/sharedPlanStore';
 import { useCan } from '../store/useCan';
 import { createSharedPlanInteractively } from './sharedPlanActions';
 import { UploadLocalPlansDialog } from './UploadLocalPlansDialog';
@@ -41,28 +41,35 @@ export function SharedGate({ children }: { children: ReactNode }) {
   const plans = useCollabStore((s) => s.plans);
   const can = useCan();
   const [upload, setUpload] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+  const [hasLocal] = useState(() => readLocalPlans().some((p) => p.plan.projects.length + p.plan.resources.length > 0));
 
   useEffect(() => {
     void bootShared();
   }, []);
 
   // Offer this browser's plans once, the first time someone who can edit gets in.
-  useEffect(() => {
-    if ((status === 'live' || status === 'no-plan') && can.edit && !readPrefs().uploadOffered) {
-      const local = readLocalPlans();
-      if (local.some((p) => p.plan.projects.length + p.plan.resources.length > 0)) setUpload(true);
-    }
-  }, [status, can.edit]);
+  const offer = !dismissed && hasLocal && (status === 'live' || status === 'no-plan') && can.edit && !readPrefs().uploadOffered;
 
-  // Tick while offline so the read-only switch after the grace period shows up.
-  const [, tick] = useState(0);
+  // Forget "recently changed by" markers once they're old.
   useEffect(() => {
-    if (status !== 'offline') return;
-    const t = setInterval(() => tick((n) => n + 1), 5000);
+    const t = setInterval(() => {
+      const { recent, set } = useCollabStore.getState();
+      const cutoff = Date.now() - RECENT_MS;
+      const kept = Object.fromEntries(Object.entries(recent).filter(([, v]) => v.ts > cutoff));
+      if (Object.keys(kept).length !== Object.keys(recent).length) set({ recent: kept });
+    }, 30_000);
     return () => clearInterval(t);
-  }, [status]);
+  }, []);
 
-  const dialog = upload && <UploadLocalPlansDialog onClose={() => setUpload(false)} />;
+  const dialog = (upload || offer) && (
+    <UploadLocalPlansDialog
+      onClose={() => {
+        setUpload(false);
+        setDismissed(true);
+      }}
+    />
+  );
 
   switch (status) {
     case 'booting':

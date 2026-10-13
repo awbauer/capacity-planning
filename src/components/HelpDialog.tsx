@@ -125,6 +125,20 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
             { what: 'All staffing in one CSV (one line per person per week)', how: <><b>CSV</b> in the toolbar</> },
           ]}
         />
+        <Section
+          title="Shared workspace (opt-in)"
+          rows={[
+            { what: 'Share plans with your team, edited live', how: <><b>Manage</b> → Settings &amp; data → <b>Use the shared workspace</b> (per browser)</> },
+            { what: 'Who else has the plan open, and what they’ve selected', how: 'Avatars in the toolbar; coloured outlines on cells' },
+            { what: 'Recently changed by someone else', how: 'Coloured corner on the cell (hover for who and when)' },
+            { what: 'History of a cell: who changed it, when, from what', how: <>Right-click → <b>History</b>, or select and press <b>H</b></> },
+            { what: 'History of a workstream or person', how: 'Click its name → History' },
+            { what: 'Freeze cells, a role or a workstream', how: <>Right-click a cell → <b>Lock…</b>; or the workstream’s details → <b>Lock staffing</b></> },
+            { what: 'Undo your own last change (others’ later changes are kept)', how: <><b>Ctrl+Z</b></> },
+            { what: 'Every change in every plan; undo any of them', how: <><b>Activity</b> tab</> },
+            { what: 'Roles and access (admins)', how: <><b>Manage</b> → People &amp; access</> },
+          ]}
+        />
       </div>
     </Modal>
   );

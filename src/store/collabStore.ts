@@ -48,8 +48,10 @@ export interface Toast {
 interface CollabState {
   status: ConnectionStatus;
   statusMsg?: string;
-  /** When the connection dropped (for going read-only after a while). */
+  /** When the connection dropped. */
   offlineSince?: number;
+  /** Offline for longer than the grace period: edits are paused. */
+  offlineReadOnly?: boolean;
   me?: Me & { connId?: string; color?: string };
   /** The open plan has arrived from the server at least once. */
   loaded: boolean;

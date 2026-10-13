@@ -74,6 +74,7 @@ class Session {
   private ws?: WebSocket;
   private retry = 0;
   private retryTimer?: ReturnType<typeof setTimeout>;
+  private graceTimer?: ReturnType<typeof setTimeout>;
   private pingTimer?: ReturnType<typeof setInterval>;
   private frame?: number;
   private nextCid = 0;
@@ -104,7 +105,7 @@ class Session {
     const c = this.collab;
     if (!c.me || !canFor(c.me.role).edit) return false;
     if (c.status === 'live' || c.status === 'connecting') return true;
-    return c.status === 'offline' && !!c.offlineSince && Date.now() - c.offlineSince < OFFLINE_GRACE_MS;
+    return c.status === 'offline' && !c.offlineReadOnly;
   }
 
   dispatch(op: Op) {
@@ -241,7 +242,17 @@ class Session {
       return;
     }
     const c = this.collab;
-    this.collab.set({ status: 'offline', offlineSince: c.offlineSince ?? Date.now() });
+    if (!c.offlineSince) {
+      this.collab.set({ status: 'offline', offlineSince: Date.now(), offlineReadOnly: false });
+      // After the grace period, stop taking edits until the connection is back.
+      clearTimeout(this.graceTimer);
+      this.graceTimer = setTimeout(() => {
+        if (this.collab.status === 'offline') {
+          this.collab.set({ offlineReadOnly: true });
+          this.updateHistory();
+        }
+      }, OFFLINE_GRACE_MS);
+    } else this.collab.set({ status: 'offline' });
     this.updateHistory();
     const delay = Math.min(30_000, 1000 * 2 ** this.retry++);
     this.retryTimer = setTimeout(() => void this.reconnect(), delay);
@@ -286,6 +297,7 @@ class Session {
     switch (msg.t) {
       case 'welcome': {
         this.retry = 0;
+        clearTimeout(this.graceTimer);
         const first = this.seq === undefined;
         this.confirmed = msg.full ?? applyPuts(this.confirmed, msg.puts ?? []);
         this.epoch = msg.epoch;
@@ -295,6 +307,7 @@ class Session {
           loaded: true,
           statusMsg: undefined,
           offlineSince: undefined,
+          offlineReadOnly: false,
           me: msg.you,
           locks: msg.locks,
           presence: Object.fromEntries(msg.presence.map((p) => [p.connId, p])),

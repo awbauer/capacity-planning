@@ -87,10 +87,12 @@ Files are UTF-8 with a byte-order mark, so Excel opens names with accents correc
 
 ## Data storage
 
-Everything is stored in your browser's `localStorage`. There is no server.
+By default everything is stored in your browser's `localStorage`:
 
 - Data is **per browser**. It doesn't sync between machines or people.
 - Clearing site data wipes it.
+
+To share plans with others, turn on the [shared workspace](#shared-workspace) (per browser, opt-in).
 
 ### Plans
 
@@ -108,17 +110,68 @@ The toolbar shows when the open plan was last exported and whether it has unexpo
 
 A new browser starts with an empty *Default* plan. To try the app, use Manage → Settings & data → *Load sample data*.
 
+## Shared workspace
+
+An opt-in mode where plans live on the server and several people edit them at once. Each person turns it on in **their own browser**: Manage → Settings & data → *Use the shared workspace in this browser*. It's off by default; with it off the app works exactly as described above and makes no server calls. Switching never changes the plans saved in your browser. The first time you switch, you're offered an upload of them as new shared plans; after that the two copies are separate. The toolbar shows **Shared**.
+
+What you get in shared mode:
+
+- **Live editing.** Edits show at once and reach everyone else within a second. People with the plan open appear as avatars in the toolbar, and their selected cells are outlined in their colour. Cells someone else changed in the last 10 minutes get a coloured corner (hover for who and when). If two people change the same cell, the later change wins; the cell's history shows both.
+- **Undo** (Ctrl+Z) undoes *your* last change only. Anything someone else changed since is kept, and you're told how many changes were kept.
+- **Cell history.** Right-click a cell (or select it and press **H**) → *History*: every change to those weeks, who made it and when, with *Restore* and *Undo this change*. A workstream's or person's details have a History section too.
+- **Freeze locks.** Right-click a cell → lock the selected cells, the role, or the whole workstream, with an optional note ("SOW signed"). Locked cells are hatched with 🔒. Only the person who set a lock can change what it covers; admins can remove anyone's lock. A lock freezes staffing (who's in a role, its weeks, a workstream's dates and status), not names or capabilities. An edit that would change locked staffing indirectly, such as deleting a person who's in a locked role, is refused with the reason. Admins can also *Lock past weeks* (Manage → Settings): only admins can then change weeks before the current one.
+- **Activity** (toolbar tab): one log of every change in every plan. Filter by plan, person, workstream or person affected, dates or text. Expand an entry to see each cell and field before → after, jump to it, or undo it. *Export CSV* downloads the filtered log. Admins also see workspace events (role changes, plans created, renamed or archived).
+- **Roles**, one per person, for every plan:
+
+  | | Viewer | Editor | Admin |
+  |---|---|---|---|
+  | See plans, history, Activity; export | ✓ | ✓ | ✓ |
+  | Edit plans; undo; set and remove own locks; create or upload plans | | ✓ | ✓ |
+  | Thresholds and targets; rename or archive plans; People & access; remove anyone's lock; lock past weeks | | | ✓ |
+
+  Viewers get a read-only app. Admins manage people under Manage → *People & access*: change roles (they apply live, even to open tabs), remove access, add people before they sign in, and choose what first-time sign-ins get (viewer by default, or no access). Emails in `OWNER_EMAILS` are always admins.
+- **Plans** are archived, never deleted, so their history is kept. Archived plans can be restored.
+- **Connection.** If the connection drops, edits keep working for 30 seconds and are sent once it's back; after that the plan is read-only until it reconnects. If your Cloudflare Access sign-in expires you're asked to sign in again. Edits you hadn't sent are kept in the tab and go out afterwards. If the shared workspace can't be reached, you can work on this browser's plans for the session; you're never switched silently.
+
+### How it works
+
+- **Cloudflare Access** in front of the Worker signs people in. The Worker verifies the Access token (`Cf-Access-Jwt-Assertion`) on every `/api/*` request against your team's keys and the application's AUD tag. It also rejects cross-site requests and WebSocket upgrades.
+- **One Durable Object per plan** (`PlanRoom`, SQLite storage) holds the plan and applies everyone's edits one at a time.
+  - Each edit is checked against the person's role and any locks, using its actual effect (cascades included).
+  - It's stored with every changed field and week (before → after, who, when) in the same transaction.
+  - It's then sent to everyone over hibernating WebSockets, so idle plans cost nothing.
+- **A Workspace Durable Object** holds people and roles, the plan list, and the index behind the Activity log.
+- Edits are small deterministic operations (`src/domain/ops.ts`). The browser and the server run the same reducer, so local mode and shared mode share all the editing code.
+- Durable Object storage has 30-day point-in-time recovery for disaster recovery. Don't use it to undo edits: it would also roll back the audit trail. Use Undo and Activity instead.
+
+### Setting it up
+
+1. **Deploy** as usual (Workers Builds runs `npm run build` and `npx wrangler deploy`). The two Durable Objects are created on the first deploy; nothing else needs provisioning.
+2. **Protect the Worker with Cloudflare Access.** In the dashboard: Workers & Pages → the Worker → Settings → Domains & Routes → enable Cloudflare Access (or protect your custom domain with an Access application). Allow the people who should get in.
+   - Access protects the whole site, so local mode needs a sign-in to load the page too.
+   - Set the Access application's cookie to SameSite **Lax** and HttpOnly.
+3. **Set the variables** (Worker → Settings → Variables; `wrangler.jsonc` has `keep_vars`, so deploys keep them):
+   - `TEAM_DOMAIN`: `https://<your-team>.cloudflareaccess.com`
+   - `POLICY_AUD`: the Access application's *Application Audience (AUD) Tag*
+   - `OWNER_EMAILS`: comma-separated emails that are always admins (at least yours)
+   - `TIMEZONE` (in `wrangler.jsonc`, default `America/New_York`): decides when "this week" starts for the past-weeks lock.
+4. Open the app, turn on the shared workspace, and upload your plans.
+
+Until steps 2–3 are done, turning the shared workspace on shows "Can't reach the shared workspace" with a way back to local mode.
+
 ## Development
 
 ```sh
 npm install
-npm run dev      # http://localhost:5173
-npm test         # unit tests (Vitest)
+npm run dev      # http://localhost:5173 (app + Worker + Durable Objects, locally)
+npm test         # unit tests (Vitest), including the server engines on Node's SQLite
 npm run lint     # oxlint
-npm run build    # typecheck + production build into dist/
+npm run build    # typecheck + production build into dist/ (dist/client is the static app)
 ```
 
-`dist/` is a static site and can be hosted anywhere.
+The shared workspace runs locally too, with local Durable Object storage in `.wrangler/state`. To sign in without Cloudflare Access, copy `.dev.vars.example` to `.dev.vars` and open `http://localhost:5173/api/dev/login?as=you@example.com`. This dev sign-in is only accepted on localhost and only when `DEV_AUTH=1` is set in `.dev.vars`, which is never deployed. `e2e/shared-workspace.e2e.cjs` drives three people through the shared workspace with Playwright (see the header of the file for how to run it).
+
+Code layout: `src/domain` is pure logic shared by browser and server (`ops.ts`, `diff.ts`, `revert.ts`, `locks.ts`, `permissions.ts`, `protocol.ts`). `src/store` has the local store, the shared store (`sharedPlanStore.ts`: sync, rebase, undo) and the mode switch. `src/collab` is the shared-mode UI. `worker/` is the Worker, the Durable Objects and their storage engines (`roomEngine.ts`, `workspaceEngine.ts`).
 
 ### Naming
 

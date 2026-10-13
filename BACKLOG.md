@@ -14,12 +14,15 @@ Deferred from v1. Roughly in priority order.
 - Probability-weighted *team-level* demand forecast, e.g. "Data Cloud FTE needed next quarter". Workstream status and the presales/delivery split are done. Per-person load deliberately doesn't use probability.
 
 - **Duplicate plan** ("Save as…") for what-if scenarios. Today a copy means Export, editing the `name` in the file, then Import.
-- Sync plans to a shared location so import-by-name isn't the only way to share a plan.
 
 - Archive resources and workstreams instead of deleting them, so history is kept for people who leave and workstreams that close.
 - CSV export of allocations, for sharing with finance or leadership.
 - Copy/paste of cell ranges, including from and to spreadsheets.
 - Entering hours or days per week as well as %.
-- Shared backend for multiple users. Today data lives in one browser's localStorage.
+- Shared workspace follow-ups:
+  - Nightly JSON snapshots of each shared plan to R2, for backups beyond the 30-day point-in-time recovery.
+  - "View the plan as of a date" (read-only), and a "what changed since last week" view built on the change log.
+  - Per-plan or per-workstream roles, if one workspace-wide role turns out too coarse.
+  - Fine-grained merging of concurrent edits to the same list field (e.g. two people adding different capabilities at once; today the later change wins).
 - Deploy `dist/` to GitHub Pages (or similar) from CI.
 - Virtualized rows if the plan grows past a few hundred rows.

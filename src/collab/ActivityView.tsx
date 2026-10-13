@@ -9,7 +9,7 @@ import { usePlan, usePlanMeta } from '../store/planStore';
 import { openSharedPlan, revertBatch } from '../store/sharedPlanStore';
 import { useCan } from '../store/useCan';
 import { useUIStore } from '../store/uiStore';
-import { when } from './HistoryPanel';
+import { when } from './format';
 
 interface Entry {
   batchId: string;

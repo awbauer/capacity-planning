@@ -8,7 +8,8 @@ import { useCollabStore } from '../store/collabStore';
 import { addLock, removeLock } from '../store/sharedPlanStore';
 import { useCan } from '../store/useCan';
 import { useDerived } from '../store/useDerived';
-import { HistoryPanel, roleTitle } from './HistoryPanel';
+import { roleTitle } from './format';
+import { HistoryPanel } from './HistoryPanel';
 
 export interface CellMenuTarget {
   /** The cell right-clicked. */

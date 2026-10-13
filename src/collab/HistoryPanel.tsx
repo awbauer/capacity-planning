@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
 import type { EntityKind } from '../domain/diff';
-import type { Assignment } from '../domain/types';
 import { formatWeek } from '../domain/weeks';
 import { useCollabStore } from '../store/collabStore';
 import { usePlanMeta, usePlanStore } from '../store/planStore';
 import { revertBatch } from '../store/sharedPlanStore';
 import { useCan } from '../store/useCan';
+import { when } from './format';
 
 interface Entry {
   seq: number;
@@ -24,8 +24,6 @@ interface Entry {
 
 export type HistoryQuery = { roleId: string; weeks: string[] } | { kind: EntityKind; id: string };
 
-export const when = (ts: number) =>
-  new Date(ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
 const show = (v: unknown, pct = false): string => {
   if (v === null || v === undefined) return pct ? '0%' : '—';
@@ -115,5 +113,3 @@ export function HistoryPanel({ query }: { query: HistoryQuery }) {
     </ul>
   );
 }
-
-export const roleTitle = (a: Assignment, personName?: string) => [a.name || 'Unnamed role', personName ?? (a.resourceId ? '?' : 'open')].join(' › ');

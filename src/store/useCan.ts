@@ -1,5 +1,5 @@
 import { canFor, type Can } from '../domain/permissions';
-import { OFFLINE_GRACE_MS, useCollabStore } from './collabStore';
+import { useCollabStore } from './collabStore';
 import { isShared } from './mode';
 
 const ALL: Can = { edit: true, admin: true };
@@ -12,7 +12,7 @@ const NONE: Can = { edit: false, admin: false };
 export function useCan(): Can {
   const role = useCollabStore((s) => s.me?.role);
   const status = useCollabStore((s) => s.status);
-  const offlineSince = useCollabStore((s) => s.offlineSince);
+  const offlineReadOnly = useCollabStore((s) => s.offlineReadOnly);
   if (!isShared()) return ALL;
   if (!role) return NONE;
   const can = canFor(role);
@@ -22,6 +22,6 @@ export function useCan(): Can {
     status === 'connecting' ||
     status === 'no-plan' ||
     status === 'archived' ||
-    (status === 'offline' && !!offlineSince && Date.now() - offlineSince < OFFLINE_GRACE_MS);
+    (status === 'offline' && !offlineReadOnly);
   return connected ? can : { ...can, edit: false };
 }

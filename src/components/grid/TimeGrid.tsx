@@ -19,7 +19,7 @@ import { cellLockedFor, lockCoversCell, type Lock } from '../../domain/locks';
 import { useCollabStore } from '../../store/collabStore';
 import { isShared } from '../../store/mode';
 import { usePlan, usePlanStore, type AllocationEdit } from '../../store/planStore';
-import { RECENT_MS, sendPresence } from '../../store/sharedPlanStore';
+import { sendPresence } from '../../store/sharedPlanStore';
 import { useUIStore } from '../../store/uiStore';
 import { useCan } from '../../store/useCan';
 import { useDerived } from '../../store/useDerived';
@@ -420,10 +420,10 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
         }
       }
       if (presenceColor) classes.push('presence');
-      const cutoff = Date.now() - RECENT_MS;
+      // Old entries are pruned from `recent` (SharedGate), so anything here is recent.
       for (const w of b.weeks) {
         const rc = recent[`${a.id}|${w}`];
-        if (rc && rc.ts > cutoff && (!recentBy || rc.ts > recentBy.ts)) recentBy = rc;
+        if (rc && (!recentBy || rc.ts > recentBy.ts)) recentBy = rc;
       }
       if (recentBy) classes.push('recent');
     }

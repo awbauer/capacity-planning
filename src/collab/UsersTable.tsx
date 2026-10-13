@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { ROLE_LABELS, USER_ROLES, type UserRole } from '../domain/permissions';
 import { useCollabStore } from '../store/collabStore';
-import { when } from './HistoryPanel';
+import { when } from './format';
 
 interface UserRow {
   email: string;
