@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { createEmptyPlan, createSamplePlan } from '../domain/sampleData';
 import { defaultMeta, serializePlan } from '../domain/plans';
 import { parsePlan, parsePlanFile } from '../domain/schema';
-import { allPlans, redo, undo, usePlanStore } from './planStore';
+import { getLocalPlanStore } from './localPlanStore';
+import { allPlans, redo, undo } from './planStore';
+
+const usePlanStore = getLocalPlanStore();
 
 const store = () => usePlanStore.getState();
 
