@@ -2,11 +2,35 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "capacity-planning",
   "compatibility_date": "2026-10-07",
+  "main": "./worker/index.ts",
   "build": {
     "command": "npm run build"
   },
   "assets": {
-    "directory": "./dist",
-    "not_found_handling": "single-page-application"
+    "directory": "./dist/client",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    // Only the API runs the Worker; the app itself is static.
+    "run_worker_first": ["/api/*"]
+  },
+  // The shared workspace (opt-in per browser). Each plan is one PlanRoom; Workspace
+  // holds people, roles, the plan list and the activity log. Both use SQLite storage.
+  "durable_objects": {
+    "bindings": [
+      { "name": "PLAN_ROOM", "class_name": "PlanRoom" },
+      { "name": "WORKSPACE", "class_name": "Workspace" }
+    ]
+  },
+  "exports": {
+    "PlanRoom": { "type": "durable-object", "storage": "sqlite" },
+    "Workspace": { "type": "durable-object", "storage": "sqlite" }
+  },
+  "observability": { "enabled": true },
+  // TEAM_DOMAIN, POLICY_AUD and OWNER_EMAILS are set in the dashboard (Settings →
+  // Variables) and kept across deploys; see README "Shared workspace".
+  "keep_vars": true,
+  "vars": {
+    // Decides when "this week" starts for the past-weeks lock.
+    "TIMEZONE": "America/New_York"
   }
 }

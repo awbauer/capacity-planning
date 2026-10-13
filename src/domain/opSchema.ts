@@ -127,3 +127,19 @@ export function parseOp(input: unknown): { op: Op } | { error: string } {
 }
 
 export const planDataSchema = plan;
+
+const lockNote = text(200).optional();
+/** A lock as sent by a browser (the server adds owner and time). */
+export const newLockSchema = z.discriminatedUnion('scope', [
+  z.strictObject({
+    scope: z.literal('cells'),
+    id: entityId,
+    roleIds: z.array(entityId).min(1).max(500),
+    from: weekKey,
+    to: weekKey,
+    note: lockNote,
+  }),
+  z.strictObject({ scope: z.literal('role'), id: entityId, roleId: entityId, note: lockNote }),
+  z.strictObject({ scope: z.literal('project'), id: entityId, projectId: entityId, note: lockNote }),
+  z.strictObject({ scope: z.literal('past'), id: entityId, note: lockNote }),
+]);
