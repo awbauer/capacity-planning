@@ -191,7 +191,7 @@ export class RoomEngine {
     }
     const locked = this.lockCheck(diff, before, user, thisWeek);
     if (locked) return locked;
-    const result = this.commit(user, cid, before, after, diff, {
+    const result = this.commitRevert(user, cid, before, after, diff, {
       op: 'revert',
       summary: `Undid: ${batch.summary}`,
       revertOf: batchId,
@@ -213,6 +213,7 @@ export class RoomEngine {
       return { ok: false, code: 'invalid', msg: 'Past weeks are already locked.' };
     }
     const lock = { ...input, id: input.id || this.newId(), owner: user.email, createdAt: this.now() } as Lock;
+    if (this.locks().some((l) => l.id === lock.id)) return { ok: false, code: 'duplicate', msg: 'That lock already exists.' };
     return this.recordLockChange(user, cid, () => {
       this.sql.all('INSERT INTO locks (id, data, created_at) VALUES (?, ?, ?)', lock.id, JSON.stringify(lock), lock.createdAt);
     }, 'lock.add', `Locked ${this.lockLabel(lock)}${lock.note ? ` (“${lock.note}”)` : ''}`, lock);
@@ -481,6 +482,17 @@ export class RoomEngine {
     });
     this.plan = after;
     return { ok: true, seq, batch, puts, ...(info.replace ? { full: after } : {}) };
+  }
+
+  /**
+   * A revert can bring entities back in a different order than storage
+   * keeps them, so the plan is reloaded from storage (the order browsers
+   * get from the puts) after committing.
+   */
+  private commitRevert(...args: Parameters<RoomEngine['commit']>): Result {
+    const result = this.commit(...args);
+    if (result.ok === true) this.plan = undefined;
+    return result;
   }
 
   private writePuts(puts: Put[]) {

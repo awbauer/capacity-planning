@@ -106,6 +106,18 @@ export class PlanRoom extends DurableObject<Env> {
     } catch {
       return;
     }
+    try {
+      await this.handle(ws, conn, msg);
+    } catch (err) {
+      // Never leave a browser waiting: a failed change is reported back as rejected.
+      console.error('PlanRoom message failed', err);
+      if ('cid' in msg && typeof msg.cid === 'string') {
+        this.send(ws, { t: 'rejected', cid: msg.cid, code: 'invalid', msg: 'The server couldn’t apply that change.' });
+      }
+    }
+  }
+
+  private async handle(ws: WebSocket, conn: Conn, msg: ClientMsg) {
     const user: User = { email: conn.email, name: conn.name, role: conn.role };
     switch (msg.t) {
       case 'hello': {

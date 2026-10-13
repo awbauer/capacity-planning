@@ -89,6 +89,7 @@ describe('RoomEngine', () => {
     expect(r).toMatchObject({ ok: false, code: 'locked', lockIds: ['lock1'] });
     expect(r.ok === false && r.msg).toContain('alice@x.com');
     expect(room.apply(alice, 'c2', set('sample-a1', [NOW], 100), NOW)).toMatchObject({ ok: true });
+    expect(room.addLock(alice, 'l2', { scope: 'project', id: 'lock1', projectId: 'proj-acme' })).toMatchObject({ ok: false, code: 'duplicate' });
     expect(room.removeLock(bob, 'c3', 'lock1')).toMatchObject({ ok: false, code: 'forbidden' });
     expect(room.removeLock(alice, 'c4', 'lock1')).toMatchObject({ ok: true });
     expect(room.apply(bob, 'c5', set('sample-a1', [NOW], 25), NOW)).toMatchObject({ ok: true });
