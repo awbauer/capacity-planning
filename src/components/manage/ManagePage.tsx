@@ -13,6 +13,14 @@ import { SellerPicker } from '../SellerPicker';
 import { StatusSelect } from '../StatusControls';
 import { TagPicker } from '../TagPicker';
 import { AddRow, InlineText } from './InlineText';
+import { SharedPlansTable } from '../../collab/SharedPlansTable';
+import { UsersTable } from '../../collab/UsersTable';
+import { newId } from '../../domain/ids';
+import { useCollabStore } from '../../store/collabStore';
+import { getPreferredMode, isLocalOverride, isShared, setPreferredMode } from '../../store/mode';
+import { addLock, removeLock } from '../../store/sharedPlanStore';
+import { useCan } from '../../store/useCan';
+import { Toggle } from '../Toggle';
 
 const TABS: { id: ManageTab; label: string }[] = [
   { id: 'resources', label: 'Resources' },
@@ -20,6 +28,7 @@ const TABS: { id: ManageTab; label: string }[] = [
   { id: 'tags', label: 'Capabilities' },
   { id: 'sellers', label: 'Sellers' },
   { id: 'plans', label: 'Plans' },
+  { id: 'users', label: 'People & access' },
   { id: 'settings', label: 'Settings & data' },
 ];
 
@@ -28,20 +37,30 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 export function ManagePage() {
   const tab = useUIStore((s) => s.manageTab);
   const setTab = useUIStore((s) => s.openManage);
+  const can = useCan();
+  const shared = isShared();
+  // People & access is the shared workspace's, and admins only.
+  const tabs = TABS.filter((t) => t.id !== 'users' || (shared && can.admin));
+  const dataTab = tab === 'resources' || tab === 'projects' || tab === 'tags' || tab === 'sellers';
   return (
     <div className="manage">
       <nav className="tabs" aria-label="Manage">
-        {TABS.map((t) => (
+        {tabs.map((t) => (
           <button key={t.id} type="button" aria-pressed={tab === t.id} onClick={() => setTab(t.id)}>
             {t.label}
           </button>
         ))}
       </nav>
-      {tab === 'resources' && <ResourcesTable />}
-      {tab === 'projects' && <ProjectsTable />}
-      {tab === 'tags' && <TagsTable />}
-      {tab === 'sellers' && <SellersTable />}
-      {tab === 'plans' && <PlansTable />}
+      {dataTab && !can.edit && <p className="callout">You have view-only access to the shared workspace.</p>}
+      {/* A disabled fieldset makes every control inside read-only for viewers. */}
+      <fieldset className="plain-fieldset" disabled={dataTab && !can.edit}>
+        {tab === 'resources' && <ResourcesTable />}
+        {tab === 'projects' && <ProjectsTable />}
+        {tab === 'tags' && <TagsTable />}
+        {tab === 'sellers' && <SellersTable />}
+      </fieldset>
+      {tab === 'plans' && (shared ? <SharedPlansTable /> : <PlansTable />)}
+      {tab === 'users' && shared && can.admin && <UsersTable />}
       {tab === 'settings' && <SettingsPanel />}
     </div>
   );
@@ -441,12 +460,66 @@ function PlansTable() {
   );
 }
 
+/** The per-browser switch between this browser's plans and the shared workspace. */
+function SharedWorkspaceSetting() {
+  const preferred = getPreferredMode();
+  const shared = isShared();
+  return (
+    <fieldset className="shared-setting">
+      <legend>Shared workspace</legend>
+      <Toggle
+        label="Use the shared workspace in this browser"
+        checked={preferred === 'shared'}
+        title="Off: plans live only in this browser (as before). On: plans live in the shared workspace, with live editing, history, locks and an activity log."
+        onChange={(on) => {
+          const msg = on
+            ? 'Switch to the shared workspace? The page reloads. Plans saved in this browser stay here, untouched; you’ll be offered to upload them.'
+            : 'Switch back to the plans saved in this browser? The page reloads. Shared plans stay in the shared workspace.';
+          if (window.confirm(msg)) setPreferredMode(on ? 'shared' : 'local');
+        }}
+      />
+      <p className="muted small">
+        {shared
+          ? 'You’re in the shared workspace: everyone with access sees the same plans and each other’s changes live. Changes are recorded in the Activity log.'
+          : isLocalOverride()
+            ? 'The shared workspace is switched on, but you chose to work on this browser’s plans for this session.'
+            : 'Off: plans are saved only in this browser. Turn on to work on shared plans with others (needs the shared workspace set up; see the README).'}
+      </p>
+    </fieldset>
+  );
+}
+
+/** Shared mode: admins can freeze every week before this one. */
+function PastWeeksLock() {
+  const can = useCan();
+  const locks = useCollabStore((s) => s.locks);
+  const toast = useCollabStore((s) => s.toast);
+  const past = locks.find((l) => l.scope === 'past');
+  return (
+    <Toggle
+      label="Lock past weeks"
+      checked={!!past}
+      disabled={!can.admin}
+      title="When on, allocations before the current week can only be changed by admins."
+      onChange={(on) =>
+        (on ? addLock({ scope: 'past', id: newId() }) : removeLock(past!.id)).catch((e: Error) => toast(e.message))
+      }
+    />
+  );
+}
+
 function SettingsPanel() {
   const plan = usePlan();
   const meta = usePlanMeta();
   const s = usePlanStore();
+  const can = useCan();
+  const shared = isShared();
   return (
     <section className="settings">
+      <SharedWorkspaceSetting />
+      {shared && !can.admin && <p className="callout">Only admins can change these settings.</p>}
+      {shared && <PastWeeksLock />}
+      <fieldset className="plain-fieldset" disabled={!can.admin}>
       <label>
         Yellow above (%)
         <input
@@ -513,6 +586,9 @@ function SettingsPanel() {
           </button>
         </div>
       </fieldset>
+      </fieldset>
+      {!shared && (
+      <>
       <div className="callout">
         <strong>Your data lives only in this browser.</strong> Clearing site data or switching browsers loses it. Use
         Export in the toolbar to save a JSON backup of the open plan, and Import to restore or move it. Thresholds
@@ -534,6 +610,8 @@ function SettingsPanel() {
           Start empty
         </button>
       </div>
+      </>
+      )}
     </section>
   );
 }

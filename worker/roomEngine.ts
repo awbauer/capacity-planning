@@ -88,11 +88,14 @@ export class RoomEngine {
   private plan?: PlanData;
   private lockList?: Lock[];
 
-  constructor(
-    private readonly sql: Sql,
-    private readonly now: () => number = Date.now,
-    private readonly newId: () => string = () => crypto.randomUUID(),
-  ) {
+  private readonly sql: Sql;
+  private readonly now: () => number;
+  private readonly newId: () => string;
+
+  constructor(sql: Sql, now: () => number = Date.now, newId: () => string = () => crypto.randomUUID()) {
+    this.sql = sql;
+    this.now = now;
+    this.newId = newId;
     migrate(sql, MIGRATIONS);
   }
 

@@ -99,12 +99,16 @@ const SEEN_EVERY_MS = 5 * 60_000;
  * Workspace Durable Object.
  */
 export class WorkspaceEngine {
-  constructor(
-    private readonly sql: Sql,
-    private readonly owners: Set<string>,
-    private readonly now: () => number = Date.now,
-    private readonly newId: () => string = () => crypto.randomUUID(),
-  ) {
+  private readonly sql: Sql;
+  private readonly owners: Set<string>;
+  private readonly now: () => number;
+  private readonly newId: () => string;
+
+  constructor(sql: Sql, owners: Set<string>, now: () => number = Date.now, newId: () => string = () => crypto.randomUUID()) {
+    this.sql = sql;
+    this.owners = owners;
+    this.now = now;
+    this.newId = newId;
     migrate(sql, MIGRATIONS);
   }
 

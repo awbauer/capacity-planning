@@ -2245,3 +2245,318 @@ kbd {
     transition: none;
   }
 }
+
+/* ── Shared workspace ───────────────────────────────────────────── */
+
+/* Viewers: edit controls are hidden; the grid is read-only. */
+.view-only .edit-only {
+  display: none !important;
+}
+.grid-read-only .cell.edit {
+  cursor: default;
+}
+.plain-fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+/* Freeze locks: hatched; your own (which you can still edit) fainter. */
+.cell.locked {
+  background-image: repeating-linear-gradient(135deg, transparent 0 5px, rgba(102, 112, 133, 0.22) 5px 7px);
+}
+.cell.locked-mine {
+  background-image: repeating-linear-gradient(135deg, transparent 0 7px, rgba(37, 99, 235, 0.14) 7px 8px);
+}
+.cell.locked::before {
+  content: '🔒';
+  position: absolute;
+  top: 1px;
+  left: 2px;
+  font-size: 8px;
+  opacity: 0.7;
+  pointer-events: none;
+}
+.cell.locked-mine::before {
+  opacity: 0.35;
+}
+
+/* Someone else has this cell selected. */
+.cell.presence {
+  box-shadow: inset 0 0 0 2px var(--presence);
+}
+.cell.presence.selected,
+.cell.presence.focus {
+  box-shadow: inset 0 0 0 2px var(--accent), inset 0 0 0 4px var(--presence);
+}
+
+/* Changed by someone else in the last few minutes. */
+.cell.recent::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  border-style: solid;
+  border-width: 0 7px 7px 0;
+  border-color: transparent var(--recent) transparent transparent;
+  pointer-events: none;
+}
+.cell-menu {
+  position: fixed;
+  z-index: 50;
+  min-width: 240px;
+  max-width: 320px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  padding: 4px 0;
+  display: flex;
+  flex-direction: column;
+}
+.cell-menu button {
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 7px 12px;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.cell-menu button:hover {
+  background: var(--accent-soft);
+}
+.cell-menu hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 4px 0;
+}
+.cell-menu-note {
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.cell-menu kbd {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* Toolbar: mode, connection, who's here. */
+.presence-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.mode-badge {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-radius: 999px;
+  padding: 2px 8px;
+  border: 1px solid var(--border-strong);
+  color: var(--muted);
+}
+.mode-shared {
+  color: var(--edge);
+  border-color: var(--edge);
+}
+.conn-pill {
+  font-size: 12px;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.conn-pill::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--warn);
+}
+.conn-live::before {
+  background: #16a34a;
+}
+.conn-offline::before {
+  background: var(--danger);
+}
+.avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  display: inline-grid;
+  place-items: center;
+  border: 2px solid var(--surface);
+  margin-left: -6px;
+  cursor: default;
+}
+.avatar.me {
+  margin-left: 0;
+  outline: 1px solid var(--border-strong);
+}
+
+.conn-banner {
+  background: var(--warn-bg);
+  color: var(--warn);
+  padding: 6px 16px;
+  font-size: 13px;
+  text-align: center;
+}
+.conn-banner.bad {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+/* Sign-in / status screens. */
+.gate {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--bg);
+}
+.gate-card {
+  max-width: 520px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 28px;
+  box-shadow: var(--shadow);
+}
+.gate-card h1 {
+  font-size: 20px;
+  margin: 0 0 12px;
+}
+.gate-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+.gate-plans {
+  margin: 0 0 8px;
+  padding-left: 18px;
+}
+
+.toasts {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 420px;
+}
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  font-size: 13px;
+}
+.toast span {
+  flex: 1;
+}
+.toast-error {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+
+/* History and activity. */
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 60vh;
+  overflow: auto;
+}
+.history-item {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.history-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.history-change {
+  margin: 2px 0;
+}
+.history-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 2px;
+}
+.activity {
+  padding: 16px;
+}
+.activity-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.activity-row.clickable {
+  cursor: pointer;
+}
+.activity-row.clickable:hover {
+  background: var(--surface-2);
+}
+.activity-detail td {
+  background: var(--surface-2);
+}
+.change-list {
+  margin: 4px 0 8px;
+  padding-left: 18px;
+  max-height: 260px;
+  overflow: auto;
+  font-size: 13px;
+}
+.op-chip {
+  display: inline-block;
+  font-size: 11px;
+  border-radius: 4px;
+  padding: 0 6px;
+  margin-right: 4px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+tr.archived {
+  opacity: 0.6;
+}
+.shared-setting {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+.inline-field {
+  display: block;
+  margin: 8px 0 12px;
+}
+.inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+.toggle:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}

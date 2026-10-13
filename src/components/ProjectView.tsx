@@ -6,6 +6,7 @@ import { weekKind, type Severity } from '../domain/load';
 import { isFilled, type Assignment, type Project } from '../domain/types';
 import type { Bucket } from '../domain/weeks';
 import { usePlan, usePlanStore } from '../store/planStore';
+import { useCan } from '../store/useCan';
 import { clientGroupKey, isExpanded, useUIStore, type Filters } from '../store/uiStore';
 import { useDerived } from '../store/useDerived';
 import { AddAssignmentDialog } from './AddAssignmentDialog';
@@ -64,6 +65,7 @@ export function ProjectView({ buckets }: Props) {
   const setGroupByClient = useUIStore((s) => s.setGroupByClient);
   const showDetails = useUIStore((s) => s.showDetails);
   const removeAssignment = usePlanStore((s) => s.removeAssignment);
+  const can = useCan();
   const [roleDialog, setRoleDialog] = useState<{ projectId: string } | { role: Assignment } | null>(null);
   const [filling, setFilling] = useState<Assignment | null>(null);
   const upcomingRoleProjects = new Set(d.upcomingRoles.map((u) => u.role.projectId));
@@ -142,7 +144,7 @@ export function ProjectView({ buckets }: Props) {
               {p.client && !groupByClient && <span className="muted"> · {p.client}</span>}
             </div>
             <div className="row-meta">
-              <StatusSelect compact value={p.status} onChange={(status) => updateProject(p.id, { status })} />
+              <StatusSelect compact disabled={!can.edit} value={p.status} onChange={(status) => updateProject(p.id, { status })} />
               <span className="seller" title={seller ? `Seller: ${seller.name}` : 'No seller'}>
                 {seller ? seller.name : <em className="muted">No seller</em>}
               </span>
@@ -185,12 +187,12 @@ export function ProjectView({ buckets }: Props) {
             </div>
           </div>
           <div className="row-actions">
-            <button type="button" className="btn btn-small" onClick={() => setAdding(p.id)}>
+            <button type="button" className="btn btn-small edit-only" onClick={() => setAdding(p.id)}>
               + Person
             </button>
             <button
               type="button"
-              className="btn btn-small"
+              className="btn btn-small edit-only"
               title="Add demand you haven't chosen a person for yet"
               onClick={() => setRoleDialog({ projectId: p.id })}
             >
@@ -270,7 +272,7 @@ export function ProjectView({ buckets }: Props) {
                   type="button"
                   className={a.name ? 'link role-name' : 'link role-name unnamed'}
                   title={`Edit role${a.level ? ` · ${a.level}` : ''}${needs ? ` · needs ${needs}` : ''}`}
-                  onClick={() => setRoleDialog({ role: a })}
+                  onClick={() => can.edit && setRoleDialog({ role: a })}
                 >
                   {roleLabel}
                 </button>
@@ -280,7 +282,7 @@ export function ProjectView({ buckets }: Props) {
                       type="button"
                       className="link person-name"
                       title={`${r.name}${r.role ? `, ${r.role}` : ''}. Change who's in this role`}
-                      onClick={() => setFilling(a)}
+                      onClick={() => (can.edit ? setFilling(a) : showDetails({ kind: 'resource', id: r.id }))}
                     >
                       {r.name}
                     </button>
@@ -296,13 +298,13 @@ export function ProjectView({ buckets }: Props) {
               </div>
             </div>
             {!r && (
-              <button type="button" className="btn btn-small" title="Choose the person for this role" onClick={() => setFilling(a)}>
+              <button type="button" className="btn btn-small edit-only" title="Choose the person for this role" onClick={() => setFilling(a)}>
                 Fill…
               </button>
             )}
             <button
               type="button"
-              className="icon-btn"
+              className="icon-btn edit-only"
               aria-label={`Remove role ${roleLabel}${r ? ` (${r.name})` : ''} from ${p.name}`}
               title={r ? 'Remove this role (to keep the role but free the person, click their name)' : 'Remove this open role'}
               onClick={() => {
@@ -398,7 +400,7 @@ export function ProjectView({ buckets }: Props) {
           <div className="corner-content">
             <strong>Workstreams</strong> <span className="muted">({projects.length})</span>
             <div className="corner-actions">
-              <button type="button" className="btn btn-small btn-primary" onClick={() => setEditing('new')}>
+              <button type="button" className="btn btn-small btn-primary edit-only" onClick={() => setEditing('new')}>
                 + New workstream
               </button>
               <button type="button" className="btn btn-small" onClick={() => setAllExpanded([...groupKeys, ...projectKeys], true)}>
@@ -420,7 +422,7 @@ export function ProjectView({ buckets }: Props) {
           plan.projects.length === 0 ? (
             <span>
               No workstreams yet.{' '}
-              <button type="button" className="link" onClick={() => setEditing('new')}>
+              <button type="button" className="link edit-only" onClick={() => setEditing('new')}>
                 Create one
               </button>
             </span>

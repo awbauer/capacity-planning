@@ -13,12 +13,20 @@ import { useDerived } from '../store/useDerived';
 import { downloadText, today } from './download';
 import { Pie } from './grid/Pie';
 import { PlanSwitcher } from './PlanSwitcher';
+import { apiDownload } from '../api/client';
+import { PresenceBar } from '../collab/PresenceBar';
+import { uniqueName } from '../domain/plans';
+import { useCollabStore } from '../store/collabStore';
+import { isLocalOverride, isShared } from '../store/mode';
+import { createSharedPlan, openSharedPlan } from '../store/sharedPlanStore';
+import { useCan } from '../store/useCan';
 import { Toggle } from './Toggle';
 
-const VIEWS: { id: View; label: string }[] = [
+const VIEWS: { id: View; label: string; sharedOnly?: boolean }[] = [
   { id: 'projects', label: 'Workstreams' },
   { id: 'resources', label: 'Resources' },
   { id: 'demand', label: 'Demand' },
+  { id: 'activity', label: 'Activity', sharedOnly: true },
   { id: 'manage', label: 'Manage' },
 ];
 const ZOOMS: { id: Zoom; label: string }[] = [
@@ -46,7 +54,10 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
   const ui = useUIStore();
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const planHash = useMemo(() => hashString(JSON.stringify(plan)), [plan]);
+  const shared = isShared();
+  const can = useCan();
+  // The "unsaved changes" hint is for this browser's plans; shared plans are saved as you go.
+  const planHash = useMemo(() => (shared ? '' : hashString(JSON.stringify(plan))), [plan, shared]);
   const lastExport = ui.exports[meta.id];
   const dirty = lastExport?.hash !== planHash;
   const thisWeek = currentWeek();
@@ -55,6 +66,12 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
   const isGrid = ui.view === 'projects' || ui.view === 'resources';
 
   const exportPlan = () => {
+    if (shared) {
+      apiDownload(`/api/plans/${meta.id}/export`, `${slug(meta.name)}-v${meta.revision}-${today()}.json`).catch((e: Error) =>
+        useCollabStore.getState().toast(e.message),
+      );
+      return;
+    }
     const next = bumpRevision();
     downloadText(`${slug(next.name)}-v${next.revision}-${today()}.json`, serializePlan(next, plan), 'application/json');
     ui.markExported(next.id, planHash);
@@ -62,7 +79,23 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
 
   const exportCsv = () => downloadText(`staffing-all-workstreams-${today()}.csv`, allWorkstreamsCsv(plan), 'text/csv');
 
+  /** Shared mode: a file always becomes a new shared plan (replacing a shared plan wholesale isn't offered). */
+  const importShared = async (file: File) => {
+    const { plans, toast } = useCollabStore.getState();
+    try {
+      const incoming = parsePlanFile(JSON.parse(await file.text()));
+      const name = uniqueName(incoming.name, plans.map((p) => p.name));
+      if (!window.confirm(`Import ${file.name} into the shared workspace as a new plan "${name}"?`)) return;
+      const created = await createSharedPlan(name, incoming.plan, `(imported from ${file.name})`);
+      openSharedPlan(created.id);
+      ui.resetFilters();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : String(err));
+    }
+  };
+
   const onImportFile = async (file: File) => {
+    if (shared) return importShared(file);
     try {
       const incoming = parsePlanFile(JSON.parse(await file.text()));
       const size = (p: typeof plan) => `${p.projects.length} workstreams, ${p.resources.length} resources`;
@@ -105,23 +138,40 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
         <h1 className="brand">Capacity Planner</h1>
         <PlanSwitcher />
         <nav className="segmented" aria-label="View">
-          {VIEWS.map((v) => (
+          {VIEWS.filter((v) => shared || !v.sharedOnly).map((v) => (
             <button key={v.id} type="button" aria-pressed={ui.view === v.id} onClick={() => ui.setView(v.id)}>
               {v.label}
             </button>
           ))}
         </nav>
         <span className="spacer" />
-        <button type="button" className="btn" onClick={undo} disabled={!canUndo} title="Undo (Ctrl+Z)">
+        <button
+          type="button"
+          className="btn"
+          onClick={undo}
+          disabled={!canUndo}
+          title={shared ? 'Undo your last change (Ctrl+Z). Later changes by others are kept.' : 'Undo (Ctrl+Z)'}
+        >
           ↶ Undo
         </button>
         <button type="button" className="btn" onClick={redo} disabled={!canRedo} title="Redo (Ctrl+Shift+Z)">
           ↷ Redo
         </button>
-        <span className={dirty ? 'export-status dirty' : 'export-status'} title="Data lives only in this browser. Export regularly.">
-          {lastExport ? `v${meta.revision} exported ${relative(lastExport.at)}` : 'Never exported'}
-          {dirty && ' · unsaved changes'}
-        </span>
+        {shared ? (
+          <PresenceBar />
+        ) : (
+          <>
+            {isLocalOverride() && (
+              <span className="mode-badge mode-local" title="The shared workspace is switched on but couldn't be used; you're on this browser's plans for this session.">
+                Local (this session)
+              </span>
+            )}
+            <span className={dirty ? 'export-status dirty' : 'export-status'} title="Data lives only in this browser. Export regularly.">
+              {lastExport ? `v${meta.revision} exported ${relative(lastExport.at)}` : 'Never exported'}
+              {dirty && ' · unsaved changes'}
+            </span>
+          </>
+        )}
         <button type="button" className="btn" onClick={() => ui.setShowHelp(true)} title="Interactions and shortcuts (?)">
           ? Help
         </button>
@@ -129,7 +179,11 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
           type="button"
           className="btn"
           onClick={exportPlan}
-          title={`Download "${meta.name}" as v${meta.revision + 1} (JSON). Each export increments the version.`}
+          title={
+            shared
+              ? `Download "${meta.name}" as JSON (a backup, or to use in a browser-only plan)`
+              : `Download "${meta.name}" as v${meta.revision + 1} (JSON). Each export increments the version.`
+          }
         >
           Export
         </button>
@@ -145,7 +199,12 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
           type="button"
           className="btn"
           onClick={() => fileRef.current?.click()}
-          title="Import a JSON export. It overwrites the plan with the same name, or becomes a new plan."
+          disabled={shared && !can.edit}
+          title={
+            shared
+              ? 'Import a JSON export as a new plan in the shared workspace.'
+              : 'Import a JSON export. It overwrites the plan with the same name, or becomes a new plan.'
+          }
         >
           Import
         </button>

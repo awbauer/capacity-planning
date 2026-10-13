@@ -7,11 +7,13 @@ interface StatusSelectProps {
   value: ProjectStatus;
   onChange: (status: ProjectStatus) => void;
   compact?: boolean;
+  disabled?: boolean;
 }
 
-export function StatusSelect({ value, onChange, compact }: StatusSelectProps) {
+export function StatusSelect({ value, onChange, compact, disabled }: StatusSelectProps) {
   return (
     <select
+      disabled={disabled}
       className={`status-select status-${value}${compact ? ' compact' : ''}`}
       aria-label="Workstream status"
       value={value}

@@ -21,6 +21,70 @@ import { downloadText, today } from './download';
 import { FillRoleDialog } from './FillRoleDialog';
 import { Modal } from './Modal';
 import { ProjectDialog } from './ProjectDialog';
+import { HistoryPanel } from '../collab/HistoryPanel';
+import { newId } from '../domain/ids';
+import { useCollabStore } from '../store/collabStore';
+import { isShared } from '../store/mode';
+import { addLock, removeLock } from '../store/sharedPlanStore';
+import { useCan } from '../store/useCan';
+
+/** Shared mode: the record of changes to a workstream or person, collapsed until asked for. */
+function HistorySection({ kind, id }: { kind: 'project' | 'resource'; id: string }) {
+  const [open, setOpen] = useState(false);
+  if (!isShared()) return null;
+  return (
+    <section className="details-section">
+      <h3>
+        <button type="button" className="link" aria-expanded={open} onClick={() => setOpen(!open)}>
+          {open ? '▾' : '▸'} History
+        </button>
+      </h3>
+      {open && <HistoryPanel query={{ kind, id }} />}
+    </section>
+  );
+}
+
+/** Shared mode: lock or unlock a whole workstream's staffing. */
+function WorkstreamLockButton({ projectId }: { projectId: string }) {
+  const can = useCan();
+  const me = useCollabStore((s) => s.me);
+  const locks = useCollabStore((s) => s.locks);
+  const toast = useCollabStore((s) => s.toast);
+  if (!isShared()) return null;
+  const lock = locks.find((l) => l.scope === 'project' && l.projectId === projectId);
+  if (lock) {
+    const mayRemove = can.edit && (me?.role === 'admin' || lock.owner === me?.email);
+    return (
+      <button
+        type="button"
+        className="btn"
+        disabled={!mayRemove}
+        title={`Locked by ${lock.owner}${lock.note ? `: “${lock.note}”` : ''}. Only they or an admin can unlock.`}
+        onClick={() => removeLock(lock.id).then(() => toast('Unlocked.', 'info'), (e: Error) => toast(e.message))}
+      >
+        🔓 Unlock staffing
+      </button>
+    );
+  }
+  if (!can.edit) return null;
+  return (
+    <button
+      type="button"
+      className="btn"
+      title="Freeze who's on this workstream, their weeks and its dates; only you (or an admin) can change them until unlocked"
+      onClick={() => {
+        const note = window.prompt('Note for this lock (optional), e.g. “SOW signed”:', '');
+        if (note === null) return;
+        addLock({ scope: 'project', id: newId(), projectId, ...(note.trim() ? { note: note.trim() } : {}) }).then(
+          () => toast('Workstream staffing locked.', 'info'),
+          (e: Error) => toast(e.message),
+        );
+      }}
+    >
+      🔒 Lock staffing…
+    </button>
+  );
+}
 
 const pct = (n: number) => `${Math.round(n)}%`;
 const PHASE_LABELS = { presales: 'Presales', delivery: 'Delivery', both: 'Presales + delivery', none: '—' } as const;
@@ -143,7 +207,7 @@ function WorkstreamDetails({ project, onClose }: { project: Project; onClose: ()
                   <td className="num">{r.avg ? pct(r.avg) : '–'}</td>
                   {kind === 'open' && (
                     <td>
-                      <button type="button" className="btn btn-small" onClick={() => setFilling(r.role)}>
+                      <button type="button" className="btn btn-small edit-only" onClick={() => setFilling(r.role)}>
                         Fill…
                       </button>
                     </td>
@@ -179,11 +243,12 @@ function WorkstreamDetails({ project, onClose }: { project: Project; onClose: ()
           >
             Show in grid
           </button>
+          <WorkstreamLockButton projectId={project.id} />
           <span className="spacer" />
           <button type="button" className="btn" onClick={onClose}>
             Close
           </button>
-          <button type="button" className="btn btn-primary" onClick={() => setEditing(true)}>
+          <button type="button" className="btn btn-primary edit-only" onClick={() => setEditing(true)}>
             Edit workstream
           </button>
         </>
@@ -236,6 +301,7 @@ function WorkstreamDetails({ project, onClose }: { project: Project; onClose: ()
         </h3>
         {roleRows(open, 'open')}
       </section>
+      <HistorySection kind="project" id={project.id} />
     </Modal>
   );
 }
@@ -389,7 +455,7 @@ function PersonDetails({ resource, onClose }: { resource: Resource; onClose: () 
                   </span>
                   <button
                     type="button"
-                    className="btn btn-small"
+                    className="btn btn-small edit-only"
                     title={`Put ${resource.name} in this role (undo with Ctrl+Z)`}
                     onClick={() => assignRole(role.id, resource.id)}
                   >
@@ -401,6 +467,7 @@ function PersonDetails({ resource, onClose }: { resource: Resource; onClose: () 
           </ul>
         )}
       </section>
+      <HistorySection kind="resource" id={resource.id} />
     </Modal>
   );
 }

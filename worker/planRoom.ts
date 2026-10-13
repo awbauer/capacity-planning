@@ -1,4 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
+import { colorFor } from '../src/domain/colors';
 import type { EntityKind } from '../src/domain/diff';
 import { newLockSchema } from '../src/domain/opSchema';
 import type { UserRole } from '../src/domain/permissions';
@@ -31,8 +32,6 @@ interface Conn {
   sel?: Presence['sel'];
 }
 
-const COLORS = ['#e11d48', '#2563eb', '#16a34a', '#d97706', '#7c3aed', '#0891b2', '#db2777', '#65a30d', '#ea580c', '#4f46e5'];
-const colorFor = (email: string) => COLORS[[...email].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % COLORS.length];
 
 /** Retry flushing the activity index this long after a failure. */
 const FLUSH_RETRY_MS = 30_000;

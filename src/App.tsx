@@ -3,14 +3,18 @@ import { ConflictsPanel } from './components/ConflictsPanel';
 import { DemandView } from './components/DemandView';
 import { DetailsModal } from './components/DetailsModal';
 import { HelpDialog } from './components/HelpDialog';
+import { ActivityView } from './collab/ActivityView';
+import { SharedGate, Toasts } from './collab/SharedGate';
 import { ManagePage } from './components/manage/ManagePage';
 import { ProjectView } from './components/ProjectView';
 import { ResourceView } from './components/ResourceView';
 import { Toolbar } from './components/Toolbar';
 import { UtilizationPanel } from './components/UtilizationPanel';
 import { buckets as makeBuckets } from './domain/weeks';
+import { isShared } from './store/mode';
 import { redo, undo } from './store/planStore';
 import { useUIStore } from './store/uiStore';
+import { useCan } from './store/useCan';
 
 function isTextInput(el: EventTarget | null): boolean {
   return (
@@ -19,7 +23,20 @@ function isTextInput(el: EventTarget | null): boolean {
   );
 }
 
+/** Shared mode goes through the sign-in / plan gate first; local mode is the app as it always was. */
 export function App() {
+  if (!isShared()) return <PlannerApp />;
+  return (
+    <>
+      <SharedGate>
+        <PlannerApp />
+      </SharedGate>
+      <Toasts />
+    </>
+  );
+}
+
+function PlannerApp() {
   const view = useUIStore((s) => s.view);
   const zoom = useUIStore((s) => s.zoom);
   const anchor = useUIStore((s) => s.anchor);
@@ -28,6 +45,7 @@ export function App() {
   const showHelp = useUIStore((s) => s.showHelp);
   const setShowHelp = useUIStore((s) => s.setShowHelp);
   const buckets = useMemo(() => makeBuckets(zoom, anchor), [zoom, anchor]);
+  const can = useCan();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -53,7 +71,7 @@ export function App() {
   }, []);
 
   return (
-    <div className="app">
+    <div className={can.edit ? 'app' : 'app view-only'}>
       <Toolbar buckets={buckets} />
       {view === 'manage' ? (
         <main className="main main-scroll">
@@ -62,6 +80,10 @@ export function App() {
       ) : view === 'demand' ? (
         <main className="main main-scroll">
           <DemandView />
+        </main>
+      ) : view === 'activity' ? (
+        <main className="main main-scroll">
+          <ActivityView />
         </main>
       ) : (
         <>

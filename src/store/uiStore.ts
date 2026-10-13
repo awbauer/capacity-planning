@@ -3,13 +3,16 @@ import { persist } from 'zustand/middleware';
 import type { ProjectStatus, WeekKey, Zoom } from '../domain/types';
 import { DEFAULT_PLAN_ID } from '../domain/plans';
 import { addWeeks, currentWeek } from '../domain/weeks';
+import { isShared } from './mode';
 
-export type View = 'projects' | 'resources' | 'demand' | 'manage';
+/** `activity` (the shared workspace's change log) only exists in shared mode. */
+export type View = 'projects' | 'resources' | 'demand' | 'activity' | 'manage';
 
 /** The workstream or person whose details modal is open. */
 export type DetailsTarget = { kind: 'project'; id: string } | { kind: 'resource'; id: string };
 
-export type ManageTab = 'resources' | 'projects' | 'tags' | 'sellers' | 'plans' | 'settings';
+/** `users` only exists in shared mode. */
+export type ManageTab = 'resources' | 'projects' | 'tags' | 'sellers' | 'plans' | 'users' | 'settings';
 
 /** How allocation cells render: Harvey-ball circles or plain numbers. */
 export type CellStyle = 'pie' | 'number';
@@ -166,6 +169,16 @@ export const useUIStore = create<UIState>()(
         const exports: Record<string, ExportRecord> =
           lastExportedAt && lastExportedHash ? { [DEFAULT_PLAN_ID]: { at: lastExportedAt, hash: lastExportedHash } } : {};
         return { ...rest, exports } as unknown as UIState;
+      },
+      // Views that exist only in shared mode fall back when the page runs locally.
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<UIState>;
+        return {
+          ...current,
+          ...p,
+          view: p.view === 'activity' && !isShared() ? 'projects' : (p.view ?? current.view),
+          manageTab: p.manageTab === 'users' && !isShared() ? 'settings' : (p.manageTab ?? current.manageTab),
+        };
       },
     },
   ),
