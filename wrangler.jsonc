@@ -35,5 +35,13 @@
   "vars": {
     // Decides when "this week" starts for the past-weeks lock.
     "TIMEZONE": "America/New_York"
+  },
+  // Preview deployments (Workers Builds on non-production branches) don't inherit vars
+  // or the email binding, so they're repeated here.
+  "previews": {
+    "vars": {
+      "TIMEZONE": "America/New_York"
+    },
+    "send_email": [{ "name": "EMAIL" }]
   }
 }
