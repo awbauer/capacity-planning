@@ -141,6 +141,13 @@ export class WorkspaceEngine {
     } else if (row.last_seen_at === null || now - Number(row.last_seen_at) > SEEN_EVERY_MS || (name && name !== row.name)) {
       this.sql.all('UPDATE users SET last_seen_at = ?, name = ? WHERE email = ?', now, name || String(row.name), email);
     }
+    // A workspace with no OWNER_EMAILS and no admin would have nobody able to create plans or
+    // grant roles: the first person to sign in becomes its admin (Access decides who can sign in).
+    if (this.owners.size === 0 && !one(this.sql.all("SELECT 1 FROM users WHERE role = 'admin' AND disabled = 0 LIMIT 1"))) {
+      this.sql.all("UPDATE users SET role = 'admin', disabled = 0 WHERE email = ?", email);
+      this.event(email, 'user', `${email} became the first admin (no OWNER_EMAILS set)`);
+      row = one(this.sql.all('SELECT * FROM users WHERE email = ?', email))!;
+    }
     const u = toUser(row, this.owners);
     return { email: u.email, name: name || u.name, role: u.role, owner: u.owner, disabled: u.disabled };
   }

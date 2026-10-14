@@ -51,6 +51,15 @@ async function until(fn, msg, timeout = 5000) {
   const cell = (page, id, i) => row(page, id).locator('td.cell.edit').nth(i);
   const val = (loc) => loc.getAttribute('data-value').then(Number);
 
+  // ── A viewer on an empty workspace is told why they can't create a plan ──
+  const zoe = await user('zoe@example.com');
+  await zoe.waitForSelector('text=No plans in the shared workspace yet');
+  assert(await zoe.getByText('zoe@example.com').count() > 0, 'the empty-workspace screen says who you are');
+  assert(await zoe.getByText(/view-only access/).count() > 0, '…and that view-only access is why you can’t create plans');
+  assert(await zoe.getByRole('button', { name: 'New plan…' }).count() === 0, 'viewers get no New plan button');
+  await shot(zoe, 'c00-viewer-no-plans');
+  await zoe.context().close();
+
   // ── Local mode is untouched and makes no API calls ──
   const alice = await user('alice@example.com', { shared: false });
   await alice.getByRole('button', { name: 'Manage', exact: true }).click();

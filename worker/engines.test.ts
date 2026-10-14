@@ -158,6 +158,23 @@ describe('WorkspaceEngine', () => {
     expect(ws.updateUser('alice@x.com', 'bob@x.com', { role: 'editor' }).role).toBe('editor');
   });
 
+  it('makes the first person to sign in admin when no owners are set and nobody is admin', () => {
+    const fresh = new WorkspaceEngine(nodeSql(), new Set(), () => (clock += 1000), () => `f${++ids}`);
+    expect(fresh.touchUser('first@x.com', 'First')).toMatchObject({ role: 'admin', owner: false });
+    expect(fresh.touchUser('second@x.com', 'Second').role).toBe('viewer');
+    expect(fresh.activity({ workspace: true }).entries[0].summary).toMatch(/first admin/);
+    // Owners configured: nobody is promoted.
+    expect(ws.touchUser('bob@x.com', 'Bob').role).toBe('viewer');
+  });
+
+  it('promotes an existing viewer when the workspace has no admin left', () => {
+    const fresh = new WorkspaceEngine(nodeSql(), new Set(), () => (clock += 1000), () => `g${++ids}`);
+    fresh.touchUser('a@x.com', 'A');
+    fresh.touchUser('b@x.com', 'B');
+    fresh.updateUser('a@x.com', 'a@x.com', { disabled: true });
+    expect(fresh.touchUser('b@x.com', 'B').role).toBe('admin');
+  });
+
   it("won't change an existing person's role through an invite", () => {
     ws.touchUser('bob@x.com', 'Bob');
     expect(() => ws.inviteUser('alice@x.com', 'bob@x.com', 'admin')).toThrow(/already/);
