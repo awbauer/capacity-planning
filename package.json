@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "node e2e/run.mjs",
-    "test:e2e:serve": "node e2e/run.mjs --serve"
+    "test:e2e:serve": "node e2e/run.mjs --serve",
+    "prepare": "node scripts/client-files.mjs --stub"
   },
   "dependencies": {
     "date-fns": "^4.4.0",

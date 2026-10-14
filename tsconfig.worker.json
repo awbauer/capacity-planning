@@ -5,6 +5,7 @@
     "lib": ["ES2023"],
     "module": "esnext",
     "types": ["@cloudflare/workers-types"],
+    "resolveJsonModule": true,
     "skipLibCheck": true,
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,

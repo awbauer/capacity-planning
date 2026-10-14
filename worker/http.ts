@@ -38,7 +38,12 @@ export const createPlanBody = z.object({ name: z.string().trim().min(1).max(200)
 export const patchPlanBody = z.object({ name: z.string().trim().min(1).max(200).optional(), archived: z.boolean().optional() });
 export const patchUserBody = z.object({ role: z.enum(USER_ROLES as [UserRole, ...UserRole[]]).optional(), disabled: z.boolean().optional() });
 export const inviteBody = z.object({ email: z.string().max(320), role: z.enum(USER_ROLES as [UserRole, ...UserRole[]]) });
-export const settingsBody = z.object({ defaultRole: z.enum(['viewer', 'editor', 'admin', 'none']) });
+export const prefsBody = z.object({ mentionEmails: z.boolean() });
+export const readBody = z.object({ planId: z.string().regex(/^[\w-]{1,64}$/), threadId: z.string().regex(/^[\w-]{1,64}$/) });
+export const settingsBody = z.object({
+  defaultRole: z.enum(['viewer', 'editor', 'admin', 'none']).optional(),
+  timeZone: z.string().max(64).optional(),
+});
 
 export function activityQuery(url: URL, me: Me): ActivityQuery {
   const p = url.searchParams;

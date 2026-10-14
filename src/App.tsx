@@ -1,9 +1,12 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ConflictsPanel } from './components/ConflictsPanel';
 import { DemandView } from './components/DemandView';
 import { DetailsModal } from './components/DetailsModal';
 import { HelpDialog } from './components/HelpDialog';
 import { ActivityView } from './collab/ActivityView';
+import { CommentsPanel } from './collab/CommentsPanel';
+import { MentionsView } from './collab/MentionsView';
+import { Modal } from './components/Modal';
 import { SharedGate, Toasts } from './collab/SharedGate';
 import { ManagePage } from './components/manage/ManagePage';
 import { ProjectView } from './components/ProjectView';
@@ -11,7 +14,9 @@ import { ResourceView } from './components/ResourceView';
 import { Toolbar } from './components/Toolbar';
 import { UtilizationPanel } from './components/UtilizationPanel';
 import { buckets as makeBuckets } from './domain/weeks';
-import { isShared } from './store/mode';
+import { useCollabStore } from './store/collabStore';
+import { isShared, setPreferredMode } from './store/mode';
+import { commentLink } from './store/sharedPlanStore';
 import { redo, undo } from './store/planStore';
 import { useUIStore } from './store/uiStore';
 import { useCan } from './store/useCan';
@@ -25,7 +30,14 @@ function isTextInput(el: EventTarget | null): boolean {
 
 /** Shared mode goes through the sign-in / plan gate first; local mode is the app as it always was. */
 export function App() {
-  if (!isShared()) return <PlannerApp />;
+  if (!isShared()) {
+    return (
+      <>
+        <PlannerApp />
+        <CommentLinkPrompt />
+      </>
+    );
+  }
   return (
     <>
       <SharedGate>
@@ -33,6 +45,35 @@ export function App() {
       </SharedGate>
       <Toasts />
     </>
+  );
+}
+
+/** A comment link (from a mention email) opened in a browser using its own plans: offer the shared workspace. */
+function CommentLinkPrompt() {
+  const [link, setLink] = useState(commentLink);
+  if (!link) return null;
+  const stay = () => {
+    history.replaceState(null, '', location.pathname + location.search);
+    setLink(null);
+  };
+  return (
+    <Modal
+      title="Open a shared comment?"
+      onClose={stay}
+      footer={
+        <>
+          <button type="button" className="btn" onClick={stay}>
+            Stay on this browser’s plans
+          </button>
+          <button type="button" className="btn btn-primary" onClick={() => setPreferredMode('shared')}>
+            Use the shared workspace
+          </button>
+        </>
+      }
+    >
+      <p>This link opens a comment in the shared workspace, but this browser is set to use its own plans.</p>
+      <p className="muted small">You can switch back any time under Manage → Settings.</p>
+    </Modal>
   );
 }
 
@@ -46,6 +87,8 @@ function PlannerApp() {
   const setShowHelp = useUIStore((s) => s.setShowHelp);
   const buckets = useMemo(() => makeBuckets(zoom, anchor), [zoom, anchor]);
   const can = useCan();
+  const shared = isShared();
+  const commentsOpen = useCollabStore((s) => s.comments !== null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -85,6 +128,10 @@ function PlannerApp() {
         <main className="main main-scroll">
           <ActivityView />
         </main>
+      ) : view === 'mentions' ? (
+        <main className="main main-scroll">
+          <MentionsView />
+        </main>
       ) : (
         <>
           <main className="main">
@@ -92,7 +139,8 @@ function PlannerApp() {
               {view === 'projects' ? <ProjectView buckets={buckets} /> : <ResourceView buckets={buckets} />}
             </div>
             {view === 'projects' && showUtilization && <UtilizationPanel />}
-            {showConflicts && <ConflictsPanel />}
+            {shared && <CommentsPanel />}
+            {showConflicts && !(shared && commentsOpen) && <ConflictsPanel />}
           </main>
           <footer className="legend">
             <span>

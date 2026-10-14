@@ -5,9 +5,10 @@ import type { Assignment, WeekKey } from '../domain/types';
 import { formatWeek, formatWeekRange } from '../domain/weeks';
 import { Modal } from '../components/Modal';
 import { useCollabStore } from '../store/collabStore';
-import { addLock, removeLock } from '../store/sharedPlanStore';
+import { addLock, removeLock, showComments } from '../store/sharedPlanStore';
 import { useCan } from '../store/useCan';
 import { useDerived } from '../store/useDerived';
+import { cellCommentAnchor } from './commentAnchors';
 import { roleTitle } from './format';
 import { HistoryPanel } from './HistoryPanel';
 
@@ -20,7 +21,7 @@ export interface CellMenuTarget {
   weeks: WeekKey[];
   /** Where to show the menu; null opens a direct action. */
   at: { x: number; y: number } | null;
-  direct?: 'history';
+  direct?: 'history' | 'comments';
 }
 
 /** Right-click menu on a grid cell in shared mode: history, locks. */
@@ -85,6 +86,16 @@ export function CellMenu({ target, onClose }: { target: CellMenuTarget; onClose:
     >
       <button type="button" role="menuitem" onClick={() => setHistory(true)}>
         History of this cell… <kbd>H</kbd>
+      </button>
+      <button
+        type="button"
+        role="menuitem"
+        onClick={() => {
+          onClose();
+          showComments({ anchor: cellCommentAnchor(target) });
+        }}
+      >
+        Comment… <kbd>M</kbd>
       </button>
       {can.edit && (
         <>

@@ -159,6 +159,20 @@ export function formatWeekRange(from: WeekKey, to: WeekKey): string {
  * server and every browser use this with the workspace's zone, so they agree
  * on which weeks are "past" even across a Monday.
  */
+/** The shared workspace's time zone until an admin picks one (Manage → Settings). */
+export const DEFAULT_TIME_ZONE = 'America/New_York';
+
+/** Whether a string is an IANA time zone this runtime knows. */
+export function isTimeZone(tz: string): boolean {
+  if (!tz || tz.length > 64) return false;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function weekInZone(timeZone: string | undefined, now: Date = new Date()): WeekKey {
   let ymd: string;
   try {

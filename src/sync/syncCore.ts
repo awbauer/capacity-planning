@@ -1,7 +1,7 @@
 import { applyPuts, type Put } from '../domain/diff';
 import { applyOp, type Op } from '../domain/ops';
 import type { ClientMsg, ServerMsg } from '../domain/protocol';
-import { PROTOCOL_VERSION } from '../domain/protocol';
+import { isSideChange, PROTOCOL_VERSION } from '../domain/protocol';
 import { createEmptyPlan } from '../domain/sampleData';
 import type { PlanData } from '../domain/types';
 
@@ -100,7 +100,7 @@ export class SyncCore {
         this.cidKind.delete(msg.cid);
         // Undoing makes a batch you can redo; anything else you did (redo included) can be undone.
         if (kind === 'undo') this.redoStack.push(msg.batch.batchId);
-        else if (!msg.batch.op.startsWith('lock.')) this.undoStack = [...this.undoStack, msg.batch.batchId].slice(-MAX_UNDO);
+        else if (!isSideChange(msg.batch.op)) this.undoStack = [...this.undoStack, msg.batch.batchId].slice(-MAX_UNDO);
         return { kind: 'own', cid: msg.cid, batchId: msg.batch.batchId, ...(msg.skipped ? { skipped: msg.skipped } : {}) };
       }
       case 'ack':

@@ -1,4 +1,5 @@
 import { useMemo, useRef } from 'react';
+import { isOpenThread } from '../domain/comments';
 import { allWorkstreamsCsv, slug } from '../domain/csv';
 import { hashString } from '../domain/hash';
 import { STATUS_LABELS } from '../domain/labels';
@@ -18,7 +19,7 @@ import { PresenceBar } from '../collab/PresenceBar';
 import { uniqueName } from '../domain/plans';
 import { useCollabStore } from '../store/collabStore';
 import { isLocalOverride, isShared } from '../store/mode';
-import { createSharedPlan, openSharedPlan } from '../store/sharedPlanStore';
+import { createSharedPlan, openSharedPlan, showComments } from '../store/sharedPlanStore';
 import { useCan } from '../store/useCan';
 import { Toggle } from './Toggle';
 
@@ -27,6 +28,7 @@ const VIEWS: { id: View; label: string; sharedOnly?: boolean }[] = [
   { id: 'resources', label: 'Resources' },
   { id: 'demand', label: 'Demand' },
   { id: 'activity', label: 'Activity', sharedOnly: true },
+  { id: 'mentions', label: 'Mentions', sharedOnly: true },
   { id: 'manage', label: 'Manage' },
 ];
 const ZOOMS: { id: Zoom; label: string }[] = [
@@ -56,6 +58,9 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
 
   const shared = isShared();
   const can = useCan();
+  const mentionCounts = useCollabStore((s) => s.mentionCounts);
+  const comments = useCollabStore((s) => s.comments);
+  const openThreads = useCollabStore((s) => Object.values(s.threads).filter(isOpenThread).length);
   // The "unsaved changes" hint is for this browser's plans; shared plans are saved as you go.
   const planHash = useMemo(() => (shared ? '' : hashString(JSON.stringify(plan))), [plan, shared]);
   const lastExport = ui.exports[meta.id];
@@ -141,6 +146,11 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
           {VIEWS.filter((v) => shared || !v.sharedOnly).map((v) => (
             <button key={v.id} type="button" aria-pressed={ui.view === v.id} onClick={() => ui.setView(v.id)}>
               {v.label}
+              {v.id === 'mentions' && mentionCounts.unreadOpen > 0 && (
+                <span className="count count-alert" title={`${mentionCounts.unreadOpen} unresolved thread(s) mentioning you have something new`}>
+                  {mentionCounts.unreadOpen}
+                </span>
+              )}
             </button>
           ))}
         </nav>
@@ -336,6 +346,17 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
               onClick={ui.toggleUtilization}
             >
               Utilization
+            </button>
+          )}
+          {shared && (
+            <button
+              type="button"
+              className="btn"
+              aria-pressed={!!comments}
+              title="Comment threads in this plan (right-click a cell or press M to comment on it)"
+              onClick={() => (comments ? useCollabStore.getState().set({ comments: null }) : showComments())}
+            >
+              Comments {openThreads > 0 && <span className="count">{openThreads}</span>}
             </button>
           )}
           <button

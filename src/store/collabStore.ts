@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { CommentAnchor, Thread } from '../domain/comments';
 import type { Lock } from '../domain/locks';
 import type { UserRole } from '../domain/permissions';
 import type { Me, Presence } from '../domain/protocol';
@@ -39,6 +40,19 @@ export interface RecentChange {
   ts: number;
 }
 
+/** What the comments panel shows: one thread, the threads on one cell or row, or (neither) the plan's list. */
+export interface CommentFocus {
+  anchor?: CommentAnchor;
+  threadId?: string;
+  /** Scroll the grid to the thread's row once it's known (opened from a link or the Mentions inbox). */
+  jump?: boolean;
+}
+
+export interface Person {
+  email: string;
+  name: string;
+}
+
 export interface Toast {
   id: number;
   msg: string;
@@ -64,6 +78,16 @@ interface CollabState {
   timeZone?: string;
   /** Cells someone else changed recently, by `${roleId}|${week}`. */
   recent: Record<string, RecentChange>;
+  /** The open plan's comment threads, by id. */
+  threads: Record<string, Thread>;
+  /** The comments panel: closed (null), or what it shows. */
+  comments: CommentFocus | null;
+  /** Everyone who can be @mentioned. */
+  people: Person[];
+  /** Unresolved threads that mention you, and how many have news. */
+  mentionCounts: { open: number; unreadOpen: number };
+  /** Mention emails: whether the server sends them, and whether you want them. */
+  prefs?: { mail: boolean; mentionEmails: boolean };
   toasts: Toast[];
   set: (patch: Partial<CollabState>) => void;
   toast: (msg: string, kind?: Toast['kind']) => void;
@@ -81,6 +105,10 @@ export const useCollabStore = create<CollabState>()((set, get) => ({
   presence: {},
   thisWeek: currentWeek(),
   recent: {},
+  threads: {},
+  comments: null,
+  people: [],
+  mentionCounts: { open: 0, unreadOpen: 0 },
   toasts: [],
   set: (patch) => set(patch),
   toast: (msg, kind = 'error') => {

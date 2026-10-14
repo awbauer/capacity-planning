@@ -5,8 +5,8 @@ import { DEFAULT_PLAN_ID } from '../domain/plans';
 import { addWeeks, currentWeek } from '../domain/weeks';
 import { isShared } from './mode';
 
-/** `activity` (the shared workspace's change log) only exists in shared mode. */
-export type View = 'projects' | 'resources' | 'demand' | 'activity' | 'manage';
+/** `activity` (the shared workspace's change log) and `mentions` (comment threads that mention you) only exist in shared mode. */
+export type View = 'projects' | 'resources' | 'demand' | 'activity' | 'mentions' | 'manage';
 
 /** The workstream or person whose details modal is open. */
 export type DetailsTarget = { kind: 'project'; id: string } | { kind: 'resource'; id: string };
@@ -176,7 +176,7 @@ export const useUIStore = create<UIState>()(
         return {
           ...current,
           ...p,
-          view: p.view === 'activity' && !isShared() ? 'projects' : (p.view ?? current.view),
+          view: (p.view === 'activity' || p.view === 'mentions') && !isShared() ? 'projects' : (p.view ?? current.view),
           manageTab: p.manageTab === 'users' && !isShared() ? 'settings' : (p.manageTab ?? current.manageTab),
         };
       },

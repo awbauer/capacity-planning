@@ -2,3 +2,6 @@
 # Lets you sign in as anyone on localhost: open /api/dev/login?as=you@example.com
 DEV_AUTH=1
 OWNER_EMAILS=alice@example.com
+# Mention emails: locally the email binding is simulated (logged, not sent).
+MAIL_FROM=Capacity Planning <notify@example.com>
+APP_URL=http://localhost:5173

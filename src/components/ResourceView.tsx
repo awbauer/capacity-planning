@@ -1,3 +1,4 @@
+import { RowComments } from '../collab/RowComments';
 import { useMemo, useState } from 'react';
 import { bucketStats, totalsGetter } from '../domain/aggregate';
 import { assignmentFlagWeeks, resourceLoadFlagged } from '../domain/conflicts';
@@ -151,6 +152,7 @@ export function ResourceView({ buckets }: Props) {
               <TagChips tagIds={r.tagIds} tagsById={d.tagsById} />
             </div>
           </div>
+          <RowComments kind="resource" id={r.id} name={r.name} />
           <button type="button" className="btn btn-small edit-only" onClick={() => setAdding(r.id)}>
             + Workstream
           </button>
@@ -211,6 +213,7 @@ export function ResourceView({ buckets }: Props) {
                 />
               </div>
             </div>
+            <RowComments kind="role" id={a.id} name={`${a.name || 'Unnamed role'} (${r.name}) on ${p.name}`} />
             <button
               type="button"
               className="icon-btn edit-only"

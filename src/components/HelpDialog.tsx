@@ -122,6 +122,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
             { what: 'Rename or delete plans', how: <><b>Manage</b> → Plans</> },
             { what: 'Back up or move a plan (export bumps its version; import overwrites the plan with the same name, else adds one)', how: <><b>Export</b> / <b>Import</b></> },
             { what: 'One workstream’s staffing plan as a spreadsheet', how: <><b>⤓ CSV</b> on the workstream row</> },
+            { what: 'Light or dark theme (or follow the system)', how: <><b>Manage</b> → Settings &amp; data → <b>Appearance</b></> },
             { what: 'All staffing in one CSV (one line per person per week)', how: <><b>CSV</b> in the toolbar</> },
           ]}
         />
@@ -133,6 +134,10 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
             { what: 'Recently changed by someone else', how: 'Coloured corner on the cell (hover for who and when)' },
             { what: 'History of a cell: who changed it, when, from what', how: <>Right-click → <b>History</b>, or select and press <b>H</b></> },
             { what: 'History of a workstream or person', how: 'Click its name → History' },
+            { what: 'Comment on cells (threaded; @ to mention someone)', how: <>Right-click → <b>Comment…</b>, or select and press <b>M</b></> },
+            { what: 'Comment on a role, workstream or person', how: <>The row’s <b>💬</b> button</> },
+            { what: 'Every thread in the plan; resolve or reopen', how: <><b>Comments</b> in the toolbar</> },
+            { what: 'Threads that mention you, across plans', how: <><b>Mentions</b> tab (badge: unread and unresolved)</> },
             { what: 'Freeze cells, a role or a workstream', how: <>Right-click a cell → <b>Lock…</b>; or the workstream’s details → <b>Lock staffing</b></> },
             { what: 'Undo your own last change (others’ later changes are kept)', how: <><b>Ctrl+Z</b></> },
             { what: 'Every change in every plan; undo any of them', how: <><b>Activity</b> tab</> },

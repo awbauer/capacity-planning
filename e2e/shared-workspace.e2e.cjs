@@ -185,6 +185,104 @@ async function until(fn, msg, timeout = 5000) {
   await carol.waitForSelector('.change-list li');
   await shot(carol, 'c09-activity');
 
+  // ── Comments: a thread on a cell, @mentions, the Mentions inbox, resolving ──
+  await cell(alice, 'sample-a1', 2).click({ button: 'right' });
+  await alice.locator('.cell-menu').getByRole('menuitem', { name: /Comment/ }).click();
+  const box = alice.locator('.comments-panel textarea');
+  await box.fill('Can we confirm this, @Bo');
+  await alice.waitForSelector('.mention-list');
+  await alice.keyboard.press('Enter');
+  await box.pressSequentially('please?');
+  await alice.keyboard.press('Control+Enter');
+  await alice.waitForSelector('.comments-panel .comment');
+  assert(await alice.locator('.comments-panel .mention', { hasText: '@Bob' }).count() === 1, 'a picked @mention shows as the person’s name');
+  const threadId = await alice.locator('.comments-panel .thread[data-thread]').first().getAttribute('data-thread');
+  await until(() => cell(alice, 'sample-a1', 2).locator('.comment-mark').count().then((n) => n === 1), 'the cell gets a comment marker');
+  await until(() => cell(bob, 'sample-a1', 2).locator('.comment-mark').count().then((n) => n === 1), 'Bob sees the marker live');
+  const mentionsTab = (p) => p.getByRole('button', { name: /^Mentions/ });
+  await until(() => mentionsTab(bob).locator('.count-alert').innerText().then((t) => t === '1'), 'Bob’s Mentions badge shows 1', 10000);
+  await shot(alice, 'c12-comment-thread');
+
+  await mentionsTab(bob).click();
+  await until(() => bob.locator('.mentions-table tr.unread').count().then((n) => n === 1), 'the thread is listed unresolved and unread');
+  assert(await bob.getByRole('checkbox', { name: /Email me when I’m mentioned/ }).isChecked(), 'mention emails are on by default when the server sends them');
+  await shot(bob, 'c13-mentions');
+  await bob.locator('.mentions-table tr.unread').click();
+  await bob.waitForSelector('.comments-panel .thread');
+  assert(await bob.locator('.grid').count() === 1, 'opening it goes to the grid with the thread open');
+  await until(() => mentionsTab(bob).locator('.count-alert').count().then((n) => n === 0), 'reading it clears the badge', 10000);
+  await bob.locator('.comments-panel textarea').fill('Confirmed with the client.');
+  await bob.getByRole('button', { name: 'Reply', exact: true }).click();
+  await until(() => alice.locator('.comments-panel .comment').count().then((n) => n === 2), 'Alice sees Bob’s reply live');
+  await bob.getByRole('button', { name: 'Resolve', exact: true }).click();
+  await until(() => alice.locator('.comments-panel .thread.resolved').count().then((n) => n === 1), 'Alice sees the thread resolved');
+  await until(() => cell(alice, 'sample-a1', 2).locator('.comment-mark').count().then((n) => n === 0), 'resolved threads leave no cell marker');
+  await mentionsTab(bob).click();
+  await bob.getByRole('button', { name: 'Resolved', exact: true }).click();
+  await until(() => bob.locator('.mentions-table tbody tr').count().then((n) => n === 1), 'the thread moves to Bob’s Resolved tab');
+
+  // A viewer comments on a row; authors edit and delete their own.
+  await carol.getByRole('button', { name: 'Workstreams', exact: true }).first().click();
+  await carol.waitForSelector('.grid');
+  await row(carol, 'sample-a1').locator('.row-comment').click();
+  assert(await carol.locator('.comments-panel .thread.resolved').count() === 1, 'a role’s comments include its cells’ threads');
+  await carol.getByRole('textbox', { name: 'Start a new thread…' }).fill('Who covers this when Alex is out?');
+  await carol.getByRole('button', { name: 'Comment', exact: true }).click();
+  await until(() => row(alice, 'sample-a1').locator('.row-comment.has').count().then((n) => n === 1), 'a viewer can comment on a row; Alice sees its count');
+  await alice.getByRole('button', { name: 'Edit', exact: true }).first().click();
+  await alice.locator('.comments-panel .comment textarea').fill('Can we confirm this one, @Bob?');
+  await alice.getByRole('button', { name: 'Save', exact: true }).click();
+  await until(() => alice.locator('.comments-panel .comment', { hasText: '(edited)' }).count().then((n) => n === 1), 'an edited comment says so');
+  await alice.getByRole('button', { name: 'Close comments' }).click();
+  const carolThread = carol.locator('.thread', { hasText: 'Who covers this' });
+  const carolThreadId = await carolThread.getAttribute('data-thread');
+  await carolThread.getByRole('textbox', { name: 'Reply…' }).fill('Also for December.');
+  await carolThread.getByRole('button', { name: 'Reply', exact: true }).click();
+  const ct = carol.locator(`.thread[data-thread="${carolThreadId}"]`);
+  await until(() => ct.locator('.comment').count().then((n) => n === 2), 'Carol replies to her own thread');
+  assert(await carol.locator('.thread.resolved').getByRole('button', { name: 'Edit', exact: true }).count() === 0, 'nobody else’s comments can be edited');
+  await ct.getByRole('button', { name: 'Delete', exact: true }).first().click();
+  await until(() => ct.locator('.comment.deleted', { hasText: 'Comment deleted' }).count().then((n) => n === 1), 'a deleted comment leaves a placeholder');
+  await ct.getByRole('button', { name: 'Delete', exact: true }).click();
+  await until(() => row(alice, 'sample-a1').locator('.row-comment.has').count().then((n) => n === 0), 'a thread with every comment deleted no longer counts');
+  await shot(carol, 'c14-row-comment');
+
+  // The activity log has every comment change, with no Undo.
+  await carol.getByRole('button', { name: 'Activity', exact: true }).click();
+  await carol.waitForSelector('.activity-table');
+  await until(
+    () => carol.locator('.activity-row').allInnerTexts().then((l) => l.some((x) => x.includes('Commented on')) && l.some((x) => x.includes('Resolved the thread')) && l.some((x) => x.includes('Deleted a comment'))),
+    'activity lists comments, resolving and deleting',
+  );
+  await carol.locator('.activity-row.clickable', { hasText: 'Commented on' }).first().click();
+  await carol.waitForSelector('text=Open thread');
+  assert(await carol.getByRole('button', { name: 'Undo this change' }).count() === 0, 'comment changes can’t be undone');
+
+  // A link to the thread (as in a mention email) opens it.
+  await bob.goto(`${BASE}/#comment=${global.planId}/${threadId}`);
+  await bob.waitForSelector(`.comments-panel .thread[data-thread="${threadId}"]`);
+  assert(!(await bob.evaluate(() => location.hash)), 'a comment link opens the thread (and leaves the address bar clean)');
+  await bob.getByRole('button', { name: 'Close comments' }).click();
+
+  // ── Workspace time zone: admins set it, everyone's open tab follows ──
+  for (const p of [alice, carol]) {
+    await p.getByRole('button', { name: 'Manage', exact: true }).click();
+    await p.getByRole('button', { name: 'Settings & data' }).click();
+  }
+  const zoneSelect = (p) => p.getByLabel('Workspace time zone');
+  assert((await zoneSelect(carol).inputValue()) === 'America/New_York', 'the time zone starts as America/New_York');
+  assert(await zoneSelect(carol).isDisabled(), 'only admins can change the time zone');
+  await zoneSelect(alice).selectOption('Asia/Tokyo');
+  await until(() => zoneSelect(carol).inputValue().then((v) => v === 'Asia/Tokyo'), 'a new time zone reaches Carol’s open tab live');
+  await alice.getByRole('button', { name: 'Activity', exact: true }).click();
+  await alice.locator('.activity-filters select[aria-label="Plan"]').selectOption('');
+  await until(() => alice.locator('.activity-row', { hasText: 'Set the workspace time zone to Asia/Tokyo' }).count().then((n) => n === 1), 'the change is in Activity');
+  await shot(carol, 'c15-time-zone');
+  await alice.getByRole('button', { name: 'Manage', exact: true }).click();
+  await alice.getByRole('button', { name: 'Settings & data' }).click();
+  await zoneSelect(alice).selectOption('America/New_York');
+  await until(() => zoneSelect(carol).inputValue().then((v) => v === 'America/New_York'), 'and back');
+
   // ── Demote Bob live: read-only again ──
   await alice.getByRole('button', { name: 'Manage', exact: true }).click();
   await alice.getByRole('button', { name: 'People & access' }).click();

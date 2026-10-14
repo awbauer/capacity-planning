@@ -1,12 +1,16 @@
 import type { Me } from '../src/domain/protocol';
 import { checkReferences } from '../src/domain/schema';
 import type { PlanData } from '../src/domain/types';
+import { assetResponse } from './assets';
 import { devAuthAllowed, identify, sameOrigin, type Identity } from './auth';
+import { clientFiles } from './clientFiles';
 import { roomStub, workspaceStub, type Env } from './env';
 import {
   activityQuery,
   body,
   createPlanBody,
+  prefsBody,
+  readBody,
   csvCell,
   fail,
   HttpError,
@@ -37,7 +41,36 @@ async function route(c: Ctx): Promise<Response> {
   const m = (re: RegExp) => path.match(re);
 
   if (path === '/api/me' && method === 'GET') {
-    return json({ me, defaultRole: me.role === 'admin' ? await ws.defaultRole() : undefined });
+    return json({
+      me,
+      defaultRole: me.role === 'admin' ? await ws.defaultRole() : undefined,
+      prefs: await ws.prefs(me.email),
+      timeZone: await ws.timeZone(),
+    });
+  }
+  if (path === '/api/me/prefs' && method === 'PUT') {
+    const b = await body(request, prefsBody);
+    return json({ prefs: await ws.setMentionEmails(me.email, b.mentionEmails) });
+  }
+
+  if (path === '/api/people' && method === 'GET') return json({ people: await ws.people() });
+
+  if (path === '/api/mentions' && method === 'GET') {
+    const p = url.searchParams;
+    const status = p.get('status');
+    return json(
+      await ws.mentions(me.email, {
+        status: status === 'open' || status === 'resolved' ? status : 'all',
+        ...(p.get('cursor') ? { cursor: p.get('cursor')! } : {}),
+        ...(p.get('limit') ? { limit: Number(p.get('limit')) } : {}),
+      }),
+    );
+  }
+  if (path === '/api/mentions/counts' && method === 'GET') return json({ counts: await ws.mentionCounts(me.email) });
+  if (path === '/api/mentions/read' && method === 'POST') {
+    const b = await body(request, readBody);
+    await ws.markRead(me.email, b.planId, b.threadId);
+    return json({ ok: true });
   }
 
   if (path === '/api/plans' && method === 'GET') {
@@ -52,7 +85,13 @@ async function route(c: Ctx): Promise<Response> {
     if (problem) throw new HttpError(400, problem);
     const row = await ws.createPlan(me.email, b.name, b.note);
     try {
-      await roomStub(env, row.id).init(row.id, { email: me.email, name: me.name }, plan ?? null, `Started plan “${row.name}”${b.note ? ` ${b.note}` : ''}`);
+      await roomStub(env, row.id).init(
+        row.id,
+        { email: me.email, name: me.name },
+        plan ?? null,
+        `Started plan “${row.name}”${b.note ? ` ${b.note}` : ''}`,
+        await ws.timeZone(),
+      );
     } catch (err) {
       // Nothing was saved: don't leave an empty plan holding the name.
       await ws.abandonPlan(row.id);
@@ -112,7 +151,7 @@ async function route(c: Ctx): Promise<Response> {
   r = m(/^\/api\/plans\/([\w-]{1,64})\/batches\/([\w-]{1,64})$/);
   if (r && method === 'GET') {
     await planOr404(env, r[1]);
-    const b = await roomStub(env, r[1]).batch(r[2]);
+    const b = await roomStub(env, r[1]).batch(r[2], me.role === 'admin');
     return b ? json(b) : fail(404, 'No such change.');
   }
 
@@ -172,17 +211,19 @@ async function route(c: Ctx): Promise<Response> {
   if (path === '/api/settings' && method === 'PUT') {
     requireRole(me, 'admin');
     const b = await body(request, settingsBody);
-    await ws.setDefaultRole(me.email, b.defaultRole);
-    return json({ defaultRole: b.defaultRole });
+    if (b.defaultRole) await ws.setDefaultRole(me.email, b.defaultRole);
+    if (b.timeZone) await ws.setTimeZone(me.email, b.timeZone);
+    return json({ defaultRole: await ws.defaultRole(), timeZone: await ws.timeZone() });
   }
 
   return fail(404, 'Not found');
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
-    if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
+    // Deployed, the Worker serves the app itself (see worker/assets.ts); in development the dev server does.
+    if (!url.pathname.startsWith('/api/')) return env.ASSETS ? env.ASSETS.fetch(request) : assetResponse(clientFiles, request);
 
     // Local development only: sign in as anyone (see README).
     if (url.pathname === '/api/dev/login') {
@@ -198,7 +239,7 @@ export default {
     }
 
     if (!sameOrigin(request)) return fail(403, 'Cross-site request blocked.');
-    const auth = await identify(request, env);
+    const auth = await identify(request, env, ctx);
     if (!auth.ok) return fail(auth.status, auth.msg);
     try {
       const me = await workspaceStub(env).touchUser(auth.identity.email, auth.identity.name);

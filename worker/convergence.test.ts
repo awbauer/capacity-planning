@@ -95,6 +95,7 @@ function makeServer(seed: number) {
         seq: room.seq,
         ...up,
         locks: [],
+        threads: room.threads(),
         presence: [],
         thisWeek: NOW,
         timeZone: 'UTC',
@@ -102,6 +103,10 @@ function makeServer(seed: number) {
       c.ready = true;
     } else if (msg.t === 'op') deliverResult(c, msg.cid, room.apply(c.user, msg.cid, msg.op, NOW));
     else if (msg.t === 'revert') deliverResult(c, msg.cid, room.revert(c.user, msg.cid, msg.batchId, NOW));
+    else if (msg.t === 'comment.add') {
+      const { cid, t: _t, ...input } = msg;
+      deliverResult(c, cid, room.addComment(c.user, cid, input));
+    }
   };
 
   const connect = (c: Client) => {
@@ -171,6 +176,7 @@ describe('browsers converge on the server’s plan', () => {
       const s = makeServer(seed);
       const { clients, r } = s;
       for (const c of clients) s.connect(c);
+      let comments = 0;
       for (let step = 0; step < 400; step++) {
         const c = r.pick(clients);
         const roll = r.next();
@@ -184,6 +190,11 @@ describe('browsers converge on the server’s plan', () => {
         } else if (roll < 0.35) {
           const msg = c.core.takeRevert(r.next() < 0.7 ? 'undo' : 'redo', true);
           if (msg) c.outbox.push(msg);
+        } else if (roll < 0.38) {
+          // Comments are recorded batches too (seq moves) but change no plan data.
+          const role = c.core.view().assignments[0];
+          const n = ++comments;
+          if (role) c.outbox.push({ t: 'comment.add', cid: `${c.user.email}-k${n}`, threadId: `t${n}`, commentId: `k${n}`, anchor: { kind: 'role', roleId: role.id }, body: 'hi' });
         } else if (roll < 0.6) s.serve(c);
         else if (roll < 0.97) s.receive(c);
         else s.drop(c);
@@ -201,6 +212,7 @@ describe('browsers converge on the server’s plan', () => {
         expect(c.core.pending, `${c.user.email} has nothing left pending`).toEqual([]);
         expect(deepEqual(c.core.confirmed, server), `${c.user.email} confirmed = server`).toBe(true);
         expect(deepEqual(c.core.view(), server), `${c.user.email} shows the server's plan`).toBe(true);
+        expect(c.core.seq, `${c.user.email} is at the server's seq`).toBe(s.room.seq);
       }
     });
   }

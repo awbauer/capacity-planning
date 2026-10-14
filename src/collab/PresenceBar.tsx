@@ -1,13 +1,7 @@
 import { useCollabStore } from '../store/collabStore';
 import { ROLE_LABELS } from '../domain/permissions';
+import { initials } from './format';
 
-const initials = (name: string) =>
-  name
-    .split(/\s+/)
-    .map((w) => w[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase();
 
 const VIEW_LABELS: Record<string, string> = {
   projects: 'Workstreams',
