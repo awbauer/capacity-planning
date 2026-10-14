@@ -1,7 +1,9 @@
 import type { Me } from '../src/domain/protocol';
 import { checkReferences } from '../src/domain/schema';
 import type { PlanData } from '../src/domain/types';
+import { assetResponse } from './assets';
 import { devAuthAllowed, identify, sameOrigin, type Identity } from './auth';
+import { clientFiles } from './clientFiles';
 import { roomStub, workspaceStub, type Env } from './env';
 import {
   activityQuery,
@@ -39,7 +41,12 @@ async function route(c: Ctx): Promise<Response> {
   const m = (re: RegExp) => path.match(re);
 
   if (path === '/api/me' && method === 'GET') {
-    return json({ me, defaultRole: me.role === 'admin' ? await ws.defaultRole() : undefined, prefs: await ws.prefs(me.email) });
+    return json({
+      me,
+      defaultRole: me.role === 'admin' ? await ws.defaultRole() : undefined,
+      prefs: await ws.prefs(me.email),
+      timeZone: await ws.timeZone(),
+    });
   }
   if (path === '/api/me/prefs' && method === 'PUT') {
     const b = await body(request, prefsBody);
@@ -78,7 +85,13 @@ async function route(c: Ctx): Promise<Response> {
     if (problem) throw new HttpError(400, problem);
     const row = await ws.createPlan(me.email, b.name, b.note);
     try {
-      await roomStub(env, row.id).init(row.id, { email: me.email, name: me.name }, plan ?? null, `Started plan “${row.name}”${b.note ? ` ${b.note}` : ''}`);
+      await roomStub(env, row.id).init(
+        row.id,
+        { email: me.email, name: me.name },
+        plan ?? null,
+        `Started plan “${row.name}”${b.note ? ` ${b.note}` : ''}`,
+        await ws.timeZone(),
+      );
     } catch (err) {
       // Nothing was saved: don't leave an empty plan holding the name.
       await ws.abandonPlan(row.id);
@@ -198,17 +211,19 @@ async function route(c: Ctx): Promise<Response> {
   if (path === '/api/settings' && method === 'PUT') {
     requireRole(me, 'admin');
     const b = await body(request, settingsBody);
-    await ws.setDefaultRole(me.email, b.defaultRole);
-    return json({ defaultRole: b.defaultRole });
+    if (b.defaultRole) await ws.setDefaultRole(me.email, b.defaultRole);
+    if (b.timeZone) await ws.setTimeZone(me.email, b.timeZone);
+    return json({ defaultRole: await ws.defaultRole(), timeZone: await ws.timeZone() });
   }
 
   return fail(404, 'Not found');
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
-    if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
+    // Deployed, the Worker serves the app itself (see worker/assets.ts); in development the dev server does.
+    if (!url.pathname.startsWith('/api/')) return env.ASSETS ? env.ASSETS.fetch(request) : assetResponse(clientFiles, request);
 
     // Local development only: sign in as anyone (see README).
     if (url.pathname === '/api/dev/login') {
@@ -224,7 +239,7 @@ export default {
     }
 
     if (!sameOrigin(request)) return fail(403, 'Cross-site request blocked.');
-    const auth = await identify(request, env);
+    const auth = await identify(request, env, ctx);
     if (!auth.ok) return fail(auth.status, auth.msg);
     try {
       const me = await workspaceStub(env).touchUser(auth.identity.email, auth.identity.name);

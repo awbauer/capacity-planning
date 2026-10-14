@@ -60,7 +60,7 @@ export class PlanRoom extends DurableObject<Env> {
   }
 
   private thisWeek(): string {
-    return weekInZone(this.env.TIMEZONE);
+    return weekInZone(this.room.timeZone);
   }
 
   // ── WebSocket connections ──
@@ -144,7 +144,7 @@ export class PlanRoom extends DurableObject<Env> {
           threads: this.room.threads(),
           presence: this.others(ws).filter((c) => c.ready).map(presenceOf),
           thisWeek: this.thisWeek(),
-          timeZone: this.env.TIMEZONE || 'UTC',
+          timeZone: this.room.timeZone,
         });
         const ready = { ...fresh, ready: true };
         ws.serializeAttachment(ready);
@@ -364,8 +364,9 @@ export class PlanRoom extends DurableObject<Env> {
   // ── called by the Worker and the Workspace (RPC) ──
 
   /** Creates the plan's content (new plan or upload), recorded as one change by `actor`. */
-  init(planId: string, actor: { email: string; name: string }, plan: PlanData | null, summary: string) {
+  init(planId: string, actor: { email: string; name: string }, plan: PlanData | null, summary: string, timeZone?: string) {
     this.room.setPlanId(planId);
+    if (timeZone) this.room.timeZone = timeZone;
     if (plan) {
       const r = this.room.replacePlan({ ...actor, role: 'editor' }, plan, summary);
       if (r.ok === true) this.ctx.waitUntil(this.flush());
@@ -396,6 +397,12 @@ export class PlanRoom extends DurableObject<Env> {
       ws.serializeAttachment({ ...conn, role });
       this.send(ws, { t: 'role', role });
     }
+  }
+
+  /** The workspace's time zone changed: "this week" moves for everyone with the plan open. */
+  setTimeZone(timeZone: string) {
+    this.room.timeZone = timeZone;
+    this.broadcast({ t: 'timezone', timeZone });
   }
 
   async setMeta(name: string, archived: boolean) {

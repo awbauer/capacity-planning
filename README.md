@@ -98,28 +98,24 @@ Admins manage people under Manage → *People & access*. Role changes apply live
 
 ### Setup
 
+No environment variables are required.
+
 1. **Deploy.** Workers Builds runs `npm run build` and `npx wrangler deploy`. The Durable Objects are created on the first deploy.
-2. **Put Cloudflare Access in front.** In the Worker's Settings → Domains & Routes, enable Cloudflare Access (or use an Access application on your domain) and allow your team. Set the Access cookie to SameSite **Lax** and HttpOnly.
-3. **Set the variables** under Worker → Settings → Variables. Deploys keep them.
+2. **Turn on Cloudflare Access** for the Worker (Worker → Settings → Domains & Routes → *Enable Cloudflare Access*), for the production URL and Preview URLs, and allow your team. The Worker reads who's signed in from Access (`ctx.access`); a request Access didn't sign in gets no shared workspace.
+3. **Optional variables** (Worker → Settings → Variables; deploys keep them):
 
-   | Variable | Value |
+   | Variable | What it does |
    | --- | --- |
-   | `TEAM_DOMAIN` | `https://<your-team>.cloudflareaccess.com` |
-   | `POLICY_AUD` | The Access application's audience (AUD) tag |
-   | `OWNER_EMAILS` | Comma-separated emails that are always admins. If it's empty and nobody is an admin yet, the first person to sign in becomes admin. Everyone else starts as a viewer. |
-   | `TIMEZONE` | Set in `wrangler.jsonc`, default `America/New_York`. Decides when "this week" starts. |
+   | `OWNER_EMAILS` | Comma-separated emails that are always admins. Without it, the first person to sign in becomes admin. Everyone else starts as a viewer. |
+   | `MAIL_FROM`, `APP_URL` | Turn on mention emails: onboard a sending domain under Email Service → Email Sending (it must use Cloudflare DNS), then set the sender (e.g. `Capacity Planning <mentions@notify.example.com>`) and the app's address. Only people with access are ever emailed. |
 
-4. **Mention emails (optional).**
-   - Onboard a sending domain under Email Service → Email Sending. The domain must use Cloudflare DNS.
-   - Set `MAIL_FROM` (e.g. `Capacity Planning <mentions@notify.example.com>`) and `APP_URL` (the app's address).
-   - Nothing is sent until both are set. Only people with access are ever emailed.
-5. **Open the app,** turn on the shared workspace, and upload your plans.
+4. **Open the app,** turn on the shared workspace, and upload your plans. An admin sets the workspace **time zone** under Manage → Settings (default America/New_York). It decides when "this week" starts for everyone, including the past-weeks lock.
 
-Until steps 2 and 3 are done, turning the shared workspace on shows "Can't reach the shared workspace", with a way back to local mode.
+**Previews:** every pull request gets a Preview URL with its own empty workspace (its own Durable Object storage, never production's data). The first person to sign in there is its admin.
 
 ### How it works
 
-- **Access:** the Worker verifies the Cloudflare Access token on every `/api/*` request.
+- **Access:** Cloudflare Access signs people in at the edge and hands the Worker the verified identity (`ctx.access`). Cloudflare doesn't pass that through Workers Static Assets, so the Worker serves the app's four built files itself (`worker/assets.ts`, inlined at build time by `vite.config.ts`). Deployments that still have `TEAM_DOMAIN` and `POLICY_AUD` set verify the Access token themselves instead; once sign-in works without them, they can be deleted.
 - **One plan, one Durable Object:** each plan is a `PlanRoom` Durable Object (SQLite). It applies edits one at a time and checks them against roles and locks. It records every changed cell and field with who made the change and when, and broadcasts over hibernating WebSockets. Comments are stored here too.
 - **The workspace:** a single `Workspace` Durable Object holds people, roles, the plan list, and the indexes behind Activity and Mentions. It sends mention emails through Cloudflare Email Service.
 - **Shared editing code:** edits are small deterministic operations (`src/domain/ops.ts`) that the browser and the server apply with the same code.

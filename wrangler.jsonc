@@ -10,7 +10,8 @@
     "directory": "./dist/client",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    // Only the API runs the Worker; the app itself is static.
+    // Development only: the build removes this and the Worker serves the app itself
+    // (worker/assets.ts), so Cloudflare Access's ctx.access reaches it. See vite.config.ts.
     "run_worker_first": ["/api/*"]
   },
   // The shared workspace (opt-in per browser). Each plan is one PlanRoom; Workspace
@@ -29,18 +30,17 @@
   // Cloudflare Email Service, for emailing people when they're @mentioned. Nothing is
   // sent until MAIL_FROM and APP_URL are set; see README "Comments and mentions".
   "send_email": [{ "name": "EMAIL" }],
-  // TEAM_DOMAIN, POLICY_AUD and OWNER_EMAILS are set in the dashboard (Settings →
-  // Variables) and kept across deploys; see README "Shared workspace".
+  // No variables are needed. Optional ones (OWNER_EMAILS; MAIL_FROM and APP_URL for mention
+  // emails) are set in the dashboard and kept across deploys; see README "Shared workspace".
   "keep_vars": true,
-  "vars": {
-    // Decides when "this week" starts for the past-weeks lock.
-    "TIMEZONE": "America/New_York"
-  },
-  // Preview deployments (Workers Builds on non-production branches) don't inherit vars
-  // or the email binding, so they're repeated here.
+  // Preview deployments (Workers Builds on non-production branches) don't inherit bindings.
+  // Each Preview gets its own, empty Durable Object storage (never production's data).
   "previews": {
-    "vars": {
-      "TIMEZONE": "America/New_York"
+    "durable_objects": {
+      "bindings": [
+        { "name": "PLAN_ROOM", "class_name": "PlanRoom" },
+        { "name": "WORKSPACE", "class_name": "Workspace" }
+      ]
     },
     "send_email": [{ "name": "EMAIL" }]
   }

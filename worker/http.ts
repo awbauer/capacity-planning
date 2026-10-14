@@ -40,7 +40,10 @@ export const patchUserBody = z.object({ role: z.enum(USER_ROLES as [UserRole, ..
 export const inviteBody = z.object({ email: z.string().max(320), role: z.enum(USER_ROLES as [UserRole, ...UserRole[]]) });
 export const prefsBody = z.object({ mentionEmails: z.boolean() });
 export const readBody = z.object({ planId: z.string().regex(/^[\w-]{1,64}$/), threadId: z.string().regex(/^[\w-]{1,64}$/) });
-export const settingsBody = z.object({ defaultRole: z.enum(['viewer', 'editor', 'admin', 'none']) });
+export const settingsBody = z.object({
+  defaultRole: z.enum(['viewer', 'editor', 'admin', 'none']).optional(),
+  timeZone: z.string().max(64).optional(),
+});
 
 export function activityQuery(url: URL, me: Me): ActivityQuery {
   const p = url.searchParams;

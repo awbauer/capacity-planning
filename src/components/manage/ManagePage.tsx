@@ -1,5 +1,5 @@
 import { setTheme, useTheme, type Theme } from '../../store/theme';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { hashString } from '../../domain/hash';
 import { TAG_COLORS } from '../../domain/ids';
@@ -19,7 +19,7 @@ import { UsersTable } from '../../collab/UsersTable';
 import { newId } from '../../domain/ids';
 import { useCollabStore } from '../../store/collabStore';
 import { getPreferredMode, isLocalOverride, isShared, setPreferredMode } from '../../store/mode';
-import { addLock, removeLock } from '../../store/sharedPlanStore';
+import { addLock, removeLock, setWorkspaceTimeZone } from '../../store/sharedPlanStore';
 import { useCan } from '../../store/useCan';
 import { Toggle } from '../Toggle';
 
@@ -514,6 +514,40 @@ function AppearanceSetting() {
   );
 }
 
+/** Shared mode: the workspace's time zone (admins change it). */
+function TimeZoneSetting() {
+  const can = useCan();
+  const zone = useCollabStore((s) => s.timeZone);
+  const toast = useCollabStore((s) => s.toast);
+  const browser = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const zones = useMemo(() => {
+    const all = typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : [];
+    return [...new Set([...(zone ? [zone] : []), browser, ...all])].sort();
+  }, [zone, browser]);
+  const save = (tz: string) => setWorkspaceTimeZone(tz).then(() => toast(`Time zone set to ${tz}.`, 'info'), (e: Error) => toast(e.message));
+  return (
+    <label className="time-zone-setting">
+      Time zone
+      <span className="time-zone-row">
+        <select aria-label="Workspace time zone" value={zone ?? ''} disabled={!can.admin} onChange={(e) => void save(e.target.value)}>
+          {!zone && <option value="">…</option>}
+          {zones.map((z) => (
+            <option key={z} value={z}>
+              {z.replace(/_/g, ' ')}
+            </option>
+          ))}
+        </select>
+        {can.admin && zone !== browser && (
+          <button type="button" className="btn btn-small" onClick={() => void save(browser)}>
+            Use mine ({browser.replace(/_/g, ' ')})
+          </button>
+        )}
+      </span>
+      <span className="muted small">Decides when “this week” starts for everyone in the shared workspace, including the past-weeks lock.</span>
+    </label>
+  );
+}
+
 /** Shared mode: admins can freeze every week before this one. */
 function PastWeeksLock() {
   const can = useCan();
@@ -544,6 +578,7 @@ function SettingsPanel() {
       <SharedWorkspaceSetting />
       <AppearanceSetting />
       {shared && !can.admin && <p className="callout">Only admins can change these settings.</p>}
+      {shared && <TimeZoneSetting />}
       {shared && <PastWeeksLock />}
       <fieldset className="plain-fieldset" disabled={!can.admin}>
       <label>

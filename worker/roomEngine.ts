@@ -33,6 +33,7 @@ import { revertChanges } from '../src/domain/revert';
 import { createEmptyPlan } from '../src/domain/sampleData';
 import { checkReferences } from '../src/domain/schema';
 import type { PlanData, WeekKey } from '../src/domain/types';
+import { DEFAULT_TIME_ZONE } from '../src/domain/weeks';
 import { metaGet, metaSet, migrate, one, type Sql, type SqlValue } from './sql';
 
 const MIGRATIONS = [
@@ -157,6 +158,15 @@ export class RoomEngine {
 
   bumpEpoch() {
     metaSet(this.sql, 'epoch', this.epoch + 1);
+  }
+
+  /** The workspace's time zone, which decides "this week" (pushed by the Workspace when an admin changes it). */
+  get timeZone(): string {
+    return metaGet(this.sql, 'time_zone') ?? DEFAULT_TIME_ZONE;
+  }
+
+  set timeZone(tz: string) {
+    metaSet(this.sql, 'time_zone', tz);
   }
 
   get planId(): string | undefined {

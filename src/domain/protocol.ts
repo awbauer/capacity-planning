@@ -104,6 +104,8 @@ export type ServerMsg =
   | { t: 'presence'; presence: Presence }
   | { t: 'presence.leave'; connId: string }
   | { t: 'role'; role: UserRole }
+  /** The workspace's time zone changed (decides "this week"). */
+  | { t: 'timezone'; timeZone: string }
   | { t: 'meta'; name: string; archived: boolean };
 
 /**

@@ -397,6 +397,9 @@ class Session {
       case 'thread':
         this.onThread(msg.thread);
         return;
+      case 'timezone':
+        this.collab.set({ timeZone: msg.timeZone, thisWeek: weekInZone(msg.timeZone) });
+        return;
       case 'presence':
         this.collab.set({ presence: { ...this.collab.presence, [msg.presence.connId]: msg.presence } });
         return;
@@ -521,9 +524,9 @@ export function useSharedHistory() {
 export async function bootShared() {
   const collab = useCollabStore.getState();
   try {
-    const { me, prefs } = await api<{ me: SharedMe; prefs?: { mail: boolean; mentionEmails: boolean } }>('/api/me');
+    const { me, prefs, timeZone } = await api<{ me: SharedMe; prefs?: { mail: boolean; mentionEmails: boolean }; timeZone?: string }>('/api/me');
     const { plans } = await api<{ plans: ServerPlan[] }>('/api/plans');
-    collab.set({ me, plans, ...(prefs ? { prefs } : {}) });
+    collab.set({ me, plans, ...(prefs ? { prefs } : {}), ...(timeZone ? { timeZone, thisWeek: weekInZone(timeZone) } : {}) });
     watchMentions();
     const link = takeCommentLink();
     const last = link?.planId ?? readPrefs().lastPlanId;
@@ -657,6 +660,12 @@ export async function markThreadRead(planId: string, threadId: string) {
   } catch {
     reads.delete(key);
   }
+}
+
+/** Admins: the workspace's time zone, which decides "this week" for everyone. */
+export async function setWorkspaceTimeZone(timeZone: string) {
+  const r = await api<{ timeZone: string }>('/api/settings', { method: 'PUT', json: { timeZone } });
+  useCollabStore.getState().set({ timeZone: r.timeZone, thisWeek: weekInZone(r.timeZone) });
 }
 
 export async function setMentionEmails(on: boolean) {

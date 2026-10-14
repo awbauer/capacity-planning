@@ -4,15 +4,14 @@ import type { Workspace } from './workspace';
 export interface Env {
   PLAN_ROOM: DurableObjectNamespace<PlanRoom>;
   WORKSPACE: DurableObjectNamespace<Workspace>;
-  ASSETS: Fetcher;
+  /** Development only (the dev server's assets); deployed, the Worker serves the app itself. */
+  ASSETS?: Fetcher;
   /** https://<team>.cloudflareaccess.com */
   TEAM_DOMAIN?: string;
   /** The Access application's audience (AUD) tag. */
   POLICY_AUD?: string;
   /** Comma-separated emails that are always admins. */
   OWNER_EMAILS?: string;
-  /** IANA time zone that decides "this week" for the past-weeks lock. */
-  TIMEZONE?: string;
   /** "1" (in .dev.vars only) allows the dev sign-in cookie on localhost. */
   DEV_AUTH?: string;
   /** Cloudflare Email Service, for mention emails. */

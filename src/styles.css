@@ -2867,3 +2867,14 @@ tr.archived {
   border-radius: 50%;
   background: var(--accent);
 }
+
+.time-zone-setting {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.time-zone-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

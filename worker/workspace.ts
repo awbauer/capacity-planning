@@ -35,6 +35,18 @@ export class Workspace extends DurableObject<Env> {
     this.ws.setDefaultRole(actor, role);
   }
 
+  timeZone() {
+    return this.ws.timeZone;
+  }
+
+  /** Changes the time zone and tells every plan, so open tabs move "this week" at once. */
+  async setTimeZone(actor: string, tz: string) {
+    this.ws.setTimeZone(actor, tz);
+    const zone = this.ws.timeZone;
+    await Promise.allSettled(this.ws.plans(true).map((p) => roomStub(this.env, p.id).setTimeZone(zone)));
+    return zone;
+  }
+
   /** Changes a role or access, and tells every open plan so connected browsers update at once. */
   async updateUser(actor: string, email: string, patch: { role?: UserRole; disabled?: boolean }) {
     const user = this.ws.updateUser(actor, email, patch);

@@ -264,6 +264,25 @@ async function until(fn, msg, timeout = 5000) {
   assert(!(await bob.evaluate(() => location.hash)), 'a comment link opens the thread (and leaves the address bar clean)');
   await bob.getByRole('button', { name: 'Close comments' }).click();
 
+  // ── Workspace time zone: admins set it, everyone's open tab follows ──
+  for (const p of [alice, carol]) {
+    await p.getByRole('button', { name: 'Manage', exact: true }).click();
+    await p.getByRole('button', { name: 'Settings & data' }).click();
+  }
+  const zoneSelect = (p) => p.getByLabel('Workspace time zone');
+  assert((await zoneSelect(carol).inputValue()) === 'America/New_York', 'the time zone starts as America/New_York');
+  assert(await zoneSelect(carol).isDisabled(), 'only admins can change the time zone');
+  await zoneSelect(alice).selectOption('Asia/Tokyo');
+  await until(() => zoneSelect(carol).inputValue().then((v) => v === 'Asia/Tokyo'), 'a new time zone reaches Carol’s open tab live');
+  await alice.getByRole('button', { name: 'Activity', exact: true }).click();
+  await alice.locator('.activity-filters select[aria-label="Plan"]').selectOption('');
+  await until(() => alice.locator('.activity-row', { hasText: 'Set the workspace time zone to Asia/Tokyo' }).count().then((n) => n === 1), 'the change is in Activity');
+  await shot(carol, 'c15-time-zone');
+  await alice.getByRole('button', { name: 'Manage', exact: true }).click();
+  await alice.getByRole('button', { name: 'Settings & data' }).click();
+  await zoneSelect(alice).selectOption('America/New_York');
+  await until(() => zoneSelect(carol).inputValue().then((v) => v === 'America/New_York'), 'and back');
+
   // ── Demote Bob live: read-only again ──
   await alice.getByRole('button', { name: 'Manage', exact: true }).click();
   await alice.getByRole('button', { name: 'People & access' }).click();

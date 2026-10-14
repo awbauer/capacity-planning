@@ -2,6 +2,7 @@ import { sameName } from '../src/domain/plans';
 import type { UserRole } from '../src/domain/permissions';
 import type { Me } from '../src/domain/protocol';
 import { plainBody, type MentionNotice, type ThreadIndexRow } from '../src/domain/comments';
+import { DEFAULT_TIME_ZONE, isTimeZone } from '../src/domain/weeks';
 import type { ActivityRow } from './roomEngine';
 import { metaGet, metaSet, migrate, one, type Sql, type SqlValue } from './sql';
 
@@ -168,6 +169,18 @@ export class WorkspaceEngine {
     if (role === this.defaultRole) return;
     metaSet(this.sql, 'default_role', role);
     this.event(actor, 'settings', `Set the role for new people to ${role === 'none' ? 'no access' : role}`);
+  }
+
+  /** The time zone that decides "this week" for everyone (and the past-weeks lock). */
+  get timeZone(): string {
+    return metaGet(this.sql, 'time_zone') ?? DEFAULT_TIME_ZONE;
+  }
+
+  setTimeZone(actor: string, tz: string) {
+    if (!isTimeZone(tz)) throw new Error(`“${tz}” isn’t a time zone.`);
+    if (tz === this.timeZone) return;
+    metaSet(this.sql, 'time_zone', tz);
+    this.event(actor, 'settings', `Set the workspace time zone to ${tz}`);
   }
 
   /** Records a sign-in and returns who they are, creating them with the default role the first time. */

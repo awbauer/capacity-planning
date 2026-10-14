@@ -307,3 +307,22 @@ describe('mention email', () => {
     expect(parseSender('"Cap" <n@x.com>')).toEqual({ email: 'n@x.com', name: 'Cap' });
   });
 });
+
+describe('workspace time zone', () => {
+  it('defaults to New York, rejects unknown zones, and logs a change', () => {
+    const ws = new WorkspaceEngine(nodeSql(), new Set(['alice@x.com']));
+    expect(ws.timeZone).toBe('America/New_York');
+    expect(() => ws.setTimeZone('alice@x.com', 'Mars/Olympus')).toThrow(/isn’t a time zone/);
+    ws.setTimeZone('alice@x.com', 'Europe/London');
+    expect(ws.timeZone).toBe('Europe/London');
+    expect(ws.activity({ workspace: true }).entries[0]).toMatchObject({ op: 'settings', summary: 'Set the workspace time zone to Europe/London' });
+  });
+
+  it('is kept by each plan room, New York until told otherwise', () => {
+    const sql = nodeSql();
+    const room = new RoomEngine(sql);
+    expect(room.timeZone).toBe('America/New_York');
+    room.timeZone = 'Asia/Tokyo';
+    expect(new RoomEngine(sql).timeZone).toBe('Asia/Tokyo');
+  });
+});
