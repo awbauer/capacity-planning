@@ -62,13 +62,14 @@ export function sessionExpiry(request: Request, now = Date.now()): number {
  * Who is making the request. Cloudflare Access signs people in at the edge
  * and hands the Worker the verified identity in `ctx.access` (the Worker
  * serves the app itself so that this reaches it; see worker/assets.ts).
- * Without it, the request didn't come through Access and is refused.
+ * Without it, Cloudflare is asked who the Access token belongs to (see
+ * edgeIdentity); without a token Access confirms, the request is refused.
  *
  * Fallback while TEAM_DOMAIN and POLICY_AUD are still set (older
  * deployments): the Access token is verified here instead. Remove them once
  * `ctx.access` is confirmed working.
  */
-export async function identify(request: Request, env: Env, ctx?: AccessContext): Promise<AuthResult> {
+export async function identify(request: Request, env: Env, ctx?: AccessContext, fetcher: typeof fetch = fetch): Promise<AuthResult> {
   const url = new URL(request.url);
   if (devAuthAllowed(env, url)) {
     const email = cookie(request, 'dev_user')?.trim().toLowerCase();
@@ -82,7 +83,52 @@ export async function identify(request: Request, env: Env, ctx?: AccessContext):
     return { ok: true, identity: { email, name, exp: sessionExpiry(request) } };
   }
   if (env.TEAM_DOMAIN && env.POLICY_AUD) return verifyToken(request, env.TEAM_DOMAIN, env.POLICY_AUD);
+  const edge = await edgeIdentity(request, fetcher);
+  if (edge) return { ok: true, identity: edge };
   return { ok: false, status: 401, msg: 'Sign in through Cloudflare Access.' };
+}
+
+/** Identities Cloudflare confirmed, by Access token, until the session ends. */
+const confirmed = new Map<string, Identity>();
+const MAX_CONFIRMED = 500;
+
+/**
+ * Who Cloudflare Access says the token belongs to, asked of this hostname's
+ * own /cdn-cgi/access/get-identity. Cloudflare checks the token against the
+ * Access application protecting exactly this hostname, so a forged token, or
+ * one from another Access team, gets nothing; so does a hostname Access
+ * doesn't protect. Used when `ctx.access` isn't set (it isn't for every way
+ * of attaching Access, e.g. the shared Preview URLs application).
+ */
+export async function edgeIdentity(request: Request, fetcher: typeof fetch = fetch): Promise<Identity | undefined> {
+  const token = cookie(request, 'CF_Authorization') || request.headers.get('Cf-Access-Jwt-Assertion') || '';
+  if (!token || token.length > 8192) return undefined;
+  const cached = confirmed.get(token);
+  if (cached && cached.exp > Date.now()) return cached;
+  confirmed.delete(token);
+  let status = 0;
+  try {
+    const res = await fetcher(new URL('/cdn-cgi/access/get-identity', request.url), {
+      headers: { Cookie: `CF_Authorization=${token}`, Accept: 'application/json' },
+      redirect: 'manual',
+    });
+    status = res.status;
+    if (res.status === 200) {
+      const who = (await res.json().catch(() => null)) as { email?: unknown; name?: unknown } | null;
+      const email = typeof who?.email === 'string' ? who.email.trim().toLowerCase() : '';
+      if (email) {
+        const name = typeof who?.name === 'string' && who.name ? who.name : nameFromEmail(email);
+        const identity = { email, name, exp: sessionExpiry(request) };
+        if (confirmed.size >= MAX_CONFIRMED) confirmed.delete(confirmed.keys().next().value!);
+        confirmed.set(token, identity);
+        return identity;
+      }
+    }
+  } catch {
+    status = -1;
+  }
+  console.warn('access identity', status);
+  return undefined;
 }
 
 /** Verifies the Access token against the team's public keys and the application's audience(s, comma-separated). */

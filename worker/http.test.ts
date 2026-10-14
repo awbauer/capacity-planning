@@ -28,11 +28,49 @@ describe('auth', () => {
     });
     expect(await identify(req, env(), access({ email: 'bo.diaz@x.com' }))).toMatchObject({ ok: true, identity: { name: 'Bo Diaz' } });
     expect(await identify(req, env(), access({}))).toMatchObject({ ok: false, status: 401 });
-    // No ctx.access (an unprotected URL), even with a token header: refused.
+    // No ctx.access and Cloudflare doesn't confirm the token (an unprotected URL, a forged token): refused.
     const forged = new Request('https://plans.example.com/api/me', { headers: { 'Cf-Access-Jwt-Assertion': 'not.a.jwt' } });
-    expect(await identify(forged, env(), {})).toMatchObject({ ok: false, status: 401 });
+    expect(await identify(forged, env(), {}, async () => new Response('', { status: 404 }))).toMatchObject({ ok: false, status: 401 });
     // The fallback token check (TEAM_DOMAIN and POLICY_AUD set) rejects a bad token.
     expect(await identify(forged, env({ TEAM_DOMAIN: 'https://t.cloudflareaccess.com', POLICY_AUD: 'aud' }))).toMatchObject({ ok: false, status: 401 });
+  });
+
+  it('without ctx.access, asks this hostname’s Access for the identity, and caches it', async () => {
+    const calls: { url: string; init?: RequestInit }[] = [];
+    const respond = (body: unknown, status = 200, type = 'application/json') => async (url: URL | RequestInfo, init?: RequestInit) => {
+      calls.push({ url: String(url), init });
+      return new Response(typeof body === 'string' ? body : JSON.stringify(body), { status, headers: { 'Content-Type': type } });
+    };
+    const withCookie = (t: string) => new Request('https://p.example.dev/api/me', { headers: { Cookie: `a=1; CF_Authorization=${t}` } });
+
+    const ok = await identify(withCookie('tok1'), env(), {}, respond({ email: 'Ann@X.com', name: 'Ann Lee' }) as typeof fetch);
+    expect(ok).toMatchObject({ ok: true, identity: { email: 'ann@x.com', name: 'Ann Lee' } });
+    expect(calls[0].url).toBe('https://p.example.dev/cdn-cgi/access/get-identity');
+    expect(calls[0].init).toMatchObject({ redirect: 'manual', headers: { Cookie: 'CF_Authorization=tok1' } });
+    // Cached: no second call for the same token.
+    await identify(withCookie('tok1'), env(), {}, respond({ email: 'x@x.com' }) as typeof fetch);
+    expect(calls).toHaveLength(1);
+    // The header works too.
+    const viaHeader = new Request('https://p.example.dev/api/me', { headers: { 'Cf-Access-Jwt-Assertion': 'tok2' } });
+    expect(await identify(viaHeader, env(), {}, respond({ email: 'bo@x.com' }) as typeof fetch)).toMatchObject({ ok: true, identity: { email: 'bo@x.com', name: 'Bo' } });
+
+    // Anything but a 200 with an email is no identity.
+    const refused = [
+      respond('', 302),
+      respond({ err: 'no' }, 401),
+      respond('<html>login</html>', 200, 'text/html'),
+      respond({ name: 'No Email' }),
+      async () => {
+        throw new Error('network');
+      },
+    ];
+    for (const [i, f] of refused.entries()) {
+      expect(await identify(withCookie(`bad${i}`), env(), {}, f as typeof fetch)).toMatchObject({ ok: false, status: 401 });
+    }
+    // No token: nothing to ask.
+    const before = calls.length;
+    expect(await identify(new Request('https://p.example.dev/api/me'), env(), {}, respond({ email: 'x@x.com' }) as typeof fetch)).toMatchObject({ ok: false });
+    expect(calls.length).toBe(before);
   });
 
   it('reads the session expiry from the Access token, within limits', () => {
