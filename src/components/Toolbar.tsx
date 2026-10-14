@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { isOpenThread } from '../domain/comments';
 import { allWorkstreamsCsv, slug } from '../domain/csv';
 import { hashString } from '../domain/hash';
@@ -7,12 +7,14 @@ import { serializePlan } from '../domain/plans';
 import { parsePlanFile } from '../domain/schema';
 import type { ProjectStatus, Zoom } from '../domain/types';
 import { LOOKAHEAD_WEEKS } from '../domain/utilization';
-import { currentWeek, shiftAnchor, type Bucket } from '../domain/weeks';
+import { issueCounts, openRoleDemand } from '../domain/capacity';
+import { formatWeekRange, shiftAnchor, type Bucket } from '../domain/weeks';
 import { findPlanByName, redo, undo, useHistory, usePlan, usePlanMeta, usePlanStore } from '../store/planStore';
 import { useUIStore, type View } from '../store/uiStore';
 import { useDerived } from '../store/useDerived';
 import { downloadText, today } from './download';
-import { Pie } from './grid/Pie';
+import { MenuItem, Popover } from './Popover';
+import { ProjectDialog } from './ProjectDialog';
 import { PlanSwitcher } from './PlanSwitcher';
 import { apiDownload } from '../api/client';
 import { PresenceBar } from '../collab/PresenceBar';
@@ -65,9 +67,13 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
   const planHash = useMemo(() => (shared ? '' : hashString(JSON.stringify(plan))), [plan, shared]);
   const lastExport = ui.exports[meta.id];
   const dirty = lastExport?.hash !== planHash;
-  const thisWeek = currentWeek();
-  const conflictCount =
-    d.overallocations.filter((o) => o.to >= thisWeek).length + d.skillIssues.length + d.upcomingRoles.length;
+  const [creating, setCreating] = useState(false);
+  const visibleWeeks = useMemo(() => buckets.flatMap((b) => b.weeks), [buckets]);
+  const issues = useMemo(
+    () => issueCounts(d.overallocations, openRoleDemand(plan, visibleWeeks), visibleWeeks),
+    [d.overallocations, plan, visibleWeeks],
+  );
+  const skillCount = d.skillIssues.length;
   const isGrid = ui.view === 'projects' || ui.view === 'resources';
 
   const exportPlan = () => {
@@ -133,16 +139,20 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
     }
   };
 
-  const rangeLabel = buckets.length
-    ? `${buckets[0].label} ${buckets[0].sublabel ?? ''} – ${buckets[buckets.length - 1].label} ${buckets[buckets.length - 1].sublabel ?? ''}`
-    : '';
+  const rangeLabel = buckets.length ? formatWeekRange(buckets[0].weeks[0], buckets[buckets.length - 1].weeks.at(-1)!) : '';
+  const activeFilters = [ui.filters.tagId, ui.filters.status, ui.filters.sellerId].filter(Boolean).length;
+  const issueParts = [
+    issues.conflicts > 0 && { n: issues.conflicts, label: issues.conflicts === 1 ? 'conflict' : 'conflicts', cls: 'danger' },
+    issues.risks > 0 && { n: issues.risks, label: 'at risk', cls: 'risk' },
+    issues.openRoles > 0 && { n: issues.openRoles, label: issues.openRoles === 1 ? 'open role' : 'open roles', cls: 'open' },
+  ].filter((x): x is { n: number; label: string; cls: string } => !!x);
 
   return (
     <header className="toolbar">
-      <div className="toolbar-row">
+      <div className="toolbar-row app-header">
         <h1 className="brand">Capacity Planner</h1>
         <PlanSwitcher />
-        <nav className="segmented" aria-label="View">
+        <nav className="tabs-nav" aria-label="View">
           {VIEWS.filter((v) => shared || !v.sharedOnly).map((v) => (
             <button key={v.id} type="button" aria-pressed={ui.view === v.id} onClick={() => ui.setView(v.id)}>
               {v.label}
@@ -155,18 +165,6 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
           ))}
         </nav>
         <span className="spacer" />
-        <button
-          type="button"
-          className="btn"
-          onClick={undo}
-          disabled={!canUndo}
-          title={shared ? 'Undo your last change (Ctrl+Z). Later changes by others are kept.' : 'Undo (Ctrl+Z)'}
-        >
-          ↶ Undo
-        </button>
-        <button type="button" className="btn" onClick={redo} disabled={!canRedo} title="Redo (Ctrl+Shift+Z)">
-          ↷ Redo
-        </button>
         {shared ? (
           <PresenceBar />
         ) : (
@@ -182,42 +180,50 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
             </span>
           </>
         )}
-        <button type="button" className="btn" onClick={() => ui.setShowHelp(true)} title="Interactions and shortcuts (?)">
-          ? Help
-        </button>
         <button
           type="button"
           className="btn"
-          onClick={exportPlan}
-          title={
-            shared
-              ? `Download "${meta.name}" as JSON (a backup, or to use in a browser-only plan)`
-              : `Download "${meta.name}" as v${meta.revision + 1} (JSON). Each export increments the version.`
-          }
+          onClick={undo}
+          disabled={!canUndo}
+          title={shared ? 'Undo your last change (Ctrl+Z). Later changes by others are kept.' : 'Undo (Ctrl+Z)'}
         >
-          Export
+          ↶ Undo
         </button>
-        <button
-          type="button"
-          className="btn"
-          onClick={exportCsv}
-          title="Staffing for every workstream as one CSV (one line per person per week). Each workstream row also has its own CSV download."
-        >
-          CSV
+        <button type="button" className="btn" onClick={redo} disabled={!canRedo} title="Redo (Ctrl+Shift+Z)">
+          ↷ Redo
         </button>
-        <button
-          type="button"
-          className="btn"
-          onClick={() => fileRef.current?.click()}
-          disabled={shared && !can.edit}
-          title={
-            shared
-              ? 'Import a JSON export as a new plan in the shared workspace.'
-              : 'Import a JSON export. It overwrites the plan with the same name, or becomes a new plan.'
-          }
-        >
-          Import
+        <button type="button" className="btn btn-icon" aria-label="Help" onClick={() => ui.setShowHelp(true)} title="Interactions and shortcuts (?)">
+          ?
         </button>
+        <Popover className="btn btn-icon" label="⋯" ariaLabel="More" title="Export, CSV and import">
+          <MenuItem
+            onClick={exportPlan}
+            title={
+              shared
+                ? `Download "${meta.name}" as JSON (a backup, or to use in a browser-only plan)`
+                : `Download "${meta.name}" as v${meta.revision + 1} (JSON). Each export increments the version.`
+            }
+          >
+            Export plan (JSON)
+          </MenuItem>
+          <MenuItem
+            onClick={exportCsv}
+            title="Staffing for every workstream as one CSV (one line per person per week). Each workstream also has its own CSV download."
+          >
+            Export staffing (CSV)
+          </MenuItem>
+          <MenuItem
+            onClick={() => fileRef.current?.click()}
+            disabled={shared && !can.edit}
+            title={
+              shared
+                ? 'Import a JSON export as a new plan in the shared workspace.'
+                : 'Import a JSON export. It overwrites the plan with the same name, or becomes a new plan.'
+            }
+          >
+            Import plan…
+          </MenuItem>
+        </Popover>
         <input
           ref={fileRef}
           type="file"
@@ -231,7 +237,7 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
         />
       </div>
       {isGrid && (
-        <div className="toolbar-row">
+        <div className="toolbar-row planner-bar">
           <nav className="segmented" aria-label="Zoom">
             {ZOOMS.map((z) => (
               <button key={z.id} type="button" aria-pressed={ui.zoom === z.id} onClick={() => ui.setZoom(z.id)}>
@@ -239,93 +245,96 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
               </button>
             ))}
           </nav>
-          <nav className="segmented" aria-label="Cell display">
-            <button
-              type="button"
-              aria-pressed={ui.cellStyle === 'pie'}
-              aria-label="Circles"
-              title="Show allocations as filled circles"
-              onClick={() => ui.setCellStyle('pie')}
-            >
-              <Pie value={50} />
-            </button>
-            <button
-              type="button"
-              aria-pressed={ui.cellStyle === 'number'}
-              aria-label="Numbers"
-              title="Show allocations as numbers"
-              onClick={() => ui.setCellStyle('number')}
-            >
-              %
-            </button>
-          </nav>
           <div className="nav-group">
-            <button type="button" className="btn" aria-label="Earlier" onClick={() => ui.setAnchor(shiftAnchor(ui.zoom, ui.anchor, -1))}>
-              ◀
+            <button type="button" className="btn btn-icon" aria-label="Earlier" title="Earlier" onClick={() => ui.setAnchor(shiftAnchor(ui.zoom, ui.anchor, -1))}>
+              ‹
             </button>
             <button type="button" className="btn" onClick={ui.goToToday}>
               Today
             </button>
-            <button type="button" className="btn" aria-label="Later" onClick={() => ui.setAnchor(shiftAnchor(ui.zoom, ui.anchor, 1))}>
-              ▶
+            <button type="button" className="btn btn-icon" aria-label="Later" title="Later" onClick={() => ui.setAnchor(shiftAnchor(ui.zoom, ui.anchor, 1))}>
+              ›
             </button>
-            <span className="muted small range-label">{rangeLabel}</span>
+            <span className="range-label">{rangeLabel}</span>
           </div>
           <span className="spacer" />
           <input
             type="search"
             className="search"
+            aria-label="Search"
             placeholder={ui.view === 'projects' ? 'Search workstreams, clients, people…' : 'Search people…'}
             value={ui.filters.text}
             onChange={(e) => ui.setFilters({ text: e.target.value })}
           />
-          <select
-            aria-label="Filter by capability"
-            value={ui.filters.tagId ?? ''}
-            onChange={(e) => ui.setFilters({ tagId: e.target.value || null })}
+          <Popover
+            kind="dialog"
+            className={activeFilters ? 'btn has-filters' : 'btn'}
+            ariaLabel="Filters"
+            label={
+              <>
+                Filters{activeFilters > 0 && <span className="count">{activeFilters}</span>}
+              </>
+            }
           >
-            <option value="">All capabilities</option>
-            {[...plan.tags]
-              .sort((a, b) => a.name.localeCompare(b.name))
-              .map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-          </select>
-          <select
-            aria-label="Filter by status"
-            value={ui.filters.status ?? ''}
-            onChange={(e) => ui.setFilters({ status: (e.target.value || null) as ProjectStatus | null })}
-          >
-            <option value="">All statuses</option>
-            {(Object.keys(STATUS_LABELS) as ProjectStatus[]).map((st) => (
-              <option key={st} value={st}>
-                {STATUS_LABELS[st]}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label="Filter by seller"
-            value={ui.filters.sellerId ?? ''}
-            onChange={(e) => ui.setFilters({ sellerId: e.target.value || null })}
-          >
-            <option value="">All sellers</option>
-            {[...plan.sellers]
-              .sort((a, b) => a.name.localeCompare(b.name))
-              .map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-          </select>
+            <div className="filter-form">
+              <label>
+                Capability
+                <select aria-label="Filter by capability" value={ui.filters.tagId ?? ''} onChange={(e) => ui.setFilters({ tagId: e.target.value || null })}>
+                  <option value="">All capabilities</option>
+                  {[...plan.tags]
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <label>
+                Stage
+                <select
+                  aria-label="Filter by status"
+                  value={ui.filters.status ?? ''}
+                  onChange={(e) => ui.setFilters({ status: (e.target.value || null) as ProjectStatus | null })}
+                >
+                  <option value="">All stages</option>
+                  {(Object.keys(STATUS_LABELS) as ProjectStatus[]).map((st) => (
+                    <option key={st} value={st}>
+                      {STATUS_LABELS[st]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Seller
+                <select aria-label="Filter by seller" value={ui.filters.sellerId ?? ''} onChange={(e) => ui.setFilters({ sellerId: e.target.value || null })}>
+                  <option value="">All sellers</option>
+                  {[...plan.sellers]
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                className="btn btn-small"
+                disabled={!activeFilters}
+                onClick={() => ui.setFilters({ tagId: null, status: null, sellerId: null })}
+              >
+                Reset filters
+              </button>
+            </div>
+          </Popover>
           <Toggle
-            label="Conflicts only"
+            label="Issues only"
             checked={ui.filters.conflictsOnly}
             title={
               ui.view === 'projects'
-                ? 'Show only workstreams with a conflict: someone over/at risk in the visible weeks, a skill mismatch, an uncovered capability or an open role to fill'
-                : 'Show only people with a conflict: over/at risk in the visible weeks, or a skill mismatch'
+                ? 'Show only workstreams with an issue in the visible weeks: someone over capacity or at risk, a skill mismatch, an uncovered capability or an open role to fill'
+                : 'Show only people with an issue: over capacity or at risk in the visible weeks, or a skill mismatch'
             }
             onChange={(conflictsOnly) => ui.setFilters({ conflictsOnly })}
           />
@@ -337,17 +346,43 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
               onChange={(underutilized) => ui.setFilters({ underutilized })}
             />
           )}
-          {ui.view === 'projects' && (
+          <button
+            type="button"
+            className="issue-chip"
+            aria-pressed={ui.showConflicts}
+            title={`Issues in the visible weeks across the whole plan, whatever the filters show${skillCount ? `, plus ${skillCount} skill issue${skillCount === 1 ? '' : 's'}` : ''}. Click to open the list.`}
+            onClick={ui.toggleConflicts}
+          >
+            {issueParts.length === 0 ? (
+              <span className="issue-none">No issues</span>
+            ) : (
+              issueParts.map((p) => (
+                <span key={p.cls} className={`issue-part issue-${p.cls}`}>
+                  <strong>{p.n}</strong> {p.label}
+                </span>
+              ))
+            )}
+          </button>
+          <nav className="segmented" aria-label="Cell display">
             <button
               type="button"
-              className="btn"
-              aria-pressed={ui.showUtilization}
-              title={`Everyone's projected utilization over the next ${LOOKAHEAD_WEEKS} weeks, split into delivery and pipeline`}
-              onClick={ui.toggleUtilization}
+              aria-pressed={ui.cellStyle === 'bars'}
+              aria-label="Bars"
+              title="Bars, labelled in FTE where they start or change"
+              onClick={() => ui.setCellStyle('bars')}
             >
-              Utilization
+              <span className="bars-icon" aria-hidden />
             </button>
-          )}
+            <button
+              type="button"
+              aria-pressed={ui.cellStyle === 'number'}
+              aria-label="Numbers"
+              title="Show every week's %"
+              onClick={() => ui.setCellStyle('number')}
+            >
+              %
+            </button>
+          </nav>
           {shared && (
             <button
               type="button"
@@ -359,16 +394,25 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
               Comments {openThreads > 0 && <span className="count">{openThreads}</span>}
             </button>
           )}
-          <button
-            type="button"
-            className={conflictCount ? 'btn btn-conflicts has' : 'btn btn-conflicts'}
-            aria-pressed={ui.showConflicts}
-            onClick={ui.toggleConflicts}
-          >
-            Conflicts {conflictCount > 0 && <span className="count">{conflictCount}</span>}
-          </button>
+          {ui.view === 'projects' && (
+            <>
+              <button
+                type="button"
+                className="btn"
+                aria-pressed={ui.showUtilization}
+                title={`Team capacity over the next ${LOOKAHEAD_WEEKS} weeks, in FTE-weeks`}
+                onClick={ui.toggleUtilization}
+              >
+                ▥ Capacity
+              </button>
+              <button type="button" className="btn btn-primary edit-only" onClick={() => setCreating(true)}>
+                + Workstream
+              </button>
+            </>
+          )}
         </div>
       )}
+      {creating && <ProjectDialog onClose={() => setCreating(false)} />}
     </header>
   );
 }

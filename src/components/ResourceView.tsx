@@ -18,7 +18,9 @@ import { usePlan, usePlanStore } from '../store/planStore';
 import { isExpanded, levelGroupKey, useUIStore, type Filters } from '../store/uiStore';
 import { useDerived } from '../store/useDerived';
 import { AddAssignmentDialog } from './AddAssignmentDialog';
-import { TagChips } from './Chips';
+import { initials } from '../collab/format';
+import { useCan } from '../store/useCan';
+import { MenuItem, Popover } from './Popover';
 import { AssignmentBadges } from './StatusControls';
 import { TimeGrid, type GridRow } from './grid/TimeGrid';
 
@@ -51,6 +53,7 @@ export function ResourceView({ buckets }: Props) {
   const showDetails = useUIStore((s) => s.showDetails);
   const removeAssignment = usePlanStore((s) => s.removeAssignment);
   const [adding, setAdding] = useState<string | null>(null);
+  const can = useCan();
 
   const threshold = plan.settings.overallocationThreshold;
   const visibleWeeks = buckets.flatMap((b) => b.weeks);
@@ -108,6 +111,9 @@ export function ResourceView({ buckets }: Props) {
           >
             {open ? '▾' : '▸'}
           </button>
+          <span className="avatar-mini" aria-hidden="true">
+            {initials(r.name)}
+          </span>
           <div className="row-main">
             <div className="row-title">
               <button
@@ -149,13 +155,13 @@ export function ResourceView({ buckets }: Props) {
                 )}
               </span>
             )}
-              <TagChips tagIds={r.tagIds} tagsById={d.tagsById} />
             </div>
           </div>
           <RowComments kind="resource" id={r.id} name={r.name} />
-          <button type="button" className="btn btn-small edit-only" onClick={() => setAdding(r.id)}>
-            + Workstream
-          </button>
+          <Popover className="icon-btn row-more" label="•••" ariaLabel={`Actions for ${r.name}`}>
+            {can.edit && <MenuItem onClick={() => setAdding(r.id)}>Add to a workstream…</MenuItem>}
+            <MenuItem onClick={() => showDetails({ kind: 'resource', id: r.id })}>Details</MenuItem>
+          </Popover>
         </div>
       ),
       summary: (b) => {
@@ -197,16 +203,18 @@ export function ResourceView({ buckets }: Props) {
         key: `a:${a.id}`,
         depth: 1,
         assignmentId: a.id,
+        resourceId: r.id,
+        name: `${r.name}, ${p.name}`,
         range: { start: p.startWeek, end: p.endWeek },
         label: (
           <div className="row-label">
             <div className="row-main">
               <div className="row-title">
-                <span className="row-name" title={`${a.name || 'Unnamed role'} on ${p.name}${p.client ? ` (${p.client})` : ''}`}>
+                <span className="row-name" title={`${a.name ? `${a.name} on ` : ''}${p.name}${p.client ? ` (${p.client})` : ''}, ${STATUS_LABELS[p.status]}`}>
                   {p.name}
-                  <span className="muted small"> · {a.name || <em>Unnamed role</em>}</span>
-                  <span className={`status-text status-${p.status}`}> · {STATUS_LABELS[p.status]}</span>
+                  {a.name && <span className="role-sub"> · {a.name}</span>}
                 </span>
+                <span className={`stage-pill status-${p.status}`}>{STATUS_LABELS[p.status]}</span>
                 <AssignmentBadges
                   worst={flags.over.length ? 'over' : flags.stretch.length ? 'stretch' : flags.risk.length ? 'risk' : null}
                   mismatch={mismatch}
@@ -214,20 +222,23 @@ export function ResourceView({ buckets }: Props) {
               </div>
             </div>
             <RowComments kind="role" id={a.id} name={`${a.name || 'Unnamed role'} (${r.name}) on ${p.name}`} />
-            <button
-              type="button"
-              className="icon-btn edit-only"
-              aria-label={`Remove ${r.name} from ${p.name}`}
-              title="Remove this role from the workstream"
-              onClick={() => {
-                const weeks = Object.keys(a.weekly).length;
-                if (weeks === 0 || window.confirm(`Remove ${r.name} from ${p.name}? This clears ${weeks} week(s) of allocation (undo with Ctrl+Z).`)) {
-                  removeAssignment(a.id);
-                }
-              }}
-            >
-              ×
-            </button>
+            <Popover className="icon-btn row-more" label="•••" ariaLabel={`Actions for ${r.name} on ${p.name}`}>
+              <MenuItem onClick={() => showDetails({ kind: 'project', id: p.id })}>{p.name}: details</MenuItem>
+              {can.edit && (
+                <MenuItem
+                  danger
+                  title="Remove this role from the workstream"
+                  onClick={() => {
+                    const weeks = Object.keys(a.weekly).length;
+                    if (weeks === 0 || window.confirm(`Remove ${r.name} from ${p.name}? This clears ${weeks} week(s) of allocation (undo with Ctrl+Z).`)) {
+                      removeAssignment(a.id);
+                    }
+                  }}
+                >
+                  Remove from workstream
+                </MenuItem>
+              )}
+            </Popover>
           </div>
         ),
       });
@@ -297,15 +308,18 @@ export function ResourceView({ buckets }: Props) {
         rows={rows}
         corner={
           <div className="corner-content">
-            <strong>Resources</strong> <span className="muted">({resources.length}) · % per week (levels: average)</span>
+            <div className="corner-title">
+              <strong>Resources</strong> <span className="muted">({resources.length})</span>
+              <span className="muted small" title="Each person's weekly load; level rows show their people's average"> · weekly load %</span>
+            </div>
             <div className="corner-actions">
-              <button type="button" className="btn btn-small" onClick={() => setAllExpanded([...groupKeys, ...resourceKeys], true)}>
-                Expand
+              <button type="button" className="link-small" onClick={() => setAllExpanded([...groupKeys, ...resourceKeys], true)}>
+                Expand all
               </button>
-              <button type="button" className="btn btn-small" onClick={() => setAllExpanded(resourceKeys, false)}>
-                Collapse
+              <button type="button" className="link-small" onClick={() => setAllExpanded(resourceKeys, false)}>
+                Collapse all
               </button>
-              <button type="button" className="btn btn-small" onClick={() => setAllExpanded(groupKeys, false)}>
+              <button type="button" className="link-small" onClick={() => setAllExpanded(groupKeys, false)}>
                 Levels only
               </button>
             </div>

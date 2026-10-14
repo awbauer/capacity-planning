@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { CapacityPanel } from './components/CapacityPanel';
 import { ConflictsPanel } from './components/ConflictsPanel';
 import { DemandView } from './components/DemandView';
 import { DetailsModal } from './components/DetailsModal';
@@ -12,7 +13,6 @@ import { ManagePage } from './components/manage/ManagePage';
 import { ProjectView } from './components/ProjectView';
 import { ResourceView } from './components/ResourceView';
 import { Toolbar } from './components/Toolbar';
-import { UtilizationPanel } from './components/UtilizationPanel';
 import { buckets as makeBuckets } from './domain/weeks';
 import { useCollabStore } from './store/collabStore';
 import { isShared, setPreferredMode } from './store/mode';
@@ -138,25 +138,37 @@ function PlannerApp() {
             <div className="grid-area">
               {view === 'projects' ? <ProjectView buckets={buckets} /> : <ResourceView buckets={buckets} />}
             </div>
-            {view === 'projects' && showUtilization && <UtilizationPanel />}
+            {view === 'projects' && showUtilization && <CapacityPanel buckets={buckets} />}
             {shared && <CommentsPanel />}
             {showConflicts && !(shared && commentsOpen) && <ConflictsPanel />}
           </main>
           <footer className="legend">
+            <span className="legend-keys" aria-label="Key">
+              <span className="legend-title">Key</span>
+              <span className="legend-item">
+                <i className="swatch swatch-confirmed" /> Confirmed
+              </span>
+              <span className="legend-item" title="Delivery on a pipeline workstream: counts only if it's won">
+                <i className="swatch swatch-tentative" /> Tentative
+              </span>
+              <span className="legend-item">
+                <i className="swatch swatch-open" /> Open role
+              </span>
+              <span className="legend-item" title="Committed work over capacity in these weeks">
+                <i className="swatch swatch-conflict" /> Conflict
+              </span>
+              <span className="legend-item" title="Over capacity only if pipeline work is won">
+                <i className="swatch swatch-potential" /> At risk
+              </span>
+              <span className="legend-item">
+                <i className="swatch swatch-today" /> This week
+              </span>
+            </span>
             <span>
-              Double-click a cell to cycle 0 → 25 → 50 → 100%.{' '}
+              Double-click a week to cycle 0 → 25 → 50 → 100%.{' '}
               <button type="button" className="link-inline" onClick={() => setShowHelp(true)}>
                 All shortcuts (?)
               </button>
-            </span>
-            <span className="legend-keys">
-              <span className="swatch swatch-presales" /> presales
-              <span className="swatch swatch-edge" /> workstream start / end
-              <span className="swatch swatch-over" /> overallocated (150%+, incl. pipeline)
-              <span className="swatch swatch-stretch" /> stretched (101–149%) or at risk (pipeline)
-              <span className="swatch swatch-tentative" /> tentative (pipeline delivery)
-              <span className="swatch swatch-outside" /> outside workstream dates
-              <span className="mixed">~</span> varies by week
             </span>
           </footer>
         </>

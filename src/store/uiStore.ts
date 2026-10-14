@@ -14,8 +14,8 @@ export type DetailsTarget = { kind: 'project'; id: string } | { kind: 'resource'
 /** `users` only exists in shared mode. */
 export type ManageTab = 'resources' | 'projects' | 'tags' | 'sellers' | 'plans' | 'users' | 'settings';
 
-/** How allocation cells render: Harvey-ball circles or plain numbers. */
-export type CellStyle = 'pie' | 'number';
+/** How allocations render: bars labelled in FTE where they change, or bars with every column's %. */
+export type CellStyle = 'bars' | 'number';
 
 export interface Filters {
   text: string;
@@ -68,6 +68,8 @@ interface UIState {
   showHelp: boolean;
   details: DetailsTarget | null;
   cellStyle: CellStyle;
+  /** Capacity panel: the person whose rows are highlighted (others dimmed). Not persisted. */
+  highlightResource: string | null;
   /** Row to scroll to and highlight once it renders. */
   focusRow: RowKey | null;
   /** Last export per plan id (drives the "unsaved changes" hint). */
@@ -88,6 +90,7 @@ interface UIState {
   setShowHelp: (show: boolean) => void;
   showDetails: (target: DetailsTarget | null) => void;
   setCellStyle: (style: CellStyle) => void;
+  setHighlightResource: (id: string | null) => void;
   /** Opens a view on a row, expanding it and any `parents` (its group rows). */
   jumpTo: (view: View, row: RowKey, week?: WeekKey, parents?: RowKey[]) => void;
   clearFocusRow: () => void;
@@ -111,7 +114,8 @@ export const useUIStore = create<UIState>()(
       groupByClient: true,
       showHelp: false,
       details: null,
-      cellStyle: 'pie',
+      cellStyle: 'bars',
+      highlightResource: null,
       focusRow: null,
       exports: {},
 
@@ -126,13 +130,20 @@ export const useUIStore = create<UIState>()(
         set((s) => ({
           expanded: { ...s.expanded, ...Object.fromEntries(keys.map((k) => [k, expanded])) },
         })),
-      toggleConflicts: () => set((s) => ({ showConflicts: !s.showConflicts })),
-      toggleUtilization: () => set((s) => ({ showUtilization: !s.showUtilization })),
+      // One side panel at a time, so the timeline keeps its width.
+      toggleConflicts: () => set((s) => ({ showConflicts: !s.showConflicts, showUtilization: s.showConflicts ? s.showUtilization : false })),
+      toggleUtilization: () =>
+        set((s) => ({
+          showUtilization: !s.showUtilization,
+          showConflicts: s.showUtilization ? s.showConflicts : false,
+          highlightResource: s.showUtilization ? null : s.highlightResource,
+        })),
       setGroupByClient: (groupByClient) => set({ groupByClient }),
       resetFilters: () => set({ filters: NO_FILTERS }),
       setShowHelp: (showHelp) => set({ showHelp }),
       showDetails: (details) => set({ details }),
       setCellStyle: (cellStyle) => set({ cellStyle }),
+      setHighlightResource: (highlightResource) => set({ highlightResource }),
       jumpTo: (view, row, week, parents = []) =>
         set((s) => ({
           view,
@@ -176,6 +187,8 @@ export const useUIStore = create<UIState>()(
         return {
           ...current,
           ...p,
+          // Circles ('pie') were replaced by bars.
+          cellStyle: p.cellStyle === 'number' ? 'number' : 'bars',
           view: (p.view === 'activity' || p.view === 'mentions') && !isShared() ? 'projects' : (p.view ?? current.view),
           manageTab: p.manageTab === 'users' && !isShared() ? 'settings' : (p.manageTab ?? current.manageTab),
         };

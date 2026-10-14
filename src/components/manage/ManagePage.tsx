@@ -582,7 +582,7 @@ function SettingsPanel() {
       {shared && <PastWeeksLock />}
       <fieldset className="plain-fieldset" disabled={!can.admin}>
       <label>
-        Yellow above (%)
+        Over capacity above (%)
         <input
           type="number"
           min={1}
@@ -594,12 +594,12 @@ function SettingsPanel() {
           }}
         />
         <span className="muted small">
-          Committed weekly load above this is flagged yellow (stretched). Pipeline delivery that would push someone over
-          it is flagged amber (at risk).
+          Committed weekly load above this is a conflict (red outline). Pipeline delivery that would push someone over
+          it is flagged at risk (dashed red outline).
         </span>
       </label>
       <label>
-        Red above (%)
+        Critical above (%)
         <input
           type="number"
           min={1}
@@ -610,7 +610,7 @@ function SettingsPanel() {
             if (v > 0) s.setThresholds({ criticalThreshold: v });
           }}
         />
-        <span className="muted small">Committed weekly load above this is flagged red (overallocated).</span>
+        <span className="muted small">Committed weekly load above this is a critical conflict (overallocated).</span>
       </label>
       <fieldset className="targets">
         <legend>Utilization targets by level (%)</legend>

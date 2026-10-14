@@ -91,7 +91,7 @@ async function until(fn, msg, timeout = 5000) {
   for (const [p, n] of [[bob, 'bob'], [carol, 'carol']]) {
     await p.waitForSelector('.grid');
     assert(await p.locator('.app.view-only').count() === 1, `${n} starts read-only (viewer)`);
-    assert(await p.getByRole('button', { name: '+ New workstream' }).count() === 0, `${n} sees no add buttons`);
+    assert(await p.getByRole('button', { name: '+ Workstream', exact: true }).count() === 0, `${n} sees no add buttons`);
   }
   const before = await val(cell(carol, 'sample-a1', 3));
   await cell(carol, 'sample-a1', 3).dblclick();
