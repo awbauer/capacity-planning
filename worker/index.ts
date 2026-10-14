@@ -1,75 +1,27 @@
-import { z } from 'zod';
-import { planDataSchema } from '../src/domain/opSchema';
-import { USER_ROLES, type UserRole } from '../src/domain/permissions';
 import type { Me } from '../src/domain/protocol';
 import { checkReferences } from '../src/domain/schema';
 import type { PlanData } from '../src/domain/types';
 import { devAuthAllowed, identify, sameOrigin, type Identity } from './auth';
 import { roomStub, workspaceStub, type Env } from './env';
-import type { ActivityQuery } from './workspaceEngine';
+import {
+  activityQuery,
+  body,
+  createPlanBody,
+  csvCell,
+  fail,
+  HttpError,
+  inviteBody,
+  json,
+  patchPlanBody,
+  patchUserBody,
+  requireRole,
+  settingsBody,
+} from './http';
 
 export { PlanRoom } from './planRoom';
 export { Workspace } from './workspace';
 
 type Ctx = { env: Env; me: Me; identity: Identity; url: URL; request: Request };
-
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
-  });
-const fail = (status: number, msg: string) => json({ error: msg }, status);
-
-class HttpError extends Error {
-  readonly status: number;
-  constructor(status: number, message: string) {
-    super(message);
-    this.status = status;
-  }
-}
-
-const requireRole = (me: Me, min: 'editor' | 'admin') => {
-  if (min === 'admin' ? me.role !== 'admin' : me.role === 'viewer') {
-    throw new HttpError(403, min === 'admin' ? 'Only admins can do that.' : 'Viewers can’t make changes.');
-  }
-};
-
-async function body<T>(request: Request, schema: z.ZodType<T>): Promise<T> {
-  if (!(request.headers.get('Content-Type') ?? '').includes('application/json')) throw new HttpError(415, 'Send JSON.');
-  const r = schema.safeParse(await request.json().catch(() => undefined));
-  if (!r.success) throw new HttpError(400, r.error.issues[0]?.message ?? 'Invalid request');
-  return r.data;
-}
-
-const createPlanBody = z.object({ name: z.string().trim().min(1).max(200), plan: planDataSchema.optional(), note: z.string().max(200).optional() });
-const patchPlanBody = z.object({ name: z.string().trim().min(1).max(200).optional(), archived: z.boolean().optional() });
-const patchUserBody = z.object({ role: z.enum(USER_ROLES as [UserRole, ...UserRole[]]).optional(), disabled: z.boolean().optional() });
-const inviteBody = z.object({ email: z.string().max(320), role: z.enum(USER_ROLES as [UserRole, ...UserRole[]]) });
-const settingsBody = z.object({ defaultRole: z.enum(['viewer', 'editor', 'admin', 'none']) });
-
-function activityQuery(url: URL, me: Me): ActivityQuery {
-  const p = url.searchParams;
-  const num = (k: string) => (p.get(k) ? Number(p.get(k)) : undefined);
-  return {
-    ...(p.get('plan') !== null ? { planId: p.get('plan')! } : {}),
-    ...(p.get('actor') ? { actor: p.get('actor')! } : {}),
-    ...(p.get('ref') ? { ref: p.get('ref')! } : {}),
-    ...(p.get('op') ? { op: p.get('op')! } : {}),
-    ...(num('from') !== undefined ? { from: num('from') } : {}),
-    ...(num('to') !== undefined ? { to: num('to') } : {}),
-    ...(p.get('q') ? { q: p.get('q')!.slice(0, 200) } : {}),
-    ...(p.get('cursor') ? { cursor: p.get('cursor')! } : {}),
-    ...(num('limit') !== undefined ? { limit: num('limit') } : {}),
-    workspace: me.role === 'admin',
-  };
-}
-
-const csvCell = (v: unknown) => {
-  const s = String(v ?? '');
-  // Leading =+-@ would run as a formula in a spreadsheet.
-  const safe = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
-  return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
-};
 
 async function planOr404(env: Env, id: string) {
   const plan = await workspaceStub(env).plan(id);

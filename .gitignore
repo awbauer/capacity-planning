@@ -26,3 +26,6 @@ dist-ssr
 # Cloudflare
 .wrangler
 .dev.vars
+
+# End-to-end screenshots
+e2e/shots

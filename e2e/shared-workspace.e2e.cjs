@@ -1,8 +1,7 @@
 const { chromium } = require('playwright');
 const path = require('path');
-// Usage: start `npm run dev` with DEV_AUTH=1 and OWNER_EMAILS=alice@example.com in .dev.vars (fresh .wrangler/state),
-// then: NODE_PATH=$(npm root -g) node e2e/shared-workspace.e2e.cjs <screenshot-dir>
-// Uses a globally installed Playwright and Chromium (not a project dependency).
+// Shared workspace, three people: run with npm run test:e2e (see e2e/run.mjs). Needs DEV_AUTH=1 and
+// OWNER_EMAILS=alice@example.com in .dev.vars and a fresh .wrangler/state.
 const SP = process.argv[2] || require('os').tmpdir();
 require('fs').mkdirSync(path.join(SP, 'shots'), { recursive: true });
 const BASE = process.env.BASE_URL || 'http://localhost:5173';
@@ -128,6 +127,16 @@ async function until(fn, msg, timeout = 5000) {
   await until(() => val(cell(alice, 'sample-a1', 6)).then((v) => v === a6), 'Alice’s undo reverts her own edit');
   assert((await val(cell(alice, 'sample-a1', 7))) === b7, '…and keeps Bob’s later edit');
   await until(() => val(cell(bob, 'sample-a1', 6)).then((v) => v === a6), 'Bob sees the undo');
+
+  // ── Editing a workstream through its dialog (it sends the whole workstream as the patch) ──
+  await alice.getByRole('button', { name: 'Sales Cloud Rollout', exact: true }).click();
+  await alice.getByRole('button', { name: 'Edit workstream' }).click();
+  await alice.locator('dialog[open] input[required]').first().fill('Sales Cloud Rollout 2');
+  await alice.getByRole('button', { name: 'Save', exact: true }).click();
+  await until(() => bob.getByRole('button', { name: 'Sales Cloud Rollout 2', exact: true }).count().then((n) => n === 1), 'a workstream edited in its dialog reaches Bob');
+  await alice.waitForTimeout(500);
+  assert(await alice.getByRole('button', { name: 'Sales Cloud Rollout 2', exact: true }).count() > 0, '…and stays changed for Alice (not rolled back)');
+  await alice.keyboard.press('Escape');
 
   // ── Locks ──
   alice.nextPrompt = 'SOW signed';

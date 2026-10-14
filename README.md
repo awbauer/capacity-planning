@@ -169,9 +169,18 @@ npm run lint     # oxlint
 npm run build    # typecheck + production build into dist/ (dist/client is the static app)
 ```
 
-The shared workspace runs locally too, with local Durable Object storage in `.wrangler/state`. To sign in without Cloudflare Access, copy `.dev.vars.example` to `.dev.vars` and open `http://localhost:5173/api/dev/login?as=you@example.com`. This dev sign-in is only accepted on localhost and only when `DEV_AUTH=1` is set in `.dev.vars`, which is never deployed. `e2e/shared-workspace.e2e.cjs` drives three people through the shared workspace with Playwright (see the header of the file for how to run it).
+The shared workspace runs locally too, with local Durable Object storage in `.wrangler/state`. To sign in without Cloudflare Access, copy `.dev.vars.example` to `.dev.vars` and open `http://localhost:5173/api/dev/login?as=you@example.com`. This dev sign-in is only accepted on localhost and only when `DEV_AUTH=1` is set in `.dev.vars`, which is never deployed.
 
-Code layout: `src/domain` is pure logic shared by browser and server (`ops.ts`, `diff.ts`, `revert.ts`, `locks.ts`, `permissions.ts`, `protocol.ts`). `src/store` has the local store, the shared store (`sharedPlanStore.ts`: sync, rebase, undo) and the mode switch. `src/collab` is the shared-mode UI. `worker/` is the Worker, the Durable Objects and their storage engines (`roomEngine.ts`, `workspaceEngine.ts`).
+End-to-end tests (Playwright; run `npx playwright install chromium` once):
+
+```sh
+npm run test:e2e:serve   # fresh dev server, then both suites
+npm run test:e2e         # against a running `npm run dev` (or BASE_URL)
+```
+
+`e2e/local.e2e.cjs` covers local mode. `e2e/shared-workspace.e2e.cjs` drives three people through the shared workspace. CI (`.github/workflows/ci.yml`) runs the typecheck, lint, unit tests, build and both e2e suites on every pull request. `worker/convergence.test.ts` simulates several browsers editing, undoing and dropping their connections against the real server engine; `SYNC_SEEDS=500 npx vitest run worker/convergence.test.ts` runs it longer.
+
+Code layout: `src/domain` is pure logic shared by browser and server (`ops.ts`, `diff.ts`, `revert.ts`, `locks.ts`, `permissions.ts`, `protocol.ts`). `src/sync/syncCore.ts` is the browser's side of syncing (confirmed plan, pending edits, undo), with no socket or UI. `src/store` has the local store, the shared store (`sharedPlanStore.ts`: the socket and UI around SyncCore) and the mode switch. `src/collab` is the shared-mode UI. `worker/` is the Worker, the Durable Objects and their storage engines (`roomEngine.ts`, `workspaceEngine.ts`).
 
 ### Naming
 
