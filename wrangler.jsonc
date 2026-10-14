@@ -26,6 +26,9 @@
     "Workspace": { "type": "durable-object", "storage": "sqlite" }
   },
   "observability": { "enabled": true },
+  // Cloudflare Email Service, for emailing people when they're @mentioned. Nothing is
+  // sent until MAIL_FROM and APP_URL are set; see README "Comments and mentions".
+  "send_email": [{ "name": "EMAIL" }],
   // TEAM_DOMAIN, POLICY_AUD and OWNER_EMAILS are set in the dashboard (Settings →
   // Variables) and kept across deploys; see README "Shared workspace".
   "keep_vars": true,

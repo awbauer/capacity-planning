@@ -1,9 +1,14 @@
 import { DurableObject } from 'cloudflare:workers';
 import type { UserRole } from '../src/domain/permissions';
-import { owners, roomStub, type Env } from './env';
+import type { MentionNotice, ThreadIndexRow } from '../src/domain/comments';
+import { mailEnabled, owners, parseSender, roomStub, type Env } from './env';
+import { mentionEmail } from './mail';
 import type { ActivityRow } from './roomEngine';
 import { doSql } from './doSql';
-import { WorkspaceEngine, type ActivityQuery, type DefaultRole } from './workspaceEngine';
+import { WorkspaceEngine, type ActivityQuery, type DefaultRole, type MentionStatus } from './workspaceEngine';
+
+/** Email Service errors worth trying again. */
+const RETRYABLE = new Set(['E_RATE_LIMIT_EXCEEDED', 'E_DAILY_LIMIT_EXCEEDED', 'E_INTERNAL_SERVER_ERROR', 'E_DELIVERY_FAILED']);
 
 /** The single workspace object: people and roles, the plan list, and the consolidated activity log. */
 export class Workspace extends DurableObject<Env> {
@@ -79,6 +84,64 @@ export class Workspace extends DurableObject<Env> {
 
   clearActivity(planId: string) {
     this.ws.clearActivity(planId);
+  }
+
+  // ── comments ──
+
+  people() {
+    return this.ws.people();
+  }
+
+  async indexThreads(planId: string, threads: ThreadIndexRow[], notices: MentionNotice[], retracted: string[]) {
+    const next = this.ws.indexThreads(planId, threads, notices, retracted, mailEnabled(this.env));
+    if (next !== null) await this.scheduleMail(next);
+  }
+
+  mentions(email: string, q: { status?: MentionStatus; cursor?: string; limit?: number }) {
+    return { ...this.ws.mentions(email, q), counts: this.ws.mentionCounts(email) };
+  }
+
+  mentionCounts(email: string) {
+    return this.ws.mentionCounts(email);
+  }
+
+  markRead(email: string, planId: string, threadId: string) {
+    this.ws.markRead(email, planId, threadId);
+  }
+
+  prefs(email: string) {
+    return { mentionEmails: this.ws.mentionEmails(email), mail: mailEnabled(this.env) };
+  }
+
+  setMentionEmails(email: string, on: boolean) {
+    this.ws.setMentionEmails(email, on);
+    return this.prefs(email);
+  }
+
+  private async scheduleMail(at: number) {
+    const current = await this.ctx.storage.getAlarm();
+    if (current === null || at < current) await this.ctx.storage.setAlarm(at);
+  }
+
+  /** Sends the mention emails that are due. */
+  async alarm() {
+    if (!mailEnabled(this.env)) return;
+    const env = this.env;
+    for (const d of this.ws.dueMail()) {
+      const ids = d.items.map((i) => i.commentId);
+      const { subject, text, html } = mentionEmail(d, env.APP_URL!);
+      try {
+        await env.EMAIL!.send({ from: parseSender(env.MAIL_FROM!), to: { email: d.email, name: d.name }, subject, text, html });
+        this.ws.mailDone(d.email, ids);
+      } catch (err) {
+        const code = (err as { code?: string }).code ?? '';
+        console.error('Mention email failed', code, (err as Error).message);
+        if (RETRYABLE.has(code)) this.ws.mailRetry(d.email, ids);
+        else this.ws.mailDone(d.email, ids);
+      }
+    }
+    const next = this.ws.nextMailAt();
+    if (next !== null) await this.ctx.storage.setAlarm(Math.max(next, Date.now() + 1000));
   }
 
   private async broadcastRole(email: string, role: UserRole | null) {

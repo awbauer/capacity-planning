@@ -1,6 +1,7 @@
 import { sameName } from '../src/domain/plans';
 import type { UserRole } from '../src/domain/permissions';
 import type { Me } from '../src/domain/protocol';
+import { plainBody, type MentionNotice, type ThreadIndexRow } from '../src/domain/comments';
 import type { ActivityRow } from './roomEngine';
 import { metaGet, metaSet, migrate, one, type Sql, type SqlValue } from './sql';
 
@@ -19,7 +20,28 @@ const MIGRATIONS = [
   CREATE INDEX activity_actor ON activity (actor, ts DESC);
   CREATE TABLE activity_refs (kind TEXT NOT NULL, ref_id TEXT NOT NULL, batch_id TEXT NOT NULL, PRIMARY KEY (kind, ref_id, batch_id));
   `,
+  `
+  CREATE TABLE threads (
+    plan_id TEXT NOT NULL, thread_id TEXT NOT NULL, label TEXT NOT NULL, resolved INTEGER NOT NULL, created_by TEXT NOT NULL,
+    created_at INTEGER NOT NULL, last_ts INTEGER NOT NULL, last_actor TEXT NOT NULL, last_excerpt TEXT NOT NULL,
+    comment_count INTEGER NOT NULL, PRIMARY KEY (plan_id, thread_id));
+  CREATE TABLE thread_mentions (email TEXT NOT NULL, plan_id TEXT NOT NULL, thread_id TEXT NOT NULL, PRIMARY KEY (email, plan_id, thread_id));
+  CREATE INDEX thread_mentions_thread ON thread_mentions (plan_id, thread_id);
+  CREATE TABLE thread_reads (email TEXT NOT NULL, plan_id TEXT NOT NULL, thread_id TEXT NOT NULL, read_ts INTEGER NOT NULL,
+    PRIMARY KEY (email, plan_id, thread_id));
+  CREATE TABLE mail_outbox (
+    email TEXT NOT NULL, comment_id TEXT NOT NULL, plan_id TEXT NOT NULL, thread_id TEXT NOT NULL, actor TEXT NOT NULL,
+    ts INTEGER NOT NULL, label TEXT NOT NULL, excerpt TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, next_at INTEGER NOT NULL,
+    PRIMARY KEY (email, comment_id));
+  CREATE INDEX mail_outbox_due ON mail_outbox (next_at);
+  ALTER TABLE users ADD COLUMN mention_email INTEGER NOT NULL DEFAULT 1;
+  `,
 ];
+
+/** Mentions wait this long before being emailed, so a burst becomes one email (and reading it first cancels it). */
+export const MAIL_DELAY_MS = 60_000;
+/** Attempts before a mention email is given up on. */
+export const MAIL_ATTEMPTS = 5;
 
 /** Who new people get when they first sign in: a role, or no access until an admin grants one. */
 export type DefaultRole = UserRole | 'none';
@@ -54,6 +76,8 @@ export interface ActivityEntry {
   summary: string;
   changeCount: number;
   revertOf: string | null;
+  /** For comment changes: the thread. */
+  threadId?: string;
 }
 
 export interface ActivityQuery {
@@ -70,6 +94,30 @@ export interface ActivityQuery {
   limit?: number;
   /** Include workspace events (admins only). */
   workspace?: boolean;
+}
+
+export type MentionStatus = 'open' | 'resolved' | 'all';
+
+/** A thread that mentions someone, as the Mentions inbox shows it. */
+export interface MentionEntry {
+  planId: string;
+  planName: string;
+  threadId: string;
+  label: string;
+  resolved: boolean;
+  createdBy: string;
+  lastTs: number;
+  lastActor: string;
+  lastExcerpt: string;
+  commentCount: number;
+  unread: boolean;
+}
+
+/** One email to send: every mention of one person waiting to go. */
+export interface MailDigest {
+  email: string;
+  name: string;
+  items: { planId: string; planName: string; threadId: string; commentId: string; actor: string; actorName: string; label: string; text: string; ts: number }[];
 }
 
 const toUser = (r: Record<string, SqlValue>, owners: Set<string>): UserRow => ({
@@ -279,6 +327,7 @@ export class WorkspaceEngine {
         );
         for (const id of r.projectIds) this.sql.all('INSERT OR IGNORE INTO activity_refs VALUES (?, ?, ?)', 'project', id, r.batchId);
         for (const id of r.resourceIds) this.sql.all('INSERT OR IGNORE INTO activity_refs VALUES (?, ?, ?)', 'resource', id, r.batchId);
+        if (r.threadId) this.sql.all('INSERT OR IGNORE INTO activity_refs VALUES (?, ?, ?)', 'thread', r.threadId, r.batchId);
       }
     });
   }
@@ -323,7 +372,9 @@ export class WorkspaceEngine {
     }
     const limit = Math.min(Math.max(query.limit ?? 50, 1), 1000);
     const rows = this.sql.all(
-      `SELECT a.*, COALESCE(p.name, '') AS plan_name FROM activity a LEFT JOIN plans p ON p.id = a.plan_id
+      `SELECT a.*, COALESCE(p.name, '') AS plan_name,
+         (SELECT ref_id FROM activity_refs r WHERE r.kind = 'thread' AND r.batch_id = a.batch_id) AS thread_id
+       FROM activity a LEFT JOIN plans p ON p.id = a.plan_id
        ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
        ORDER BY a.ts DESC, a.batch_id DESC LIMIT ?`,
       ...binds,
@@ -340,6 +391,7 @@ export class WorkspaceEngine {
       summary: String(r.summary),
       changeCount: Number(r.change_count),
       revertOf: r.revert_of === null ? null : String(r.revert_of),
+      ...(r.thread_id ? { threadId: String(r.thread_id) } : {}),
     }));
     const last = entries[entries.length - 1];
     return { entries, ...(rows.length > limit && last ? { next: `${last.ts}~${last.batchId}` } : {}) };
@@ -351,6 +403,224 @@ export class WorkspaceEngine {
       this.sql.all('DELETE FROM activity_refs WHERE batch_id IN (SELECT batch_id FROM activity WHERE plan_id = ?)', planId);
       this.sql.all('DELETE FROM activity WHERE plan_id = ?', planId);
     });
+  }
+
+  // ── comments: the Mentions inbox and mention emails ──
+
+  /** Everyone with access, for @-mention suggestions. */
+  people(): { email: string; name: string }[] {
+    return this.users()
+      .filter((u) => !u.disabled)
+      .map((u) => ({ email: u.email, name: u.name }));
+  }
+
+  mentionEmails(email: string): boolean {
+    return Number(one(this.sql.all('SELECT mention_email FROM users WHERE email = ?', email))?.mention_email ?? 1) === 1;
+  }
+
+  setMentionEmails(email: string, on: boolean) {
+    this.sql.all('UPDATE users SET mention_email = ? WHERE email = ?', on ? 1 : 0, email);
+    if (!on) this.sql.all('DELETE FROM mail_outbox WHERE email = ?', email);
+  }
+
+  /**
+   * A plan's changed threads and new mentions. Idempotent (rows are
+   * replaced), so a plan can resend after a failure. With `mail`, mentions
+   * of people who can be emailed are queued; returns when mail is next due.
+   */
+  indexThreads(planId: string, threads: ThreadIndexRow[], notices: MentionNotice[], retracted: string[], mail: boolean): number | null {
+    const now = this.now();
+    this.sql.transaction(() => {
+      for (const t of threads) {
+        this.sql.all(
+          `INSERT INTO threads (plan_id, thread_id, label, resolved, created_by, created_at, last_ts, last_actor, last_excerpt, comment_count)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(plan_id, thread_id) DO UPDATE SET label = excluded.label, resolved = excluded.resolved, last_ts = excluded.last_ts,
+             last_actor = excluded.last_actor, last_excerpt = excluded.last_excerpt, comment_count = excluded.comment_count`,
+          planId,
+          t.threadId,
+          t.label.slice(0, 300),
+          t.resolved ? 1 : 0,
+          t.createdBy,
+          t.createdAt,
+          t.lastTs,
+          t.lastActor,
+          t.lastExcerpt.slice(0, 1000),
+          t.commentCount,
+        );
+        this.sql.all('DELETE FROM thread_mentions WHERE plan_id = ? AND thread_id = ?', planId, t.threadId);
+        for (const email of t.mentions.slice(0, 500)) {
+          this.sql.all('INSERT OR IGNORE INTO thread_mentions VALUES (?, ?, ?)', email, planId, t.threadId);
+        }
+      }
+      if (mail) {
+        for (const n of notices) {
+          // Only people who already have access, never arbitrary addresses (anyone can type one).
+          const u = this.user(n.email);
+          if (!u || u.disabled || n.email === n.actor || !this.mentionEmails(n.email)) continue;
+          this.sql.all(
+            `INSERT OR IGNORE INTO mail_outbox (email, comment_id, plan_id, thread_id, actor, ts, label, excerpt, next_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            n.email,
+            n.commentId,
+            planId,
+            n.threadId,
+            n.actor,
+            n.ts,
+            n.label.slice(0, 300),
+            n.excerpt.slice(0, 1000),
+            now + MAIL_DELAY_MS,
+          );
+        }
+      }
+      for (const id of retracted) this.sql.all('DELETE FROM mail_outbox WHERE comment_id = ?', id);
+    });
+    return this.nextMailAt();
+  }
+
+  /** Threads that mention someone, most recently active first, a page at a time. Archived plans are left out. */
+  mentions(email: string, q: { status?: MentionStatus; cursor?: string; limit?: number }): { entries: MentionEntry[]; next?: string } {
+    const where = ['m.email = ?'];
+    const binds: SqlValue[] = [email, email];
+    if (q.status === 'open') where.push('t.resolved = 0');
+    if (q.status === 'resolved') where.push('t.resolved = 1');
+    if (q.cursor) {
+      const [ts, plan, thread] = q.cursor.split('~');
+      where.push('(t.last_ts < ? OR (t.last_ts = ? AND (t.plan_id || \'~\' || t.thread_id) < ?))');
+      binds.push(Number(ts), Number(ts), `${plan ?? ''}~${thread ?? ''}`);
+    }
+    const limit = Math.min(Math.max(q.limit ?? 50, 1), 200);
+    const rows = this.sql.all(
+      `SELECT t.*, p.name AS plan_name, r.read_ts FROM thread_mentions m
+       JOIN threads t ON t.plan_id = m.plan_id AND t.thread_id = m.thread_id
+       JOIN plans p ON p.id = t.plan_id AND p.archived_at IS NULL
+       LEFT JOIN thread_reads r ON r.email = ? AND r.plan_id = t.plan_id AND r.thread_id = t.thread_id
+       WHERE ${where.join(' AND ')}
+       ORDER BY t.last_ts DESC, (t.plan_id || '~' || t.thread_id) DESC LIMIT ?`,
+      ...binds,
+      limit + 1,
+    );
+    const entries = rows.slice(0, limit).map((r) => ({
+      planId: String(r.plan_id),
+      planName: String(r.plan_name),
+      threadId: String(r.thread_id),
+      label: String(r.label),
+      resolved: Number(r.resolved) === 1,
+      createdBy: String(r.created_by),
+      lastTs: Number(r.last_ts),
+      lastActor: String(r.last_actor),
+      lastExcerpt: String(r.last_excerpt),
+      commentCount: Number(r.comment_count),
+      unread: String(r.last_actor) !== email && (r.read_ts === null || Number(r.last_ts) > Number(r.read_ts)),
+    }));
+    const last = entries[entries.length - 1];
+    return { entries, ...(rows.length > limit && last ? { next: `${last.lastTs}~${last.planId}~${last.threadId}` } : {}) };
+  }
+
+  /** Unresolved threads that mention someone, and how many have news for them. */
+  mentionCounts(email: string): { open: number; unreadOpen: number } {
+    const r = one(
+      this.sql.all(
+        `SELECT COUNT(*) AS open,
+           COALESCE(SUM(CASE WHEN t.last_actor <> ? AND (r.read_ts IS NULL OR t.last_ts > r.read_ts) THEN 1 ELSE 0 END), 0) AS unread
+         FROM thread_mentions m
+         JOIN threads t ON t.plan_id = m.plan_id AND t.thread_id = m.thread_id AND t.resolved = 0
+         JOIN plans p ON p.id = t.plan_id AND p.archived_at IS NULL
+         LEFT JOIN thread_reads r ON r.email = m.email AND r.plan_id = t.plan_id AND r.thread_id = t.thread_id
+         WHERE m.email = ?`,
+        email,
+        email,
+      ),
+    );
+    return { open: Number(r?.open ?? 0), unreadOpen: Number(r?.unread ?? 0) };
+  }
+
+  /** Someone has seen a thread: it's no longer unread, and mentions in it needn't be emailed. */
+  markRead(email: string, planId: string, threadId: string) {
+    const now = this.now();
+    this.sql.all(
+      `INSERT INTO thread_reads (email, plan_id, thread_id, read_ts) VALUES (?, ?, ?, ?)
+       ON CONFLICT(email, plan_id, thread_id) DO UPDATE SET read_ts = MAX(read_ts, excluded.read_ts)`,
+      email,
+      planId,
+      threadId,
+      now,
+    );
+    this.sql.all('DELETE FROM mail_outbox WHERE email = ? AND plan_id = ? AND thread_id = ? AND ts <= ?', email, planId, threadId, now);
+  }
+
+  /** When the next mention email is due, or null. */
+  nextMailAt(): number | null {
+    const r = one(this.sql.all<{ n: number | null }>('SELECT MIN(next_at) AS n FROM mail_outbox'));
+    return r?.n ?? null;
+  }
+
+  /**
+   * Emails due now: one per person, holding every mention of them waiting.
+   * Mentions of people who lost access or turned emails off are dropped.
+   */
+  dueMail(): MailDigest[] {
+    const now = this.now();
+    this.sql.all('DELETE FROM mail_outbox WHERE plan_id IN (SELECT id FROM plans WHERE archived_at IS NOT NULL)');
+    const due = this.sql.all<{ email: string }>('SELECT DISTINCT email FROM mail_outbox WHERE next_at <= ?', now);
+    const digests: MailDigest[] = [];
+    const nameOf = (e: string) => this.user(e)?.name ?? e;
+    for (const { email } of due) {
+      const u = this.user(email);
+      if (!u || u.disabled || !this.mentionEmails(email)) {
+        this.sql.all('DELETE FROM mail_outbox WHERE email = ?', email);
+        continue;
+      }
+      const rows = this.sql.all(
+        `SELECT o.*, COALESCE(p.name, '') AS plan_name FROM mail_outbox o JOIN plans p ON p.id = o.plan_id AND p.archived_at IS NULL
+         WHERE o.email = ? ORDER BY o.ts`,
+        email,
+      );
+      if (!rows.length) {
+        this.sql.all('DELETE FROM mail_outbox WHERE email = ?', email);
+        continue;
+      }
+      digests.push({
+        email,
+        name: u.name,
+        items: rows.map((r) => ({
+          planId: String(r.plan_id),
+          planName: String(r.plan_name),
+          threadId: String(r.thread_id),
+          commentId: String(r.comment_id),
+          actor: String(r.actor),
+          actorName: nameOf(String(r.actor)),
+          label: String(r.label),
+          text: plainBody(String(r.excerpt), nameOf),
+          ts: Number(r.ts),
+        })),
+      });
+    }
+    return digests;
+  }
+
+  /** A digest went out (or can never go): its mentions leave the queue. */
+  mailDone(email: string, commentIds: string[]) {
+    for (const id of commentIds) this.sql.all('DELETE FROM mail_outbox WHERE email = ? AND comment_id = ?', email, id);
+  }
+
+  /** A digest failed for now: try again later, up to MAIL_ATTEMPTS times. */
+  mailRetry(email: string, commentIds: string[]) {
+    for (const id of commentIds) {
+      const row = one(this.sql.all('SELECT attempts FROM mail_outbox WHERE email = ? AND comment_id = ?', email, id));
+      if (!row) continue;
+      const attempts = Number(row.attempts) + 1;
+      if (attempts >= MAIL_ATTEMPTS) this.sql.all('DELETE FROM mail_outbox WHERE email = ? AND comment_id = ?', email, id);
+      else {
+        this.sql.all(
+          'UPDATE mail_outbox SET attempts = ?, next_at = ? WHERE email = ? AND comment_id = ?',
+          attempts,
+          this.now() + MAIL_DELAY_MS * 2 ** attempts,
+          email,
+          id,
+        );
+      }
+    }
   }
 
   /** A workspace-level event (roles, plans, settings) in the activity log. */

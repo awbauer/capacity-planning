@@ -1,5 +1,6 @@
 import { create, useStore, type StoreApi, type UseBoundStore } from 'zustand';
 import { ApiError, api } from '../api/client';
+import { anchorRoleId, threadMentions, type CommentAnchor, type Thread } from '../domain/comments';
 import type { Put } from '../domain/diff';
 import type { NewLock } from '../domain/locks';
 import { applyOp, type Op } from '../domain/ops';
@@ -10,8 +11,9 @@ import type { Assignment, PlanData } from '../domain/types';
 import { weekInZone } from '../domain/weeks';
 import { SyncCore, type Pending } from '../sync/syncCore';
 import { makePlanActions } from './actions';
-import { OFFLINE_GRACE_MS, useCollabStore, type ServerPlan } from './collabStore';
+import { OFFLINE_GRACE_MS, useCollabStore, type Person, type ServerPlan } from './collabStore';
 import type { PlanState } from './localPlanStore';
+import { useUIStore } from './uiStore';
 
 export interface SharedPlanState extends PlanState {
   undo: () => void;
@@ -51,6 +53,13 @@ export function writePrefs(patch: Prefs) {
 const notAvailable = (what: string) => () => {
   throw new Error(`${what} works differently in the shared workspace.`);
 };
+
+/** Messages whose outcome the caller waits for. */
+type RequestMsg = ClientMsg extends infer M
+  ? M extends { cid: string; t: 'revert' | 'lock.add' | 'lock.remove' | 'comment.add' | 'comment.edit' | 'comment.delete' | 'thread.resolve' }
+    ? Omit<M, 'cid'>
+    : never
+  : never;
 
 /** Socket attempts that never open before the plan is checked over HTTP (archived? gone?). */
 const NEVER_OPENED_LIMIT = 3;
@@ -131,7 +140,7 @@ class Session {
   }
 
   /** Sends a request whose outcome the caller wants (locks, reverts). */
-  request(msg: { t: 'revert'; batchId: string } | { t: 'lock.add'; lock: NewLock } | { t: 'lock.remove'; id: string }): Promise<void> {
+  request(msg: RequestMsg): Promise<void> {
     const cid = this.cid();
     return new Promise((resolve, reject) => {
       if (!this.connected) {
@@ -179,7 +188,19 @@ class Session {
     this.store().setState({ plan: this.core.view(), meta: { id: planId, name, revision: 0 } });
     this.updateHistory();
     writePrefs({ lastPlanId: planId });
-    this.collab.set({ status: 'connecting', loaded: false, offlineSince: undefined, offlineReadOnly: false, locks: [], presence: {}, recent: {} });
+    const focus = this.collab.comments;
+    this.collab.set({
+      status: 'connecting',
+      loaded: false,
+      offlineSince: undefined,
+      offlineReadOnly: false,
+      locks: [],
+      presence: {},
+      recent: {},
+      threads: {},
+      // A thread being opened from a link or the inbox stays open across the switch.
+      comments: focus?.jump ? focus : null,
+    });
     this.connect(this.generation);
   }
 
@@ -330,6 +351,7 @@ class Session {
           offlineReadOnly: false,
           me: msg.you,
           locks: msg.locks,
+          threads: Object.fromEntries(msg.threads.map((t) => [t.id, t])),
           presence: Object.fromEntries(msg.presence.map((p) => [p.connId, p])),
           timeZone: msg.timeZone,
           thisWeek: weekInZone(msg.timeZone),
@@ -372,6 +394,9 @@ class Session {
       case 'locks':
         this.collab.set({ locks: msg.locks });
         return;
+      case 'thread':
+        this.onThread(msg.thread);
+        return;
       case 'presence':
         this.collab.set({ presence: { ...this.collab.presence, [msg.presence.connId]: msg.presence } });
         return;
@@ -391,6 +416,20 @@ class Session {
         this.store().setState({ meta: { ...this.store().getState().meta, name: msg.name } });
         this.collab.set({ plans: this.collab.plans.map((p) => (p.id === this.planId ? { ...p, name: msg.name } : p)) });
         return;
+    }
+  }
+
+  private onThread(thread: Thread) {
+    const before = this.collab.threads[thread.id];
+    this.collab.set({ threads: { ...this.collab.threads, [thread.id]: thread } });
+    const me = this.collab.me?.email;
+    if (!me || !this.planId) return;
+    // Open in front of you: it's read. Otherwise, if it mentions you, the Mentions badge updates now.
+    if (this.collab.comments?.threadId === thread.id && document.visibilityState === 'visible') {
+      void markThreadRead(this.planId, thread.id);
+    } else if (threadMentions(thread).includes(me) || (before && threadMentions(before).includes(me))) {
+      // The plan tells the workspace's index right after broadcasting; give it a moment.
+      setTimeout(() => void refreshMentionCounts(), 1500);
     }
   }
 
@@ -482,11 +521,19 @@ export function useSharedHistory() {
 export async function bootShared() {
   const collab = useCollabStore.getState();
   try {
-    const { me } = await api<{ me: SharedMe }>('/api/me');
+    const { me, prefs } = await api<{ me: SharedMe; prefs?: { mail: boolean; mentionEmails: boolean } }>('/api/me');
     const { plans } = await api<{ plans: ServerPlan[] }>('/api/plans');
-    collab.set({ me, plans });
-    const last = readPrefs().lastPlanId;
+    collab.set({ me, plans, ...(prefs ? { prefs } : {}) });
+    watchMentions();
+    const link = takeCommentLink();
+    const last = link?.planId ?? readPrefs().lastPlanId;
     const plan = plans.find((p) => p.id === last) ?? plans[0];
+    if (link && plan?.id === link.planId) {
+      const ui = useUIStore.getState();
+      if (ui.view !== 'projects' && ui.view !== 'resources') ui.setView('projects');
+      collab.set({ comments: { threadId: link.threadId, jump: true } });
+    }
+    else if (link) collab.toast('That comment’s plan isn’t in the shared workspace (it may have been archived).');
     if (plan) getSession().open(plan.id, plan.name);
     else collab.set({ status: 'no-plan' });
   } catch (err) {
@@ -537,3 +584,131 @@ export const sendPresence = (() => {
 export const addLock = (lock: NewLock) => getSession().request({ t: 'lock.add', lock });
 export const removeLock = (id: string) => getSession().request({ t: 'lock.remove', id });
 export const revertBatch = (batchId: string) => getSession().request({ t: 'revert', batchId });
+
+// ── comments ──
+
+export const addComment = (c: { threadId: string; commentId: string; anchor?: CommentAnchor; body: string }) =>
+  getSession().request({ t: 'comment.add', ...c });
+export const editComment = (threadId: string, commentId: string, body: string) =>
+  getSession().request({ t: 'comment.edit', threadId, commentId, body });
+export const deleteComment = (threadId: string, commentId: string) => getSession().request({ t: 'comment.delete', threadId, commentId });
+export const setThreadResolved = (threadId: string, resolved: boolean) =>
+  getSession().request({ t: 'thread.resolve', threadId, resolved });
+
+/** Opens the comments panel on a thread, a cell or row, or (no argument) the plan's list. */
+export function showComments(focus: { anchor?: CommentAnchor; threadId?: string; jump?: boolean } = {}) {
+  useCollabStore.getState().set({ comments: focus });
+}
+
+/** Opens a thread in any plan (from the Mentions inbox or an activity entry): switches plan if needed. */
+export function openThread(planId: string, threadId: string) {
+  const collab = useCollabStore.getState();
+  const ui = useUIStore.getState();
+  if (ui.view !== 'projects' && ui.view !== 'resources') ui.setView('projects');
+  collab.set({ comments: { threadId, jump: true } });
+  if (getSession().planId === planId) return;
+  // A plan created since the list was loaded isn't in it yet.
+  if (collab.plans.some((p) => p.id === planId)) openSharedPlan(planId);
+  else {
+    void refreshPlans().then(
+      (plans) => {
+        if (plans.some((p) => p.id === planId)) openSharedPlan(planId);
+        else useCollabStore.getState().toast('That comment’s plan isn’t in the shared workspace (it may have been archived).');
+      },
+      (e: Error) => useCollabStore.getState().toast(e.message),
+    );
+  }
+}
+
+let peopleLoaded = 0;
+/** Loads who can be @mentioned (at most once a minute). */
+export async function loadPeople(): Promise<Person[]> {
+  const collab = useCollabStore.getState();
+  if (Date.now() - peopleLoaded < 60_000 && collab.people.length) return collab.people;
+  peopleLoaded = Date.now();
+  try {
+    const { people } = await api<{ people: Person[] }>('/api/people');
+    useCollabStore.getState().set({ people });
+    return people;
+  } catch {
+    peopleLoaded = 0;
+    return collab.people;
+  }
+}
+
+export async function refreshMentionCounts() {
+  try {
+    const { counts } = await api<{ counts: { open: number; unreadOpen: number } }>('/api/mentions/counts');
+    useCollabStore.getState().set({ mentionCounts: counts });
+  } catch {
+    // Shown again on the next poll.
+  }
+}
+
+const reads = new Map<string, number>();
+/** Marks a thread read (debounced per thread), then refreshes the badge. */
+export async function markThreadRead(planId: string, threadId: string) {
+  const key = `${planId}/${threadId}`;
+  if (Date.now() - (reads.get(key) ?? 0) < 2000) return;
+  reads.set(key, Date.now());
+  try {
+    await api('/api/mentions/read', { method: 'POST', json: { planId, threadId } });
+    await refreshMentionCounts();
+  } catch {
+    reads.delete(key);
+  }
+}
+
+export async function setMentionEmails(on: boolean) {
+  const { prefs } = await api<{ prefs: { mail: boolean; mentionEmails: boolean } }>('/api/me/prefs', {
+    method: 'PUT',
+    json: { mentionEmails: on },
+  });
+  useCollabStore.getState().set({ prefs });
+}
+
+let watching = false;
+/** Keeps the Mentions badge current: now, every minute, when the tab comes back, and on comment links. */
+function watchMentions() {
+  void refreshMentionCounts();
+  if (watching) return;
+  watching = true;
+  setInterval(() => document.visibilityState === 'visible' && void refreshMentionCounts(), 60_000);
+  window.addEventListener('focus', () => void refreshMentionCounts());
+  window.addEventListener('hashchange', () => {
+    const link = takeCommentLink();
+    if (!link) return;
+    openThread(link.planId, link.threadId);
+  });
+}
+
+/** `#comment=<planId>/<threadId>`, as in mention emails. */
+export function commentLink(): { planId: string; threadId: string } | null {
+  const m = location.hash.match(/^#comment=([\w-]{1,64})\/([\w-]{1,64})$/);
+  return m ? { planId: m[1], threadId: m[2] } : null;
+}
+
+/** Reads a comment link from the address bar and clears it (so a reload doesn't reopen it). */
+function takeCommentLink() {
+  const link = commentLink();
+  if (link) history.replaceState(null, '', location.pathname + location.search);
+  return link;
+}
+
+/** The grid row a thread is on, and the rows above it to expand. */
+export function threadRow(thread: Thread, plan: PlanData): { view: 'projects' | 'resources'; row: string; week?: string; parents: string[] } | null {
+  const a = thread.anchor;
+  const roleId = anchorRoleId(a);
+  const clientKey = (projectId: string) => `c:${plan.projects.find((p) => p.id === projectId)?.client?.trim().toLowerCase() || ''}`;
+  if (roleId) {
+    const role = plan.assignments.find((r) => r.id === roleId);
+    if (!role) return null;
+    return { view: 'projects', row: `a:${roleId}`, ...(a.kind === 'cells' ? { week: a.from } : {}), parents: [`p:${role.projectId}`, clientKey(role.projectId)] };
+  }
+  if (a.kind === 'project') return plan.projects.some((p) => p.id === a.projectId) ? { view: 'projects', row: `p:${a.projectId}`, parents: [clientKey(a.projectId)] } : null;
+  if (a.kind === 'resource') {
+    const r = plan.resources.find((x) => x.id === a.resourceId);
+    return r ? { view: 'resources', row: `r:${r.id}`, parents: [`g:${r.level ?? 'none'}`] } : null;
+  }
+  return null;
+}

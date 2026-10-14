@@ -19,11 +19,13 @@ import { cellLockedFor, lockCoversCell, type Lock } from '../../domain/locks';
 import { useCollabStore } from '../../store/collabStore';
 import { isShared } from '../../store/mode';
 import { usePlan, usePlanStore, type AllocationEdit } from '../../store/planStore';
-import { sendPresence } from '../../store/sharedPlanStore';
+import { sendPresence, showComments } from '../../store/sharedPlanStore';
 import { useUIStore } from '../../store/uiStore';
 import { useCan } from '../../store/useCan';
 import { useDerived } from '../../store/useDerived';
 import { CellMenu, type CellMenuTarget } from '../../collab/CellMenu';
+import { cellCommentAnchor } from '../../collab/commentAnchors';
+import { anchorOnCell, isOpenThread, type Thread } from '../../domain/comments';
 import { Pie } from './Pie';
 
 export interface SummaryCell {
@@ -124,6 +126,16 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
   const locks = useCollabStore((s) => s.locks);
   const presence = useCollabStore((s) => s.presence);
   const recent = useCollabStore((s) => s.recent);
+  const threadMap = useCollabStore((s) => s.threads);
+  /** Open cell threads by role, for the comment markers. */
+  const cellThreads = useMemo(() => {
+    const m = new Map<string, Thread[]>();
+    for (const t of Object.values(threadMap)) {
+      if (t.anchor.kind !== 'cells' || !isOpenThread(t)) continue;
+      m.set(t.anchor.roleId, [...(m.get(t.anchor.roleId) ?? []), t]);
+    }
+    return m;
+  }, [threadMap]);
   const serverWeek = useCollabStore((s) => s.thisWeek);
   const toast = useCollabStore((s) => s.toast);
   const [menu, setMenu] = useState<CellMenuTarget | null>(null);
@@ -307,11 +319,14 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     } else if (shared && (e.key === 'h' || e.key === 'H') && !mod) {
       e.preventDefault();
       openMenuAt(focus, null, 'history');
+    } else if (shared && (e.key === 'm' || e.key === 'M') && !mod) {
+      e.preventDefault();
+      openMenuAt(focus, null, 'comments');
     }
   };
 
   /** Opens the cell menu (or straight to history) for a cell, using the selection if the cell is in it. */
-  const openMenuAt = (pos: Pos, at: { x: number; y: number } | null, direct?: 'history') => {
+  const openMenuAt = (pos: Pos, at: { x: number; y: number } | null, direct?: 'history' | 'comments') => {
     const area = rect && inSelection(pos.r, pos.c) ? rect : { r0: pos.r, r1: pos.r, c0: pos.c, c1: pos.c };
     const roles = editRows
       .slice(area.r0, area.r1 + 1)
@@ -320,7 +335,9 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     const cell = assignmentsById.get(editRows[pos.r].assignmentId!);
     if (!cell) return;
     const weeks = buckets.slice(area.c0, area.c1 + 1).flatMap((b) => b.weeks);
-    setMenu({ cell, cellWeeks: buckets[pos.c].weeks, roles, weeks, at, direct });
+    const target: CellMenuTarget = { cell, cellWeeks: buckets[pos.c].weeks, roles, weeks, at, direct };
+    if (direct === 'comments') showComments({ anchor: cellCommentAnchor(target) });
+    else setMenu(target);
   };
 
   const onCellMouseDown = (pos: Pos, e: MouseEvent) => {
@@ -402,6 +419,7 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     let presenceColor: string | undefined;
     const presenceNames: string[] = [];
     let recentBy: { email: string; ts: number } | undefined;
+    let commentCount = 0;
     if (shared) {
       const covering = locks.filter((l) => b.weeks.some((w) => lockCoversCell(l, a, w, serverWeek)));
       if (covering.length) {
@@ -426,6 +444,7 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
         if (rc && (!recentBy || rc.ts > recentBy.ts)) recentBy = rc;
       }
       if (recentBy) classes.push('recent');
+      commentCount = (cellThreads.get(a.id) ?? []).filter((t) => anchorOnCell(t.anchor, a.id, b.weeks)).length;
     }
 
     let title: string | undefined;
@@ -438,6 +457,7 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
       lockNote && `🔒 ${lockNote}`,
       presenceNames.length && `${presenceNames.join(', ')} ${presenceNames.length === 1 ? 'has' : 'have'} this selected`,
       recentBy && `Changed by ${recentBy.email} ${relativeMins(recentBy.ts)}`,
+      commentCount && `💬 ${commentCount} open comment thread${commentCount === 1 ? '' : 's'} (M to open)`,
     ].filter(Boolean);
     if (notes.length) title = [title, ...notes].filter(Boolean).join('\n');
 
@@ -522,6 +542,7 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
             {formatPct(st.avg)}
           </>
         )}
+        {commentCount > 0 && <span className="comment-mark" aria-label={`${commentCount} open comment thread${commentCount === 1 ? '' : 's'}`} />}
       </td>
     );
   };

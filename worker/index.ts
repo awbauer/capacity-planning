@@ -7,6 +7,8 @@ import {
   activityQuery,
   body,
   createPlanBody,
+  prefsBody,
+  readBody,
   csvCell,
   fail,
   HttpError,
@@ -37,7 +39,31 @@ async function route(c: Ctx): Promise<Response> {
   const m = (re: RegExp) => path.match(re);
 
   if (path === '/api/me' && method === 'GET') {
-    return json({ me, defaultRole: me.role === 'admin' ? await ws.defaultRole() : undefined });
+    return json({ me, defaultRole: me.role === 'admin' ? await ws.defaultRole() : undefined, prefs: await ws.prefs(me.email) });
+  }
+  if (path === '/api/me/prefs' && method === 'PUT') {
+    const b = await body(request, prefsBody);
+    return json({ prefs: await ws.setMentionEmails(me.email, b.mentionEmails) });
+  }
+
+  if (path === '/api/people' && method === 'GET') return json({ people: await ws.people() });
+
+  if (path === '/api/mentions' && method === 'GET') {
+    const p = url.searchParams;
+    const status = p.get('status');
+    return json(
+      await ws.mentions(me.email, {
+        status: status === 'open' || status === 'resolved' ? status : 'all',
+        ...(p.get('cursor') ? { cursor: p.get('cursor')! } : {}),
+        ...(p.get('limit') ? { limit: Number(p.get('limit')) } : {}),
+      }),
+    );
+  }
+  if (path === '/api/mentions/counts' && method === 'GET') return json({ counts: await ws.mentionCounts(me.email) });
+  if (path === '/api/mentions/read' && method === 'POST') {
+    const b = await body(request, readBody);
+    await ws.markRead(me.email, b.planId, b.threadId);
+    return json({ ok: true });
   }
 
   if (path === '/api/plans' && method === 'GET') {
@@ -112,7 +138,7 @@ async function route(c: Ctx): Promise<Response> {
   r = m(/^\/api\/plans\/([\w-]{1,64})\/batches\/([\w-]{1,64})$/);
   if (r && method === 'GET') {
     await planOr404(env, r[1]);
-    const b = await roomStub(env, r[1]).batch(r[2]);
+    const b = await roomStub(env, r[1]).batch(r[2], me.role === 'admin');
     return b ? json(b) : fail(404, 'No such change.');
   }
 

@@ -8,6 +8,22 @@ import {
   type EntityKind,
   type Put,
 } from '../src/domain/diff';
+import {
+  anchorExists,
+  anchorLabel,
+  anchorRefs,
+  excerpt,
+  indexRow,
+  MAX_COMMENTS_PER_THREAD,
+  MAX_THREADS_PER_PLAN,
+  parseMentions,
+  rawExcerpt,
+  type Comment,
+  type CommentAdd,
+  type MentionNotice,
+  type Thread,
+  type ThreadIndexRow,
+} from '../src/domain/comments';
 import { brokenLocks, type Lock, type NewLock } from '../src/domain/locks';
 import { parseOp, validateChanged } from '../src/domain/opSchema';
 import { applyOp, flattenOps, type Op } from '../src/domain/ops';
@@ -35,6 +51,14 @@ const MIGRATIONS = [
   CREATE INDEX changes_project ON changes (project_id, seq) WHERE project_id IS NOT NULL;
   CREATE TABLE locks (id TEXT PRIMARY KEY, data TEXT NOT NULL, created_at INTEGER NOT NULL);
   `,
+  `
+  CREATE TABLE threads (id TEXT PRIMARY KEY, data TEXT NOT NULL, created_at INTEGER NOT NULL);
+  CREATE TABLE comment_revisions (
+    seq INTEGER NOT NULL, comment_id TEXT NOT NULL, thread_id TEXT NOT NULL, before TEXT, after TEXT, PRIMARY KEY (seq, comment_id));
+  CREATE TABLE thread_dirty (thread_id TEXT PRIMARY KEY, v INTEGER NOT NULL);
+  CREATE TABLE mention_events (id INTEGER PRIMARY KEY AUTOINCREMENT, data TEXT NOT NULL);
+  ALTER TABLE batches ADD COLUMN thread_id TEXT;
+  `,
 ];
 
 export interface User {
@@ -49,10 +73,32 @@ export interface ActivityRow extends BatchInfo {
   epoch: number;
   projectIds: string[];
   resourceIds: string[];
+  /** The comment thread, for comment batches. */
+  threadId?: string;
+}
+
+/** What the workspace needs to hear about comments since the last flush. */
+export interface ThreadOutbox {
+  threads: ThreadIndexRow[];
+  /** Thread ids and the version read, to clear once the workspace has them. */
+  versions: [string, number][];
+  notices: MentionNotice[];
+  /** Comments deleted since: their notices are dropped. */
+  retracted: string[];
+  /** Highest mention event included. */
+  lastEvent: number;
+}
+
+/** A comment's text before and after one recorded change (for the audit log). */
+export interface CommentRevision {
+  commentId: string;
+  threadId: string;
+  before: string | null;
+  after: string | null;
 }
 
 export type Result =
-  | { ok: true; seq: number; batch: BatchInfo; puts: Put[]; full?: PlanData; skipped?: number; locks?: Lock[] }
+  | { ok: true; seq: number; batch: BatchInfo; puts: Put[]; full?: PlanData; skipped?: number; locks?: Lock[]; thread?: Thread }
   | { ok: false; code: RejectCode; msg: string; lockIds?: string[] }
   | { ok: 'dup'; seq: number }
   | { ok: 'noop'; seq: number };
@@ -87,6 +133,7 @@ const json = (v: unknown): string | null => (v === null || v === undefined ? nul
 export class RoomEngine {
   private plan?: PlanData;
   private lockList?: Lock[];
+  private threadMap?: Map<string, Thread>;
 
   private readonly sql: Sql;
   private readonly now: () => number;
@@ -237,6 +284,220 @@ export class RoomEngine {
     }, 'lock.remove', `Unlocked ${this.lockLabel(lock)}${by}`, lock);
   }
 
+  // ── comments ──
+
+  /** Every comment thread, oldest first. */
+  threads(): Thread[] {
+    if (!this.threadMap) {
+      const rows = this.sql.all<{ data: string }>('SELECT data FROM threads ORDER BY created_at, id');
+      this.threadMap = new Map(rows.map((r) => {
+        const t = JSON.parse(r.data) as Thread;
+        return [t.id, t];
+      }));
+    }
+    return [...this.threadMap.values()];
+  }
+
+  thread(id: string): Thread | undefined {
+    this.threads();
+    return this.threadMap!.get(id);
+  }
+
+  /** Adds a comment: to a thread, or starting one when `anchor` is given. Anyone with access can comment. */
+  addComment(user: User, cid: string | undefined, input: CommentAdd): Result {
+    const dup = this.dupOf(user, cid);
+    if (dup !== undefined) return { ok: 'dup', seq: dup };
+    const plan = this.current();
+    const existing = this.thread(input.threadId);
+    if (this.threads().some((t) => t.comments.some((c) => c.id === input.commentId))) {
+      return { ok: false, code: 'duplicate', msg: 'That comment already exists.' };
+    }
+    const now = this.now();
+    const mentions = parseMentions(input.body);
+    const comment = { id: input.commentId, author: user.email, body: input.body, mentions, createdAt: now };
+    let thread: Thread;
+    let what: string;
+    if (existing) {
+      if (input.anchor) return { ok: false, code: 'duplicate', msg: 'That thread already exists.' };
+      if (existing.comments.length >= MAX_COMMENTS_PER_THREAD) {
+        return { ok: false, code: 'too_large', msg: `A thread holds at most ${MAX_COMMENTS_PER_THREAD} comments; start a new one.` };
+      }
+      const reopen = existing.resolvedAt !== undefined;
+      thread = { ...existing, comments: [...existing.comments, comment] };
+      if (reopen) {
+        delete thread.resolvedAt;
+        delete thread.resolvedBy;
+      }
+      what = reopen ? 'Replied to and reopened a resolved thread on' : 'Replied on';
+    } else {
+      if (!input.anchor) return { ok: false, code: 'not_found', msg: 'That thread no longer exists.' };
+      if (!anchorExists(plan, input.anchor)) return { ok: false, code: 'not_found', msg: 'What you commented on no longer exists.' };
+      if (this.threads().length >= MAX_THREADS_PER_PLAN) {
+        return { ok: false, code: 'too_large', msg: `This plan has the most comment threads it can hold (${MAX_THREADS_PER_PLAN}).` };
+      }
+      thread = { id: input.threadId, anchor: input.anchor, createdBy: user.email, createdAt: now, comments: [comment] };
+      what = 'Commented on';
+    }
+    const summary = `${what} ${anchorLabel(plan, thread.anchor)}: “${excerpt(input.body)}”`;
+    return this.recordComment(user, cid, thread, 'comment.add', summary, {
+      comment: { id: comment.id, before: null, after: comment.body },
+      notices: mentions.map((email) => this.notice(email, thread, comment.id, user.email, now, comment.body)),
+    });
+  }
+
+  /** Changes a comment's text. Only its author can. */
+  editComment(user: User, cid: string | undefined, threadId: string, commentId: string, body: string): Result {
+    const dup = this.dupOf(user, cid);
+    if (dup !== undefined) return { ok: 'dup', seq: dup };
+    const found = this.findComment(threadId, commentId);
+    if ('ok' in found) return found;
+    const { thread, comment } = found;
+    if (comment.author !== user.email) return { ok: false, code: 'forbidden', msg: 'Only the person who wrote a comment can edit it.' };
+    if (comment.body === body) return { ok: 'noop', seq: this.seq };
+    const now = this.now();
+    const mentions = parseMentions(body);
+    const added = mentions.filter((m) => !comment.mentions.includes(m));
+    const updated = { ...comment, body, mentions, editedAt: now };
+    const next = { ...thread, comments: thread.comments.map((c) => (c.id === commentId ? updated : c)) };
+    const summary = `Edited a comment on ${anchorLabel(this.current(), thread.anchor)}: “${excerpt(body)}”`;
+    return this.recordComment(user, cid, next, 'comment.edit', summary, {
+      comment: { id: commentId, before: comment.body, after: body },
+      notices: added.map((email) => this.notice(email, next, commentId, user.email, now, body)),
+    });
+  }
+
+  /** Deletes a comment (its author or an admin). Its place in the thread stays; its text is only kept for the audit log. */
+  deleteComment(user: User, cid: string | undefined, threadId: string, commentId: string): Result {
+    const dup = this.dupOf(user, cid);
+    if (dup !== undefined) return { ok: 'dup', seq: dup };
+    const found = this.findComment(threadId, commentId);
+    if ('ok' in found) return found;
+    const { thread, comment } = found;
+    if (comment.author !== user.email && user.role !== 'admin') {
+      return { ok: false, code: 'forbidden', msg: 'Only the person who wrote a comment, or an admin, can delete it.' };
+    }
+    const deleted: Comment = { id: comment.id, author: comment.author, body: '', mentions: [], createdAt: comment.createdAt, deleted: { by: user.email, at: this.now() } };
+    const next = { ...thread, comments: thread.comments.map((c) => (c.id === commentId ? deleted : c)) };
+    const by = comment.author === user.email ? '' : ` by ${comment.author}`;
+    const summary = `Deleted a comment${by} on ${anchorLabel(this.current(), thread.anchor)}`;
+    return this.recordComment(user, cid, next, 'comment.delete', summary, {
+      comment: { id: commentId, before: comment.body, after: null },
+      retract: commentId,
+    });
+  }
+
+  /** Resolves or reopens a thread. Anyone with access can. */
+  setResolved(user: User, cid: string | undefined, threadId: string, resolved: boolean): Result {
+    const dup = this.dupOf(user, cid);
+    if (dup !== undefined) return { ok: 'dup', seq: dup };
+    const thread = this.thread(threadId);
+    if (!thread) return { ok: false, code: 'not_found', msg: 'That thread no longer exists.' };
+    if ((thread.resolvedAt !== undefined) === resolved) return { ok: 'noop', seq: this.seq };
+    const next: Thread = { ...thread };
+    if (resolved) {
+      next.resolvedAt = this.now();
+      next.resolvedBy = user.email;
+    } else {
+      delete next.resolvedAt;
+      delete next.resolvedBy;
+    }
+    const summary = `${resolved ? 'Resolved' : 'Reopened'} the thread on ${anchorLabel(this.current(), thread.anchor)}`;
+    return this.recordComment(user, cid, next, resolved ? 'comment.resolve' : 'comment.reopen', summary, {});
+  }
+
+  /** What the workspace hasn't heard yet: changed threads and new mentions. */
+  threadOutbox(limit = 100): ThreadOutbox {
+    const plan = this.current();
+    const dirty = this.sql.all<{ thread_id: string; v: number }>('SELECT thread_id, v FROM thread_dirty LIMIT ?', limit);
+    const events = this.sql.all<{ id: number; data: string }>('SELECT id, data FROM mention_events ORDER BY id LIMIT ?', limit * 5);
+    const notices: MentionNotice[] = [];
+    const retracted: string[] = [];
+    for (const e of events) {
+      const d = JSON.parse(e.data) as MentionNotice | { retract: string };
+      if ('retract' in d) retracted.push(d.retract);
+      else notices.push(d);
+    }
+    return {
+      threads: dirty.map((d) => this.thread(d.thread_id)).filter((t): t is Thread => !!t).map((t) => indexRow(plan, t)),
+      versions: dirty.map((d) => [d.thread_id, d.v]),
+      notices,
+      retracted,
+      lastEvent: events.length ? events[events.length - 1].id : 0,
+    };
+  }
+
+  /** Clears what the workspace now has (threads changed again since stay dirty). */
+  threadOutboxSent(sent: ThreadOutbox) {
+    this.sql.transaction(() => {
+      for (const [id, v] of sent.versions) this.sql.all('DELETE FROM thread_dirty WHERE thread_id = ? AND v = ?', id, v);
+      if (sent.lastEvent) this.sql.all('DELETE FROM mention_events WHERE id <= ?', sent.lastEvent);
+    });
+  }
+
+  /** Marks every thread for re-sending (rebuilding the workspace's index). */
+  reindexThreads() {
+    this.sql.all('INSERT INTO thread_dirty (thread_id, v) SELECT id, 1 FROM threads WHERE true ON CONFLICT(thread_id) DO UPDATE SET v = v + 1');
+  }
+
+  get threadOutboxEmpty(): boolean {
+    return !one(this.sql.all('SELECT 1 FROM thread_dirty LIMIT 1')) && !one(this.sql.all('SELECT 1 FROM mention_events LIMIT 1'));
+  }
+
+  private notice(email: string, thread: Thread, commentId: string, actor: string, ts: number, body: string): MentionNotice {
+    return { email, threadId: thread.id, commentId, actor, ts, label: anchorLabel(this.current(), thread.anchor), excerpt: rawExcerpt(body, 500) };
+  }
+
+  private findComment(threadId: string, commentId: string): { thread: Thread; comment: Comment } | (Result & { ok: false }) {
+    const thread = this.thread(threadId);
+    if (!thread) return { ok: false, code: 'not_found', msg: 'That thread no longer exists.' };
+    const comment = thread.comments.find((c) => c.id === commentId);
+    if (!comment || comment.deleted) return { ok: false, code: 'not_found', msg: 'That comment was deleted.' };
+    return { thread, comment };
+  }
+
+  private recordComment(
+    user: User,
+    cid: string | undefined,
+    thread: Thread,
+    op: string,
+    summary: string,
+    extra: { comment?: { id: string; before: string | null; after: string | null }; notices?: MentionNotice[]; retract?: string },
+  ): Result {
+    const refs = anchorRefs(this.current(), thread.anchor);
+    const r = this.recordSideChange(
+      user,
+      cid,
+      (seq) => {
+        this.sql.all(
+          'INSERT INTO threads (id, data, created_at) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data',
+          thread.id,
+          JSON.stringify(thread),
+          thread.createdAt,
+        );
+        if (extra.comment) {
+          this.sql.all(
+            'INSERT INTO comment_revisions (seq, comment_id, thread_id, before, after) VALUES (?, ?, ?, ?, ?)',
+            seq,
+            extra.comment.id,
+            thread.id,
+            extra.comment.before,
+            extra.comment.after,
+          );
+        }
+        this.sql.all('INSERT INTO thread_dirty (thread_id, v) VALUES (?, 1) ON CONFLICT(thread_id) DO UPDATE SET v = v + 1', thread.id);
+        for (const n of extra.notices ?? []) this.sql.all('INSERT INTO mention_events (data) VALUES (?)', JSON.stringify(n));
+        if (extra.retract) this.sql.all('INSERT INTO mention_events (data) VALUES (?)', JSON.stringify({ retract: extra.retract }));
+      },
+      op,
+      summary.slice(0, 600),
+      refs,
+      thread.id,
+    );
+    this.threads();
+    this.threadMap!.set(thread.id, thread);
+    return { ...r, thread };
+  }
+
   /** Replaces the whole plan (creating or uploading one); recorded like any other change. */
   replacePlan(user: User, plan: PlanData, summary: string): Result {
     const before = this.current();
@@ -324,11 +585,29 @@ export class RoomEngine {
     }));
   }
 
-  /** One batch and every change in it. */
-  batch(batchId: string): { batch: BatchInfo; changes: Change[] } | undefined {
+  /**
+   * One batch and every change in it. For a comment batch, `withText` adds
+   * the comment's text before and after (admins only: it can be deleted text).
+   */
+  batch(
+    batchId: string,
+    withText = false,
+  ): { batch: BatchInfo; changes: Change[]; threadId?: string; comment?: CommentRevision } | undefined {
     const row = one(this.sql.all('SELECT * FROM batches WHERE batch_id = ?', batchId));
     if (!row) return undefined;
-    return { batch: toBatchInfo(row), changes: this.batchChanges(Number(row.seq)) };
+    const seq = Number(row.seq);
+    const rev = withText
+      ? one(this.sql.all<{ comment_id: string; thread_id: string; before: string | null; after: string | null }>(
+          'SELECT comment_id, thread_id, before, after FROM comment_revisions WHERE seq = ?',
+          seq,
+        ))
+      : undefined;
+    return {
+      batch: toBatchInfo(row),
+      changes: this.batchChanges(seq),
+      ...(row.thread_id ? { threadId: String(row.thread_id) } : {}),
+      ...(rev ? { comment: { commentId: rev.comment_id, threadId: rev.thread_id, before: rev.before, after: rev.after } } : {}),
+    };
   }
 
   /** Batches after `afterSeq`, for the workspace's activity index. */
@@ -343,6 +622,7 @@ export class RoomEngine {
         epoch,
         projectIds: JSON.parse(String(r.project_ids)) as string[],
         resourceIds: JSON.parse(String(r.resource_ids)) as string[],
+        ...(r.thread_id ? { threadId: String(r.thread_id) } : {}),
       }));
   }
 
@@ -426,22 +706,43 @@ export class RoomEngine {
   }
 
   private recordLockChange(user: User, cid: string | undefined, write: () => void, op: string, summary: string, lock: Lock): Result {
-    const seq = this.seq + 1;
-    const batch: BatchInfo = { batchId: this.newId(), seq, actor: user.email, ts: this.now(), op, summary, changeCount: 0 };
     const projectIds = lock.scope === 'project' ? [lock.projectId] : [];
-    this.sql.transaction(() => {
-      write();
-      this.insertBatch(batch, cid, projectIds, [], false);
-      metaSet(this.sql, 'seq', seq);
-    });
+    const r = this.recordSideChange(user, cid, write, op, summary, { projectIds, resourceIds: [] });
     this.lockList = undefined;
-    return { ok: true, seq, batch, puts: [], locks: this.locks() };
+    return { ...r, locks: this.locks() };
   }
 
-  private insertBatch(batch: BatchInfo, cid: string | undefined, projectIds: string[], resourceIds: string[], adminOnly: boolean) {
+  /** Records a batch that changes no plan data (a lock or a comment), running `write` in its transaction. */
+  private recordSideChange(
+    user: User,
+    cid: string | undefined,
+    write: (seq: number) => void,
+    op: string,
+    summary: string,
+    refs: { projectIds: string[]; resourceIds: string[] },
+    threadId?: string,
+  ): Result & { ok: true } {
+    const seq = this.seq + 1;
+    const batch: BatchInfo = { batchId: this.newId(), seq, actor: user.email, ts: this.now(), op, summary, changeCount: 0 };
+    this.sql.transaction(() => {
+      write(seq);
+      this.insertBatch(batch, cid, refs.projectIds, refs.resourceIds, false, threadId);
+      metaSet(this.sql, 'seq', seq);
+    });
+    return { ok: true, seq, batch, puts: [] };
+  }
+
+  private insertBatch(
+    batch: BatchInfo,
+    cid: string | undefined,
+    projectIds: string[],
+    resourceIds: string[],
+    adminOnly: boolean,
+    threadId?: string,
+  ) {
     this.sql.all(
-      `INSERT INTO batches (seq, batch_id, actor, client_op_id, ts, op, summary, revert_of, change_count, project_ids, resource_ids, admin_only)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO batches (seq, batch_id, actor, client_op_id, ts, op, summary, revert_of, change_count, project_ids, resource_ids, admin_only, thread_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       batch.seq,
       batch.batchId,
       batch.actor,
@@ -454,6 +755,7 @@ export class RoomEngine {
       JSON.stringify(projectIds),
       JSON.stringify(resourceIds),
       adminOnly ? 1 : 0,
+      threadId ?? null,
     );
   }
 

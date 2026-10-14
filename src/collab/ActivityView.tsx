@@ -6,10 +6,11 @@ import { formatWeek } from '../domain/weeks';
 import { today } from '../components/download';
 import { useCollabStore } from '../store/collabStore';
 import { usePlan, usePlanMeta } from '../store/planStore';
-import { openSharedPlan, revertBatch } from '../store/sharedPlanStore';
+import { openSharedPlan, openThread, revertBatch } from '../store/sharedPlanStore';
 import { useCan } from '../store/useCan';
 import { useUIStore } from '../store/uiStore';
 import { when } from './format';
+import { CommentText } from './ThreadView';
 
 interface Entry {
   batchId: string;
@@ -22,6 +23,14 @@ interface Entry {
   summary: string;
   changeCount: number;
   revertOf: string | null;
+  /** For comment changes. */
+  threadId?: string;
+}
+
+/** A comment's text before and after a change (admins only). */
+interface CommentRevision {
+  before: string | null;
+  after: string | null;
 }
 
 interface Filters {
@@ -40,6 +49,11 @@ const OP_LABELS: Record<string, string> = {
   revert: 'Undo',
   'lock.add': 'Lock',
   'lock.remove': 'Unlock',
+  'comment.add': 'Comment',
+  'comment.edit': 'Comment edited',
+  'comment.delete': 'Comment deleted',
+  'comment.resolve': 'Resolved',
+  'comment.reopen': 'Reopened',
   'plan.replace': 'Whole plan',
   plan: 'Plan',
   user: 'Access',
@@ -227,12 +241,17 @@ function ActivityRow({ entry: e, open, onToggle, isOpenPlan }: { entry: Entry; o
   const jumpTo = useUIStore((s) => s.jumpTo);
   const plan = usePlan();
   const [detail, setDetail] = useState<Change[] | null>(null);
-  const expandable = !!e.planId && e.changeCount > 0;
+  const [text, setText] = useState<CommentRevision | null>(null);
+  const threadId = e.op.startsWith('comment.') ? e.threadId : undefined;
+  const expandable = !!e.planId && (e.changeCount > 0 || !!threadId);
 
   useEffect(() => {
     if (!open || !expandable || detail) return;
-    api<{ changes: Change[] }>(`/api/plans/${e.planId}/batches/${e.batchId}`)
-      .then((r) => setDetail(r.changes))
+    api<{ changes: Change[]; comment?: CommentRevision }>(`/api/plans/${e.planId}/batches/${e.batchId}`)
+      .then((r) => {
+        setDetail(r.changes);
+        setText(r.comment ?? null);
+      })
       .catch((err: Error) => toast(err.message));
   }, [open, expandable, detail, e.planId, e.batchId, toast]);
 
@@ -266,6 +285,28 @@ function ActivityRow({ entry: e, open, onToggle, isOpenPlan }: { entry: Entry; o
           <td colSpan={5}>
             {!detail ? (
               <span className="muted">Loading…</span>
+            ) : threadId ? (
+              <>
+                {text && (
+                  <ul className="change-list">
+                    {text.before !== null && (
+                      <li>
+                        <strong>{text.after === null ? 'Text deleted:' : 'Before:'}</strong> <CommentText body={text.before} />
+                      </li>
+                    )}
+                    {text.after !== null && (
+                      <li>
+                        <strong>{text.before === null ? 'Text:' : 'After:'}</strong> <CommentText body={text.after} />
+                      </li>
+                    )}
+                  </ul>
+                )}
+                <div className="button-row">
+                  <button type="button" className="btn btn-small" onClick={() => openThread(e.planId, threadId)}>
+                    Open thread
+                  </button>
+                </div>
+              </>
             ) : (
               <>
                 <ul className="change-list">

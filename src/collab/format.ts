@@ -7,3 +7,12 @@ export const when = (ts: number) =>
 /** "Role › Person", or "Role › open". */
 export const roleTitle = (a: Assignment, personName?: string) =>
   [a.name || 'Unnamed role', personName ?? (a.resourceId ? '?' : 'open')].join(' › ');
+
+/** Up to two initials for an avatar. */
+export const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .map((w) => w[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();

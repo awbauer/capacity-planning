@@ -1,3 +1,4 @@
+import { RowComments } from '../collab/RowComments';
 import { useState } from 'react';
 import type { Derived } from '../domain/derive';
 import { assignmentFlagWeeks } from '../domain/conflicts';
@@ -187,6 +188,7 @@ export function ProjectView({ buckets }: Props) {
             </div>
           </div>
           <div className="row-actions">
+            <RowComments kind="project" id={p.id} name={p.name} />
             <button type="button" className="btn btn-small edit-only" onClick={() => setAdding(p.id)}>
               + Person
             </button>
@@ -302,6 +304,7 @@ export function ProjectView({ buckets }: Props) {
                 Fill…
               </button>
             )}
+            <RowComments kind="role" id={a.id} name={`${roleLabel}${r ? ` (${r.name})` : ''}`} />
             <button
               type="button"
               className="icon-btn edit-only"

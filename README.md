@@ -121,13 +121,16 @@ What you get in shared mode:
 - **Cell history.** Right-click a cell (or select it and press **H**) → *History*: every change to those weeks, who made it and when, with *Restore* and *Undo this change*. A workstream's or person's details have a History section too.
 - **Freeze locks.** Right-click a cell → lock the selected cells, the role, or the whole workstream, with an optional note ("SOW signed"). Locked cells are hatched with 🔒. Only the person who set a lock can change what it covers; admins can remove anyone's lock. A lock freezes staffing (who's in a role, its weeks, a workstream's dates and status), not names or capabilities. An edit that would change locked staffing indirectly, such as deleting a person who's in a locked role, is refused with the reason. Admins can also *Lock past weeks* (Manage → Settings): only admins can then change weeks before the current one.
 - **Activity** (toolbar tab): one log of every change in every plan. Filter by plan, person, workstream or person affected, dates or text. Expand an entry to see each cell and field before → after, jump to it, or undo it. *Export CSV* downloads the filtered log. Admins also see workspace events (role changes, plans created, renamed or archived).
+- **Comments.** Right-click a cell (or select cells and press **M**) → *Comment…*, or use a row's 💬 button to comment on a whole role, workstream or person. Comments are threaded; anyone with access can comment (viewers included), resolve and reopen. A reply to a resolved thread reopens it. Cells with an open thread get an orange corner, and rows show how many open threads they have. *Comments* (toolbar) lists every thread in the plan: Open, Resolved or All, or only those that mention you. You can edit your own comments; you or an admin can delete them. A deleted comment leaves a placeholder, and its text stays in the audit log for admins. Comments aren't plan data: undo, history and exports ignore them. Every comment, edit, delete, resolve and reopen is in Activity.
+- **@mentions and the Mentions inbox.** Type `@` in a comment to mention someone with access. *Mentions* (toolbar tab, with a badge for unread unresolved threads) lists every thread that mentions you across plans, under Unresolved, Resolved or All, and marks what's new since you last opened it. If email is set up (below), mentions are also emailed about a minute later, one email per burst, and not at all if you've opened the thread by then. Each person can turn the emails off in *Mentions*. Only people who already have access are emailed, whatever address is typed.
 - **Roles**, one per person, for every plan:
 
   | | Viewer | Editor | Admin |
   |---|---|---|---|
   | See plans, history, Activity; export | ✓ | ✓ | ✓ |
+  | Comment, resolve and reopen threads; edit and delete own comments | ✓ | ✓ | ✓ |
   | Edit plans; undo; set and remove own locks; create or upload plans | | ✓ | ✓ |
-  | Thresholds and targets; rename or archive plans; People & access; remove anyone's lock; lock past weeks | | | ✓ |
+  | Thresholds and targets; rename or archive plans; People & access; remove anyone's lock; lock past weeks; delete anyone's comment | | | ✓ |
 
   Viewers get a read-only app. Admins manage people under Manage → *People & access*: change roles (they apply live, even to open tabs), remove access, add people before they sign in, and choose what first-time sign-ins get (viewer by default, or no access). Emails in `OWNER_EMAILS` are always admins.
 - **Plans** are archived, never deleted, so their history is kept. Archived plans can be restored.
@@ -141,6 +144,7 @@ What you get in shared mode:
   - It's stored with every changed field and week (before → after, who, when) in the same transaction.
   - It's then sent to everyone over hibernating WebSockets, so idle plans cost nothing.
 - **A Workspace Durable Object** holds people and roles, the plan list, and the index behind the Activity log.
+- **Comments** live in their plan's Durable Object, next to the plan. They're recorded like locks: as a batch in the change log, with no plan changes, sent live to everyone in the plan. The plan then sends the Workspace the changed threads and new mentions (retried until delivered). That's the index behind the Mentions inbox. The Workspace's alarm sends mention emails through **Cloudflare Email Service** (`send_email` binding).
 - Edits are small deterministic operations (`src/domain/ops.ts`). The browser and the server run the same reducer, so local mode and shared mode share all the editing code.
 - Durable Object storage has 30-day point-in-time recovery for disaster recovery. Don't use it to undo edits: it would also roll back the audit trail. Use Undo and Activity instead.
 
@@ -155,7 +159,12 @@ What you get in shared mode:
    - `POLICY_AUD`: the Access application's *Application Audience (AUD) Tag*
    - `OWNER_EMAILS`: comma-separated emails that are always admins (at least yours). If it's empty and nobody is an admin yet, the first person to sign in becomes admin (recorded in Activity). Everyone else starts as a viewer (or whatever an admin sets under People & access), and viewers can't create plans.
    - `TIMEZONE` (in `wrangler.jsonc`, default `America/New_York`): decides when "this week" starts for the past-weeks lock.
-4. Open the app, turn on the shared workspace, and upload your plans.
+4. **Mention emails** are optional; without them, mentions only show in the app.
+   - Onboard a sending domain under Compute → Email Service → Email Sending. The domain must use Cloudflare DNS. A subdomain such as `notify.example.com` keeps this mail's reputation separate.
+   - Set `MAIL_FROM` (e.g. `Capacity Planning <mentions@notify.example.com>`, on the onboarded domain) and `APP_URL` (the app's address, for the links in emails).
+   - Nothing is sent until both are set. The `EMAIL` binding is already in `wrangler.jsonc`.
+   - Before a domain is onboarded, Email Service only delivers to verified addresses in your account.
+5. Open the app, turn on the shared workspace, and upload your plans.
 
 Until steps 2–3 are done, turning the shared workspace on shows "Can't reach the shared workspace" with a way back to local mode.
 

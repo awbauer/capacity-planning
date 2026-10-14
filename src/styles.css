@@ -2566,3 +2566,271 @@ tr.archived {
 .gate-viewer p {
   margin: 0 0 6px;
 }
+
+/* ── Comments (shared mode) ── */
+
+/* An open comment thread on this cell: a corner fold, bottom right (::before/::after are taken). */
+.cell .comment-mark {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 0 0 8px 8px;
+  border-color: transparent transparent var(--comment) transparent;
+  pointer-events: none;
+}
+
+:root {
+  --comment: #d97706;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --comment: #fbbf24;
+  }
+}
+
+.row-comment {
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 0 4px;
+  font-size: 12px;
+  opacity: 0.25;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--text);
+}
+.row-label:hover .row-comment,
+.row-comment:focus-visible,
+.row-comment.has {
+  opacity: 1;
+}
+.row-comment .count {
+  display: inline-block;
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--comment);
+  color: var(--surface);
+  font-size: 10px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.toolbar .count,
+.mentions .count {
+  display: inline-block;
+  min-width: 18px;
+  margin-left: 4px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--surface-2);
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+}
+.count.count-alert {
+  background: var(--danger);
+  color: var(--surface);
+}
+
+.comments-panel {
+  width: 340px;
+  flex-shrink: 0;
+  overflow: auto;
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.comments-panel h2 {
+  font-size: 13px;
+}
+.thread-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.thread-list li > button {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 6px 8px;
+  cursor: pointer;
+}
+.thread-list li > button:hover {
+  border-color: var(--accent);
+}
+.comments-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.comments-head h2 {
+  margin: 0;
+}
+.comments-where {
+  margin: 0;
+  font-weight: 600;
+  font-size: 13px;
+}
+.comments-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.segmented.small button {
+  font-size: 12px;
+  padding: 2px 8px;
+}
+
+.thread {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--surface);
+}
+.thread.resolved {
+  background: var(--surface-2);
+}
+.thread.resolved .comments {
+  opacity: 0.75;
+}
+.thread-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.thread-label {
+  font-weight: 600;
+}
+.comments {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.comment {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.comment .avatar {
+  flex-shrink: 0;
+  margin-left: 0;
+}
+.comment-main {
+  flex: 1;
+  min-width: 0;
+}
+.comment-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12px;
+}
+.comment-head .link {
+  font-weight: 400;
+  color: var(--muted);
+}
+.comment-body {
+  margin: 2px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+.comment.deleted .comment-head strong {
+  color: var(--muted);
+}
+.mention {
+  color: var(--accent);
+  font-weight: 600;
+}
+.mention.mention-me {
+  background: var(--accent-soft);
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+.mention-input {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.mention-input textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 56px;
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+}
+.mention-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.mention-list {
+  position: absolute;
+  z-index: 40;
+  left: 0;
+  right: 0;
+  top: 100%;
+  margin: 2px 0 0;
+  padding: 4px 0;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  box-shadow: var(--shadow);
+}
+.mention-list button {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 4px 10px;
+  color: var(--text);
+  cursor: pointer;
+}
+.mention-list li[aria-selected='true'] button,
+.mention-list button:hover {
+  background: var(--accent-soft);
+}
+
+.mentions-table tr.unread td {
+  font-weight: 600;
+}
+.unread-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}

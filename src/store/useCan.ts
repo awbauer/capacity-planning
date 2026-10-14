@@ -25,3 +25,10 @@ export function useCan(): Can {
     (status === 'offline' && !offlineReadOnly);
   return connected ? can : { ...can, edit: false };
 }
+
+/** Whether this person can comment right now: anyone with access, while connected to the open plan. */
+export function useCanComment(): boolean {
+  const role = useCollabStore((s) => s.me?.role);
+  const status = useCollabStore((s) => s.status);
+  return isShared() && !!role && (status === 'live' || status === 'connecting');
+}

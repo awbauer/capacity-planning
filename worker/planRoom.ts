@@ -1,6 +1,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { colorFor } from '../src/domain/colors';
 import type { EntityKind } from '../src/domain/diff';
+import { commentAddSchema, commentDeleteSchema, commentEditSchema, threadResolveSchema } from '../src/domain/comments';
 import { newLockSchema } from '../src/domain/opSchema';
 import type { UserRole } from '../src/domain/permissions';
 import {
@@ -140,6 +141,7 @@ export class PlanRoom extends DurableObject<Env> {
           seq: this.room.seq,
           ...catchUp,
           locks: this.room.locks(),
+          threads: this.room.threads(),
           presence: this.others(ws).filter((c) => c.ready).map(presenceOf),
           thisWeek: this.thisWeek(),
           timeZone: this.env.TIMEZONE || 'UTC',
@@ -167,6 +169,30 @@ export class PlanRoom extends DurableObject<Env> {
       case 'lock.remove':
         this.finish(ws, msg.cid, this.room.removeLock(user, msg.cid, String(msg.id)));
         return;
+      case 'comment.add': {
+        const p = commentAddSchema.safeParse({ threadId: msg.threadId, commentId: msg.commentId, anchor: msg.anchor, body: msg.body });
+        if (!p.success) return this.invalid(ws, msg.cid, p.error.issues[0].message);
+        this.finish(ws, msg.cid, this.room.addComment(user, msg.cid, p.data));
+        return;
+      }
+      case 'comment.edit': {
+        const p = commentEditSchema.safeParse({ threadId: msg.threadId, commentId: msg.commentId, body: msg.body });
+        if (!p.success) return this.invalid(ws, msg.cid, p.error.issues[0].message);
+        this.finish(ws, msg.cid, this.room.editComment(user, msg.cid, p.data.threadId, p.data.commentId, p.data.body));
+        return;
+      }
+      case 'comment.delete': {
+        const p = commentDeleteSchema.safeParse({ threadId: msg.threadId, commentId: msg.commentId });
+        if (!p.success) return this.invalid(ws, msg.cid, p.error.issues[0].message);
+        this.finish(ws, msg.cid, this.room.deleteComment(user, msg.cid, p.data.threadId, p.data.commentId));
+        return;
+      }
+      case 'thread.resolve': {
+        const p = threadResolveSchema.safeParse({ threadId: msg.threadId, resolved: msg.resolved });
+        if (!p.success) return this.invalid(ws, msg.cid, p.error.issues[0].message);
+        this.finish(ws, msg.cid, this.room.setResolved(user, msg.cid, p.data.threadId, p.data.resolved));
+        return;
+      }
       case 'presence': {
         conn.view = typeof msg.view === 'string' ? msg.view.slice(0, 40) : undefined;
         const sel = msg.sel;
@@ -179,6 +205,10 @@ export class PlanRoom extends DurableObject<Env> {
         return;
       }
     }
+  }
+
+  private invalid(ws: WebSocket, cid: unknown, msg: string) {
+    if (typeof cid === 'string') this.send(ws, { t: 'rejected', cid, code: 'invalid', msg });
   }
 
   async webSocketClose(ws: WebSocket) {
@@ -223,6 +253,7 @@ export class PlanRoom extends DurableObject<Env> {
       }
     }
     if (result.locks) this.broadcast({ t: 'locks', locks: result.locks });
+    if (result.thread) this.broadcast({ t: 'thread', thread: result.thread });
     this.ctx.waitUntil(this.flush());
   }
 
@@ -268,14 +299,26 @@ export class PlanRoom extends DurableObject<Env> {
 
   // ── activity index ──
 
-  /** Sends batches not yet in the workspace's activity log; retries by alarm on failure. */
+  /**
+   * Sends batches not yet in the workspace's activity log, then changed
+   * comment threads and new mentions (for the Mentions inbox and emails);
+   * retries by alarm on failure.
+   */
   private async flush() {
     try {
+      const ws = workspaceStub(this.env);
       for (;;) {
         const rows = this.room.activitySince(this.room.flushedSeq, 200);
-        if (rows.length === 0) return;
-        await workspaceStub(this.env).recordActivity(rows);
+        if (rows.length === 0) break;
+        await ws.recordActivity(rows);
         this.room.flushedSeq = rows[rows.length - 1].seq;
+      }
+      const planId = this.room.planId;
+      while (planId && !this.room.threadOutboxEmpty) {
+        const out = this.room.threadOutbox();
+        if (out.versions.length === 0 && out.lastEvent === 0) break;
+        await ws.indexThreads(planId, out.threads, out.notices, out.retracted);
+        this.room.threadOutboxSent(out);
       }
     } catch {
       await this.scheduleAlarm(Date.now() + FLUSH_RETRY_MS);
@@ -334,8 +377,8 @@ export class PlanRoom extends DurableObject<Env> {
     return this.room.history(q);
   }
 
-  batch(batchId: string) {
-    return this.room.batch(batchId) ?? null;
+  batch(batchId: string, withText = false) {
+    return this.room.batch(batchId, withText) ?? null;
   }
 
   exportPlan() {
@@ -367,6 +410,7 @@ export class PlanRoom extends DurableObject<Env> {
     if (!id) return;
     await workspaceStub(this.env).clearActivity(id);
     this.room.flushedSeq = 0;
+    this.room.reindexThreads();
     await this.flush();
   }
 }
