@@ -2,11 +2,10 @@ import { z } from 'zod';
 import { DEFAULT_PLAN_NAME, type PlanFile } from './plans';
 import { CAREER_LEVELS, type Assignment, type PlanData } from './types';
 import { snapWeekly } from './steps';
-import { normalizeWeek } from './weeks';
+import { isWeekKey } from './weeks';
 
 const id = z.string().min(1);
-const isMonday = (k: string) => /^\d{4}-\d{2}-\d{2}$/.test(k) && normalizeWeek(k) === k;
-const weekKey = z.string().refine(isMonday, 'weeks must be Mondays in yyyy-MM-dd format');
+const weekKey = z.string().refine(isWeekKey, 'weeks must be Mondays in yyyy-MM-dd format');
 
 const planSchema = z.object({
   // v1 predates workstream status; v2 had separate presales/delivery rows; v3 kept open
@@ -126,7 +125,7 @@ export function checkReferences(plan: PlanData): string | null {
   }
   for (const a of plan.assignments) {
     const label = a.name ? `role "${a.name}"` : `role ${a.id}`;
-    const bad = Object.keys(a.weekly).find((k) => !isMonday(k));
+    const bad = Object.keys(a.weekly).find((k) => !isWeekKey(k));
     if (bad) return `${label} has week "${bad}"; weeks must be Mondays (yyyy-MM-dd)`;
     if (!projectIds.has(a.projectId)) return missing('workstream', a.projectId, label);
     if (a.resourceId !== null && !resourceIds.has(a.resourceId)) return missing('resource', a.resourceId, label);

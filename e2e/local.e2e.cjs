@@ -15,7 +15,7 @@ const rowMenu = (page, row, item) => choose(page, row.locator('.row-more').first
 const moreMenu = (page, item) => choose(page, page.getByRole('button', { name: 'More', exact: true }), item);
 
 (async () => {
-  const browser = await chromium.launch();
+  const browser = await chromium.launch({ ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH } : {}) });
   const context = await browser.newContext({ viewport: { width: 1600, height: 950 }, acceptDownloads: true });
   const page = await context.newPage();
   const errors = [];
@@ -607,4 +607,5 @@ const moreMenu = (page, item) => choose(page, page.getByRole('button', { name: '
 
   console.log('console errors/warnings:', errors.length ? errors : 'none');
   await browser.close();
+  assert(errors.length === 0, 'no unexpected browser errors: ' + errors.join('\n'));
 })().catch((e) => { console.error(e); process.exit(1); });

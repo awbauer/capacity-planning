@@ -30,3 +30,6 @@ dist-ssr
 # End-to-end screenshots
 e2e/shots
 worker/client-files.generated.json
+
+# Scratch work and isolated end-to-end state
+work/

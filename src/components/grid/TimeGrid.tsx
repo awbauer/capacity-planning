@@ -115,6 +115,7 @@ interface RowTimeline {
 /** A bar being dragged: one edge (resize) or the whole bar (move), on one row. */
 interface BarDrag {
   kind: 'start' | 'end' | 'move';
+  roleId: string;
   r: number;
   /** Column the drag started in, and the one under the pointer now. */
   c0: number;
@@ -356,9 +357,15 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
       : resizeEdits(drag.run, drag.kind, buckets[drag.c].weeks[0]);
 
   const commitDrag = (drag: BarDrag) => {
-    const a = assignmentsById.get(editRows[drag.r]?.assignmentId ?? '');
+    const a = assignmentsById.get(drag.roleId);
     if (!a) return;
     const e = dragEdits(drag);
+    // A move or resize is one operation. Skipping a locked destination while
+    // clearing the source would silently discard part of the booking.
+    if ([...e.set, ...e.clear].some((w) => lockedFor(a, w))) {
+      toast('That drag touches locked weeks. The booking was left unchanged.', 'info');
+      return;
+    }
     applyEdits([
       { a, weeks: e.set, percent: e.value },
       { a, weeks: e.clear, percent: 0 },
@@ -382,7 +389,7 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     const state = (w: WeekKey) => bookingState(weekClass(project, w), isFilled(a));
     const run = valueRun(a.weekly, week, (w) => state(w) === state(week));
     if (!run) return;
-    const drag = { kind, r, c0: c, c, run };
+    const drag = { kind, roleId: a.id, r, c0: c, c, run };
     barDragRef.current = drag;
     setBarDrag(drag);
   };

@@ -1,7 +1,7 @@
 const { chromium } = require('playwright');
 const path = require('path');
 // Shared workspace, three people: run with npm run test:e2e (see e2e/run.mjs). Needs DEV_AUTH=1 and
-// OWNER_EMAILS=alice@example.com in .dev.vars and a fresh .wrangler/state.
+// OWNER_EMAILS=alice@example.com in .dev.vars and isolated Durable Object storage.
 const SP = process.argv[2] || require('os').tmpdir();
 require('fs').mkdirSync(path.join(SP, 'shots'), { recursive: true });
 const BASE = process.env.BASE_URL || 'http://localhost:5173';
@@ -23,7 +23,7 @@ async function until(fn, msg, timeout = 5000) {
 }
 
 (async () => {
-  const browser = await chromium.launch();
+  const browser = await chromium.launch({ ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH } : {}) });
   const errors = [];
   async function user(email, { shared = true } = {}) {
     const context = await browser.newContext({ viewport: { width: 1500, height: 900 } });
@@ -332,6 +332,7 @@ async function until(fn, msg, timeout = 5000) {
 
   console.log('console errors:', errors.length ? errors : 'none');
   await browser.close();
+  assert(errors.length === 0, 'no unexpected browser errors: ' + errors.join('\n'));
 })().catch(async (e) => {
   console.error(e);
   process.exit(1);

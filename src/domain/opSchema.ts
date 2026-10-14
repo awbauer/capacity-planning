@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { CLICK_STEPS } from './steps';
 import { CAREER_LEVELS } from './types';
-import { normalizeWeek } from './weeks';
+import { isWeekKey } from './weeks';
 import { getEntity, type Change } from './diff';
 import type { Op } from './ops';
 import type { PlanData } from './types';
@@ -10,8 +10,7 @@ import type { PlanData } from './types';
 export const entityId = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/, 'invalid id');
 const text = (max = 200) => z.string().max(max);
 const name = z.string().trim().min(1).max(200);
-const isMonday = (k: string) => /^\d{4}-\d{2}-\d{2}$/.test(k) && normalizeWeek(k) === k;
-export const weekKey = z.string().refine(isMonday, 'weeks must be Mondays (yyyy-MM-dd)');
+export const weekKey = z.string().refine(isWeekKey, 'weeks must be Mondays (yyyy-MM-dd)');
 const level = z.enum(CAREER_LEVELS);
 const tagIds = z.array(entityId).max(50);
 const step = z.number().refine((v) => (CLICK_STEPS as readonly number[]).includes(v), 'allocations are 0/25/50/100');

@@ -133,8 +133,9 @@ npm run build            # typecheck + production build
 npm run test:e2e:serve   # Playwright end-to-end tests on a fresh dev server
 ```
 
+- **Isolated browser tests:** `test:e2e:serve` starts its own server and temporary Durable Object storage; it preserves `.wrangler/state` and refuses an occupied port. Downloads and screenshots go to `work/e2e/`. To use an installed Chromium, set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/path/to/chromium`.
 - **Shared workspace locally:** copy `.dev.vars.example` to `.dev.vars`, then sign in as anyone at `http://localhost:5173/api/dev/login?as=you@example.com`. The dev sign-in only works on localhost with `DEV_AUTH=1`. Mention emails are simulated there and logged instead of sent.
-- **Tests:** CI runs the typecheck, lint, unit tests, build and both e2e suites (`e2e/local.e2e.cjs` and `e2e/shared-workspace.e2e.cjs`) on every pull request. `worker/convergence.test.ts` simulates several browsers editing and dropping connections; to run it longer, use `SYNC_SEEDS=500 npx vitest run worker/convergence.test.ts`.
+- **Tests:** CI runs the typecheck, lint, unit tests, build and all three e2e suites (`e2e/local.e2e.cjs`, `e2e/shared-workspace.e2e.cjs` and `e2e/adversarial.e2e.cjs`) on every pull request. `worker/convergence.test.ts` simulates several browsers editing and dropping connections; to run it longer, use `SYNC_SEEDS=500 npx vitest run worker/convergence.test.ts`.
 
 **Code layout**
 

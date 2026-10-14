@@ -143,7 +143,7 @@ class Session {
   request(msg: RequestMsg): Promise<void> {
     const cid = this.cid();
     return new Promise((resolve, reject) => {
-      if (!this.connected) {
+      if (!this.connected || this.collab.status !== 'live') {
         reject(new Error('You’re offline; try again once reconnected.'));
         return;
       }
@@ -162,7 +162,7 @@ class Session {
 
   /** Undo/redo only take the batch off the stack when the request can actually be sent. */
   private revert(which: 'undo' | 'redo') {
-    const msg = this.core.takeRevert(which, this.connected);
+    const msg = this.core.takeRevert(which, this.connected && this.collab.status === 'live');
     if (!msg) {
       const stack = which === 'undo' ? this.core.undoStack : this.core.redoStack;
       if (stack.length && !this.connected) this.collab.toast('Reconnecting — try again in a moment.', 'info');
@@ -173,7 +173,7 @@ class Session {
   }
 
   private updateHistory() {
-    const can = this.canEdit() && this.connected;
+    const can = this.canEdit() && this.connected && this.collab.status === 'live';
     this.store().setState({ canUndo: can && this.core.undoStack.length > 0, canRedo: can && this.core.redoStack.length > 0 });
   }
 
@@ -311,7 +311,7 @@ class Session {
   }
 
   send(msg: ClientMsg): boolean {
-    if (!this.connected) return false;
+    if (!this.connected || (msg.t !== 'hello' && this.collab.status !== 'live')) return false;
     this.ws!.send(JSON.stringify(msg));
     return true;
   }

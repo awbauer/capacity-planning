@@ -14,7 +14,10 @@ export default defineConfig(({ command }) => ({
     // `ctx.access` (the signed-in Cloudflare Access user) on; in development the dev server serves it.
     cloudflare(
       command === 'serve'
-        ? { config: { assets: { not_found_handling: 'single-page-application', run_worker_first: ['/api/*'] } } }
+        ? {
+            ...(process.env.CAPACITY_E2E_STATE_DIR ? { persistState: { path: process.env.CAPACITY_E2E_STATE_DIR } } : {}),
+            config: { assets: { not_found_handling: 'single-page-application', run_worker_first: ['/api/*'] } },
+          }
         : {},
     ),
   ],

@@ -7,9 +7,11 @@ import { weeksBetween } from './weeks';
 type Cell = string | number | null | undefined;
 
 /** RFC 4180 quoting: wrap in quotes when needed, double any embedded quotes. */
-export function csvCell(value: Cell): string {
+export function csvCell(value: unknown): string {
   if (value === null || value === undefined) return '';
-  const s = String(value);
+  const raw = String(value);
+  // Quoting alone does not prevent spreadsheet formula execution. Keep numeric cells numeric.
+  const s = typeof value === 'string' && /^[=+\-@\t\r\n]/.test(raw) ? `'${raw}` : raw;
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 

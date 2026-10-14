@@ -13,6 +13,18 @@ describe('csv', () => {
     expect(csvCell(50)).toBe('50');
   });
 
+  it('neutralizes formula prefixes in exported text while preserving numbers', () => {
+    for (const value of ['=1+1', '+SUM(A1)', '-1+2', '@SUM(A1)', '\t=1', '\r=1', '\n=1']) {
+      const escaped = csvCell(value);
+      expect(escaped.startsWith("'") || escaped.startsWith(`"'`)).toBe(true);
+    }
+    expect(csvCell(-25)).toBe('-25');
+    const plan = createSamplePlan('2026-10-05');
+    plan.projects[0].name = '=1+1';
+    expect(workstreamCsv(plan, plan.projects[0].id)).toContain("Workstream,'=1+1");
+    expect(allWorkstreamsCsv(plan)).toContain("'=1+1,");
+  });
+
   it('slugs workstream names for file names', () => {
     expect(slug('Colgate - MCN Agent')).toBe('colgate-mcn-agent');
     expect(slug('!!!')).toBe('workstream');
