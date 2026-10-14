@@ -151,7 +151,7 @@ export function ResourceView({ buckets }: Props) {
               <TagChips tagIds={r.tagIds} tagsById={d.tagsById} />
             </div>
           </div>
-          <button type="button" className="btn btn-small" onClick={() => setAdding(r.id)}>
+          <button type="button" className="btn btn-small edit-only" onClick={() => setAdding(r.id)}>
             + Workstream
           </button>
         </div>
@@ -213,7 +213,7 @@ export function ResourceView({ buckets }: Props) {
             </div>
             <button
               type="button"
-              className="icon-btn"
+              className="icon-btn edit-only"
               aria-label={`Remove ${r.name} from ${p.name}`}
               title="Remove this role from the workstream"
               onClick={() => {

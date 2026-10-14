@@ -1,0 +1,16 @@
+﻿Workstream,Agentforce Service Pilot
+Client,Contoso
+Seller,Marcus Chen
+Status,Pipeline
+Start (week of),2026-11-09
+End (week of),2027-02-01
+Required capabilities,Agentforce; Service Cloud
+
+Role,Person,Level,Capabilities needed,2026-10-12,2026-10-19,2026-10-26,2026-11-02,2026-11-09,2026-11-16,2026-11-23,2026-11-30,2026-12-07,2026-12-14,2026-12-21,2026-12-28,2027-01-04,2027-01-11,2027-01-18,2027-01-25,2027-02-01
+Phase,,,,Presales,Presales,Presales,Presales,Delivery,Delivery,Delivery,Delivery,Delivery,Delivery,Delivery,Delivery,Delivery,Delivery,Delivery,Delivery,Delivery
+Sales Cloud Consultant,Casey Nguyen,SA,Agentforce; Service Cloud,0,0,0,0,50,50,50,50,50,50,50,50,50,50,50,50,50
+Service Cloud Developer,Jamie Ortiz,A,Agentforce; Service Cloud,25,25,25,25,100,100,100,100,100,100,100,100,100,100,100,100,100
+Solution Architect,Alex Rivera,SM,Agentforce; Service Cloud,25,25,25,25,0,0,100,100,100,100,100,100,100,0,0,0,0
+Agentforce Architect,Open,SM,Agentforce,0,0,0,0,50,50,50,50,50,50,50,50,50,50,50,50,50
+Total FTE,,,,0.5,0.5,0.5,0.5,1.5,1.5,2.5,2.5,2.5,2.5,2.5,2.5,2.5,1.5,1.5,1.5,1.5
+Open FTE,,,,0,0,0,0,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5

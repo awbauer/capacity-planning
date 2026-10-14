@@ -153,3 +153,19 @@ export function formatWeekRange(from: WeekKey, to: WeekKey): string {
   if (from === to) return `wk of ${formatWeek(from)}`;
   return `${format(parseWeek(from), 'MMM d')} – ${format(addDays(parseWeek(to), 4), 'MMM d, yyyy')}`;
 }
+
+/**
+ * The current week as seen in an IANA time zone (falls back to UTC). The
+ * server and every browser use this with the workspace's zone, so they agree
+ * on which weeks are "past" even across a Monday.
+ */
+export function weekInZone(timeZone: string | undefined, now: Date = new Date()): WeekKey {
+  let ymd: string;
+  try {
+    ymd = new Intl.DateTimeFormat('en-CA', { timeZone: timeZone || 'UTC', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+  } catch {
+    ymd = now.toISOString().slice(0, 10);
+  }
+  const [y, m, d] = ymd.split('-').map(Number);
+  return toWeekKey(new Date(y, m - 1, d));
+}

@@ -9,10 +9,13 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:e2e": "node e2e/run.mjs",
+    "test:e2e:serve": "node e2e/run.mjs --serve"
   },
   "dependencies": {
     "date-fns": "^4.4.0",
+    "jose": "^6.2.12",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "zod": "^4.6.5",
@@ -20,13 +23,17 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.63.2",
+    "@cloudflare/workers-types": "^5.20261013.1",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
     "oxlint": "^1.81.0",
+    "playwright": "^1.56.1",
     "typescript": "~6.0.2",
     "vite": "^8.3.0",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.3",
+    "wrangler": "^4.150.0"
   }
 }

@@ -1,0 +1,4 @@
+# Copy to .dev.vars for local development (never deploy these).
+# Lets you sign in as anyone on localhost: open /api/dev/login?as=you@example.com
+DEV_AUTH=1
+OWNER_EMAILS=alice@example.com

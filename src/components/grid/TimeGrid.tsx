@@ -3,19 +3,27 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type KeyboardEvent,
   type MouseEvent,
   type ReactNode,
 } from 'react';
 import { bucketStats } from '../../domain/aggregate';
+import { colorFor } from '../../domain/colors';
 import { assignmentFlagWeeks } from '../../domain/conflicts';
 import { totalIsCritical, weekClass, weekKind, type Severity } from '../../domain/load';
 import { isFilled, type Assignment, type WeekKey, type Zoom } from '../../domain/types';
 import { nextStep } from '../../domain/steps';
 import { currentWeek, formatWeek, type Bucket } from '../../domain/weeks';
+import { cellLockedFor, lockCoversCell, type Lock } from '../../domain/locks';
+import { useCollabStore } from '../../store/collabStore';
+import { isShared } from '../../store/mode';
 import { usePlan, usePlanStore, type AllocationEdit } from '../../store/planStore';
+import { sendPresence } from '../../store/sharedPlanStore';
 import { useUIStore } from '../../store/uiStore';
+import { useCan } from '../../store/useCan';
 import { useDerived } from '../../store/useDerived';
+import { CellMenu, type CellMenuTarget } from '../../collab/CellMenu';
 import { Pie } from './Pie';
 
 export interface SummaryCell {
@@ -51,6 +59,17 @@ interface Pos {
   r: number;
   c: number;
 }
+
+/** A selected cell by row and column key, so it survives rows being added or removed (by anyone). */
+interface CellKey {
+  row: string;
+  bucket: string;
+}
+
+const relativeMins = (ts: number) => {
+  const m = Math.round((Date.now() - ts) / 60000);
+  return m < 1 ? 'just now' : `${m} min ago`;
+};
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
@@ -98,6 +117,16 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
   const clearFocusRow = useUIStore((s) => s.clearFocusRow);
   const cellStyle = useUIStore((s) => s.cellStyle);
   const thisWeek = currentWeek();
+  const shared = isShared();
+  const can = useCan();
+  const view = useUIStore((s) => s.view);
+  const me = useCollabStore((s) => s.me);
+  const locks = useCollabStore((s) => s.locks);
+  const presence = useCollabStore((s) => s.presence);
+  const recent = useCollabStore((s) => s.recent);
+  const serverWeek = useCollabStore((s) => s.thisWeek);
+  const toast = useCollabStore((s) => s.toast);
+  const [menu, setMenu] = useState<CellMenuTarget | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const editRows = useMemo(() => rows.filter((r) => r.assignmentId), [rows]);
@@ -107,22 +136,27 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     [plan.assignments],
   );
 
-  const [anchor, setAnchor] = useState<Pos | null>(null);
-  const [focus, setFocus] = useState<Pos | null>(null);
+  const bucketIndex = useMemo(() => new Map(buckets.map((b, i) => [b.key, i])), [buckets]);
+  const [anchorKey, setAnchorKey] = useState<CellKey | null>(null);
+  const [focusKey, setFocusKey] = useState<CellKey | null>(null);
   const [draft, setDraft] = useState<string | null>(null);
   const draftRef = useRef<string | null>(null);
   const selectAllOnFocus = useRef(false);
   const dragging = useRef(false);
 
-  // Reset the selection when the set of editable rows or columns changes.
-  const signature = editRows.map((r) => r.key).join('|') + '#' + buckets.map((b) => b.key).join('|');
-  const [selectionFor, setSelectionFor] = useState(signature);
-  if (selectionFor !== signature) {
-    setSelectionFor(signature);
-    setAnchor(null);
-    setFocus(null);
-    setDraft(null);
-  }
+  // Selection is kept by key; if its row or column goes away it simply ends.
+  const toPos = (k: CellKey | null): Pos | null => {
+    const r = k ? editIndex.get(k.row) : undefined;
+    const c = k ? bucketIndex.get(k.bucket) : undefined;
+    return r === undefined || c === undefined ? null : { r, c };
+  };
+  const toKey = (p: Pos | null): CellKey | null =>
+    p && editRows[p.r] && buckets[p.c] ? { row: editRows[p.r].key, bucket: buckets[p.c].key } : null;
+  const anchor = toPos(anchorKey);
+  const focus = toPos(focusKey);
+  const setAnchor = (p: Pos | null) => setAnchorKey(toKey(p));
+  const setFocus = (p: Pos | null) => setFocusKey(toKey(p));
+  if (draft !== null && !focus) setDraft(null);
 
   useEffect(() => {
     const up = () => (dragging.current = false);
@@ -145,6 +179,17 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     return () => window.clearTimeout(t);
   }, [focusRow, clearFocusRow]);
 
+  // Tell others in the plan what's selected (shared mode).
+  const selRoleIds = anchor && focus ? editRows.slice(Math.min(anchor.r, focus.r), Math.max(anchor.r, focus.r) + 1).map((r) => r.assignmentId!) : [];
+  const selFrom = anchor && focus ? buckets[Math.min(anchor.c, focus.c)]?.weeks[0] : undefined;
+  const selTo = anchor && focus ? buckets[Math.max(anchor.c, focus.c)]?.weeks.at(-1) : undefined;
+  const selSig = `${view}|${selRoleIds.join(',')}|${selFrom}|${selTo}`;
+  useEffect(() => {
+    if (!shared) return;
+    sendPresence({ view, ...(selRoleIds.length && selFrom && selTo ? { sel: { roleIds: selRoleIds.slice(0, 100), from: selFrom, to: selTo } } : {}) });
+    // selSig captures everything the message depends on.
+  }, [selSig, shared]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const rect =
     anchor && focus
       ? {
@@ -158,11 +203,38 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     !!rect && r >= rect.r0 && r <= rect.r1 && c >= rect.c0 && c <= rect.c1;
   const isSingle = !!rect && rect.r0 === rect.r1 && rect.c0 === rect.c1;
 
+  const lockUser = { email: me?.email ?? '', admin: me?.role === 'admin' };
+  const lockedFor = (a: Assignment, week: WeekKey): Lock | undefined =>
+    shared ? cellLockedFor(locks, a, week, serverWeek, lockUser) : undefined;
+
+  /** Says why nothing happened when a viewer (or someone offline) tries to edit. */
+  const readOnlyNotice = () => {
+    if (shared) toast(me && me.role === 'viewer' ? 'You have view-only access.' : 'You’re offline; editing is paused.');
+  };
+
   const applyToCells = (area: { r0: number; r1: number; c0: number; c1: number }, percent: number) => {
+    if (!can.edit) return readOnlyNotice();
     const weeks = buckets.slice(area.c0, area.c1 + 1).flatMap((b) => b.weeks);
     const edits: AllocationEdit[] = [];
+    let blocked: Lock | undefined;
     for (let r = area.r0; r <= area.r1; r++) {
-      edits.push({ assignmentId: editRows[r].assignmentId!, weeks, percent });
+      const a = assignmentsById.get(editRows[r].assignmentId!);
+      if (!a) continue;
+      // Locked weeks are left out (the server would refuse the whole edit).
+      const open = weeks.filter((w) => {
+        const l = lockedFor(a, w);
+        if (l) blocked ??= l;
+        return !l;
+      });
+      if (open.length) edits.push({ assignmentId: a.id, weeks: open, percent });
+    }
+    if (blocked) {
+      toast(
+        blocked.scope === 'past'
+          ? 'Past weeks are locked; only admins can change them.'
+          : `Some cells are locked by ${blocked.owner}${blocked.note ? ` (“${blocked.note}”)` : ''} and were left as they are.`,
+        'info',
+      );
     }
     setAllocations(edits);
   };
@@ -206,8 +278,9 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     const mod = e.metaKey || e.ctrlKey;
     if (/^[0-9]$/.test(e.key) && !mod) {
       e.preventDefault();
-      startEditing(e.key, false);
-    } else if (e.key === 'Enter' || e.key === 'F2') {
+      if (can.edit) startEditing(e.key, false);
+      else readOnlyNotice();
+    } else if ((e.key === 'Enter' || e.key === 'F2') && can.edit) {
       e.preventDefault();
       const st = cellValue(editRows[focus.r].assignmentId!, buckets[focus.c]);
       startEditing(formatPct(st.avg), true);
@@ -231,7 +304,23 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     } else if (e.key === 'Escape') {
       setAnchor(null);
       setFocus(null);
+    } else if (shared && (e.key === 'h' || e.key === 'H') && !mod) {
+      e.preventDefault();
+      openMenuAt(focus, null, 'history');
     }
+  };
+
+  /** Opens the cell menu (or straight to history) for a cell, using the selection if the cell is in it. */
+  const openMenuAt = (pos: Pos, at: { x: number; y: number } | null, direct?: 'history') => {
+    const area = rect && inSelection(pos.r, pos.c) ? rect : { r0: pos.r, r1: pos.r, c0: pos.c, c1: pos.c };
+    const roles = editRows
+      .slice(area.r0, area.r1 + 1)
+      .map((r) => assignmentsById.get(r.assignmentId!))
+      .filter((a): a is Assignment => !!a);
+    const cell = assignmentsById.get(editRows[pos.r].assignmentId!);
+    if (!cell) return;
+    const weeks = buckets.slice(area.c0, area.c1 + 1).flatMap((b) => b.weeks);
+    setMenu({ cell, cellWeeks: buckets[pos.c].weeks, roles, weeks, at, direct });
   };
 
   const onCellMouseDown = (pos: Pos, e: MouseEvent) => {
@@ -306,6 +395,38 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     if (b.weeks.includes(thisWeek)) classes.push('today');
     if (st.avg > 0) classes.push('filled');
     if (role) classes.push('open-role');
+    if (!can.edit) classes.push('read-only');
+
+    // Shared mode: locks, who else has this cell selected, and recent changes by others.
+    let lockNote: string | undefined;
+    let presenceColor: string | undefined;
+    const presenceNames: string[] = [];
+    let recentBy: { email: string; ts: number } | undefined;
+    if (shared) {
+      const covering = locks.filter((l) => b.weeks.some((w) => lockCoversCell(l, a, w, serverWeek)));
+      if (covering.length) {
+        const mine = covering.every((l) => (l.scope === 'past' ? lockUser.admin : l.owner === lockUser.email));
+        classes.push(mine ? 'locked locked-mine' : 'locked');
+        const l = covering[0];
+        lockNote =
+          l.scope === 'past'
+            ? 'Locked: past weeks (admins can still edit)'
+            : `Locked by ${l.owner}${l.note ? `: “${l.note}”` : ''}${mine ? ' (you can still edit)' : ''}`;
+      }
+      for (const p of Object.values(presence)) {
+        if (p.sel && p.sel.roleIds.includes(a.id) && b.weeks.some((w) => w >= p.sel!.from && w <= p.sel!.to)) {
+          presenceColor ??= p.color;
+          presenceNames.push(p.name);
+        }
+      }
+      if (presenceColor) classes.push('presence');
+      // Old entries are pruned from `recent` (SharedGate), so anything here is recent.
+      for (const w of b.weeks) {
+        const rc = recent[`${a.id}|${w}`];
+        if (rc && (!recentBy || rc.ts > recentBy.ts)) recentBy = rc;
+      }
+      if (recentBy) classes.push('recent');
+    }
 
     let title: string | undefined;
     if (person && flag && flagWeek) title = `This row: ${Math.round(st.avg)}%. ${loadTitle(person.resourceId, flagWeek, flag)}`;
@@ -313,6 +434,12 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     else if (cls === 'excluded' && st.avg > 0) title = 'Delivery on a lost workstream: not counted toward load.';
     else if (st.mixed) title = `Varies by week: avg ${Math.round(st.avg)}%, peak ${st.peak}%. Double-clicking or typing sets every week.`;
     else if (st.avg > 0) title = `${Math.round(st.avg)}%`;
+    const notes = [
+      lockNote && `🔒 ${lockNote}`,
+      presenceNames.length && `${presenceNames.join(', ')} ${presenceNames.length === 1 ? 'has' : 'have'} this selected`,
+      recentBy && `Changed by ${recentBy.email} ${relativeMins(recentBy.ts)}`,
+    ].filter(Boolean);
+    if (notes.length) title = [title, ...notes].filter(Boolean).join('\n');
 
     return (
       <td
@@ -321,7 +448,23 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
         data-value={Math.round(st.avg)}
         className={classes.join(' ')}
         title={title}
+        style={
+          presenceColor || recentBy
+            ? ({
+                ...(presenceColor ? { '--presence': presenceColor } : {}),
+                ...(recentBy ? { '--recent': colorFor(recentBy.email) } : {}),
+              } as CSSProperties)
+            : undefined
+        }
         onMouseDown={(e) => onCellMouseDown({ r, c }, e)}
+        onContextMenu={
+          shared
+            ? (e) => {
+                e.preventDefault();
+                openMenuAt({ r, c }, { x: e.clientX, y: e.clientY });
+              }
+            : undefined
+        }
         onMouseEnter={() => {
           if (dragging.current) setFocus({ r, c });
         }}
@@ -398,7 +541,7 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
   return (
     <div
       ref={scrollRef}
-      className={`grid-scroll zoom-${zoom} cells-${cellStyle}`}
+      className={`grid-scroll zoom-${zoom} cells-${cellStyle}${can.edit ? '' : ' grid-read-only'}`}
       tabIndex={0}
       onKeyDown={onGridKeyDown}
       aria-label="Allocation grid"
@@ -444,6 +587,7 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
           })}
         </tbody>
       </table>
+      {menu && <CellMenu target={menu} onClose={() => setMenu(null)} />}
     </div>
   );
 }

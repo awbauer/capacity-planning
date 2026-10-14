@@ -89,29 +89,50 @@ export function parsePlanFile(input: unknown): PlanFile {
     version: 4,
     assignments: toRoles(data.version, data.assignments, roles, data.resources),
   };
+  const problem = checkReferences(plan);
+  if (problem) throw new Error(`Invalid plan file: ${problem}`);
+  return { name: name ?? DEFAULT_PLAN_NAME, revision: revision ?? 0, plan };
+}
+
+/**
+ * The first broken reference in a plan (an unknown tag, seller, person or
+ * workstream, or a week that isn't a Monday), or null if there is none.
+ */
+export function checkReferences(plan: PlanData): string | null {
+  for (const [kind, list] of [
+    ['capability', plan.tags],
+    ['seller', plan.sellers],
+    ['person', plan.resources],
+    ['workstream', plan.projects],
+    ['role', plan.assignments],
+  ] as const) {
+    const seen = new Set<string>();
+    for (const x of list) {
+      if (seen.has(x.id)) return `the ${kind} id "${x.id}" is used twice`;
+      seen.add(x.id);
+    }
+  }
   const tagIds = new Set(plan.tags.map((t) => t.id));
   const sellerIds = new Set(plan.sellers.map((s) => s.id));
   const resourceIds = new Set(plan.resources.map((r) => r.id));
   const projectIds = new Set(plan.projects.map((p) => p.id));
-  const missing = (kind: string, ref: string, owner: string) => {
-    throw new Error(`Invalid plan file: ${owner} references unknown ${kind} "${ref}"`);
-  };
+  const missing = (kind: string, ref: string, owner: string) => `${owner} references unknown ${kind} "${ref}"`;
   for (const r of plan.resources) {
-    for (const t of r.tagIds) if (!tagIds.has(t)) missing('tag', t, `resource "${r.name}"`);
+    for (const t of r.tagIds) if (!tagIds.has(t)) return missing('tag', t, `resource "${r.name}"`);
   }
   for (const p of plan.projects) {
-    for (const t of p.tagIds) if (!tagIds.has(t)) missing('tag', t, `workstream "${p.name}"`);
-    if (p.sellerId && !sellerIds.has(p.sellerId)) missing('seller', p.sellerId, `workstream "${p.name}"`);
+    for (const t of p.tagIds) if (!tagIds.has(t)) return missing('tag', t, `workstream "${p.name}"`);
+    if (p.sellerId && !sellerIds.has(p.sellerId)) return missing('seller', p.sellerId, `workstream "${p.name}"`);
   }
   for (const a of plan.assignments) {
     const label = a.name ? `role "${a.name}"` : `role ${a.id}`;
     const bad = Object.keys(a.weekly).find((k) => !isMonday(k));
-    if (bad) throw new Error(`Invalid plan file: ${label} has week "${bad}"; weeks must be Mondays (yyyy-MM-dd)`);
-    if (!projectIds.has(a.projectId)) missing('workstream', a.projectId, label);
-    if (a.resourceId !== null && !resourceIds.has(a.resourceId)) missing('resource', a.resourceId, label);
-    for (const t of a.tagIds) if (!tagIds.has(t)) missing('tag', t, label);
+    if (bad) return `${label} has week "${bad}"; weeks must be Mondays (yyyy-MM-dd)`;
+    if (!projectIds.has(a.projectId)) return missing('workstream', a.projectId, label);
+    if (a.resourceId !== null && !resourceIds.has(a.resourceId)) return missing('resource', a.resourceId, label);
+    for (const t of a.tagIds) if (!tagIds.has(t)) return missing('tag', t, label);
   }
-  return { name: name ?? DEFAULT_PLAN_NAME, revision: revision ?? 0, plan };
+  return null;
 }
 
 /** A row as saved by any version: v1–v3 rows had no role fields, v1–v2 could have a `kind`. */
