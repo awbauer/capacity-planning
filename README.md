@@ -19,6 +19,7 @@ By default it runs entirely in your browser. Optionally, a **shared workspace** 
 - **Issues**, from a person's total across all their workstreams in a week (an overlap alone isn't one):
   - **Conflict** (red outline over the weeks): committed work over 100%. Past 150% it's critical (stronger red).
   - **At risk** (dashed red outline): committed work fits, but goes over 100% if pipeline work is won.
+  - **Low risk** (faded dashed outline): it goes over only if a pipeline workstream under 75% likely to be won (or with no win % set) comes through.
 
   Both thresholds are under Manage → Settings & data. There's deliberately no win-probability weighting. Commercial stage (Won / Pipeline, green / amber) is shown on the workstream; red only ever means an issue.
 - **Capabilities** (tags) go on people, roles and workstreams. Mismatches and uncovered capabilities are flagged.
@@ -28,14 +29,18 @@ By default it runs entirely in your browser. Optionally, a **shared workspace** 
 
 | View | What it shows |
 | --- | --- |
-| **Workstreams** | One row per workstream (grouped by client by default) with its client, stage, demand in FTE and any issues, and a band showing staffing over time. Expand it to see each person and open role as bars. The row's **•••** menu adds people and open roles, edits the workstream and downloads its CSV; click a person to swap them or leave the role open. |
+| **Workstreams** | One row per workstream (optionally grouped by client, seller or stage) with its name and client, stage, win % (pipeline) and any issues, and its staffing over time. Click the row to see each person and open role. The row's **•••** menu adds people and open roles, edits the workstream and downloads its CSV; click a person to swap them or leave the role open. |
 | **Resources** | One row per person, grouped by level, showing total weekly load as a heat map. Expand a person to edit their allocations. *Underutilized* shows people below their level's target over the next 10 weeks. |
 | **Demand** | Live workstreams split into Pipeline and Won: who's supporting each pursuit, who's staffed, open roles and FTE. |
 | **Details** | Click a workstream or person name: a summary, a checklist of problems, roles, and open roles a person could fill. |
 | **Issues** (panel) | The toolbar's issue counts (conflicts, at risk and open roles in the visible weeks, across the whole plan) open the list: overallocations, at-risk weeks, skill gaps and open roles. Click one to jump to it. |
 | **Capacity** (panel) | Team capacity in FTE-weeks for the next 10 weeks or the weeks on screen: won delivery, pipeline and headroom (or overbooked) as shares of the same supply, then people (click one to highlight their rows), open roles and capabilities. Everyone counts as 1.0 FTE a week. |
 
-Zoom between Week, Month and Quarter. At month and quarter zoom a cell shows the period's average, or its busiest week with **Peak** (`~` when its weeks differ; hover for both). Click a month or quarter header to drill down to its weeks and is flagged if any week in it is over. *Issues only* hides workstreams or people without an issue in the visible weeks; *Filters* narrows by capability, stage and seller.
+Zoom between Week, Month and Quarter. At month and quarter zoom a cell shows the period's average, or its busiest week with **Peak** (`~` when its weeks differ; hover for both). A cell is flagged if any week in it is over; click a month or quarter header to drill down to its weeks. *Filters* narrows by capability, stage and seller.
+
+The Workstreams view opens on **Pipeline only** (turn it off to see won and lost workstreams too), ungrouped (**Group by**: client, seller or stage), with every workstream collapsed to one line: name and client, stage, issues. Click anywhere on a row to expand it.
+
+**Win %:** each pipeline workstream has a 25 / 50 / 75 / 90% chance of winning, set on its row. Workstreams sort most-likely first (won ones count as 100%), *Filters → Win %* shows only those at least that likely, and risk from deals under 75% (or unset) is shown as a lighter *low risk*. Loads and the Capacity panel are never weighted by it. On Resources, *Issues only* hides people without an issue in the visible weeks.
 
 ## Editing allocations
 

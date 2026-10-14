@@ -1,4 +1,4 @@
-import { severity, splitLoads, type LoadClass, type Severity, type SplitLoads } from './load';
+import { lowRiskAt, severity, splitLoads, type LoadClass, type Severity, type SplitLoads } from './load';
 import type { Assignment, PlanData, Project, Resource, WeekKey } from './types';
 import { addWeeks } from './weeks';
 
@@ -12,6 +12,8 @@ export interface Overallocation {
   peak: number;
   /** Projects with a counted, non-zero allocation in any of these weeks. */
   projectIds: string[];
+  /** 'risk' only: every week goes over only if pipeline work under LIKELY_WIN% likely is won. */
+  low?: boolean;
 }
 
 export type SkillIssue =
@@ -58,6 +60,7 @@ export function findOverallocations(plan: PlanData, loads: SplitLoads = splitLoa
         weeks: run,
         peak: Math.max(...run.map((w) => (sev === 'risk' ? c(w) + t(w) : c(w)))),
         projectIds: [...projectIds],
+        ...(sev === 'risk' && run.every((w) => lowRiskAt(loads, resourceId, w, settings)) ? { low: true } : {}),
       });
       run = [];
       runSeverity = null;

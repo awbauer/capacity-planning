@@ -161,8 +161,11 @@ function PlannerApp() {
               <span className="legend-item" title="Committed work over capacity in these weeks">
                 <i className="swatch swatch-conflict" /> Conflict
               </span>
-              <span className="legend-item" title="Over capacity only if pipeline work is won">
+              <span className="legend-item" title="Over capacity if pipeline work is won">
                 <i className="swatch swatch-potential" /> At risk
+              </span>
+              <span className="legend-item" title="Over capacity only if pipeline work under 75% likely to be won comes through">
+                <i className="swatch swatch-potential low" /> Low risk
               </span>
               <span className="legend-item">
                 <i className="swatch swatch-today" /> This week

@@ -32,6 +32,7 @@ const planSchema = z.object({
       client: z.string().optional(),
       sellerId: id.nullable(),
       status: z.enum(['pipeline', 'won', 'lost']).default('won'),
+      winProbability: z.union([z.literal(25), z.literal(50), z.literal(75), z.literal(90)]).optional(),
       tagIds: z.array(id),
       startWeek: weekKey.optional(),
       endWeek: weekKey.optional(),

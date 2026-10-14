@@ -13,7 +13,7 @@ import { SyncCore, type Pending } from '../sync/syncCore';
 import { makePlanActions } from './actions';
 import { OFFLINE_GRACE_MS, useCollabStore, type Person, type ServerPlan } from './collabStore';
 import type { PlanState } from './localPlanStore';
-import { useUIStore } from './uiStore';
+import { useUIStore, workstreamGroupKeys } from './uiStore';
 
 export interface SharedPlanState extends PlanState {
   undo: () => void;
@@ -708,13 +708,13 @@ function takeCommentLink() {
 export function threadRow(thread: Thread, plan: PlanData): { view: 'projects' | 'resources'; row: string; week?: string; parents: string[] } | null {
   const a = thread.anchor;
   const roleId = anchorRoleId(a);
-  const clientKey = (projectId: string) => `c:${plan.projects.find((p) => p.id === projectId)?.client?.trim().toLowerCase() || ''}`;
+  const groupKeys = (projectId: string) => workstreamGroupKeys(plan.projects.find((p) => p.id === projectId));
   if (roleId) {
     const role = plan.assignments.find((r) => r.id === roleId);
     if (!role) return null;
-    return { view: 'projects', row: `a:${roleId}`, ...(a.kind === 'cells' ? { week: a.from } : {}), parents: [`p:${role.projectId}`, clientKey(role.projectId)] };
+    return { view: 'projects', row: `a:${roleId}`, ...(a.kind === 'cells' ? { week: a.from } : {}), parents: [`p:${role.projectId}`, ...groupKeys(role.projectId)] };
   }
-  if (a.kind === 'project') return plan.projects.some((p) => p.id === a.projectId) ? { view: 'projects', row: `p:${a.projectId}`, parents: [clientKey(a.projectId)] } : null;
+  if (a.kind === 'project') return plan.projects.some((p) => p.id === a.projectId) ? { view: 'projects', row: `p:${a.projectId}`, parents: groupKeys(a.projectId) } : null;
   if (a.kind === 'resource') {
     const r = plan.resources.find((x) => x.id === a.resourceId);
     return r ? { view: 'resources', row: `r:${r.id}`, parents: [`g:${r.level ?? 'none'}`] } : null;

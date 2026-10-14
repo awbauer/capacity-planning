@@ -12,6 +12,11 @@ const choose = async (page, trigger, item) => {
   await page.getByRole('menuitem', { name: item }).click();
 };
 const rowMenu = (page, row, item) => choose(page, row.locator('.row-more').first(), item);
+/** Pipeline only is on whenever the page loads; the tests below want every workstream. */
+const allStages = async (page) => {
+  const sw = page.getByRole('switch', { name: 'Pipeline only' });
+  if ((await sw.count()) && (await sw.getAttribute('aria-checked')) === 'true') await sw.click();
+};
 const moreMenu = (page, item) => choose(page, page.getByRole('button', { name: 'More', exact: true }), item);
 
 (async () => {
@@ -30,6 +35,32 @@ const moreMenu = (page, item) => choose(page, page.getByRole('button', { name: '
   await page.getByRole('button', { name: 'Load sample data' }).click();
   await page.getByRole('button', { name: 'Workstreams', exact: true }).first().click();
   await page.waitForSelector('.grid');
+
+  // Defaults: pipeline workstreams only, not grouped by client, all collapsed.
+  const pipelineSwitch = page.getByRole('switch', { name: 'Pipeline only' });
+  assert((await pipelineSwitch.getAttribute('aria-checked')) === 'true', 'Pipeline only is on by default');
+  assert(await page.getByRole('switch', { name: 'Issues only' }).count() === 0, 'Workstreams has Pipeline only instead of Issues only');
+  const pipelineRows = await page.locator('tr.project-row').count();
+  const samplePipeline = (await page.evaluate(() => JSON.parse(localStorage.getItem('capacity-plan:v1')).state.plan)).projects.filter((p) => p.status === 'pipeline').length;
+  assert(pipelineRows === samplePipeline && pipelineRows > 0, `only pipeline workstreams shown (${pipelineRows})`);
+  const groupBy = page.getByLabel('Group by', { exact: true });
+  assert((await groupBy.inputValue()) === 'none', 'Group by is None by default');
+  assert(await page.locator('tr.group-row').count() === 0 && await page.locator('tr.role-row').count() === 0, 'workstreams start collapsed and ungrouped');
+  const firstWs = page.locator('tr.project-row').first();
+  const [nameBox, clientBox] = await Promise.all([firstWs.locator('.ws-name').boundingBox(), firstWs.locator('.row-title .client').boundingBox()]);
+  assert(clientBox && Math.abs(nameBox.y - clientBox.y) < 4 && clientBox.x > nameBox.x, 'client is on the first line, after the workstream name');
+  assert(await firstWs.locator('.row-meta .fte').count() === 0, 'no FTE text in the label column');
+  // Clicking anywhere on the row (not just the arrow) expands and collapses it.
+  await firstWs.locator('.row-meta').click({ position: { x: 200, y: 6 } });
+  assert(await page.locator('tr.role-row').count() > 0, 'clicking the row expands it');
+  await firstWs.locator('.ws-name').click();
+  assert(await page.locator('tr.role-row').count() === 0, 'clicking its name collapses it again');
+  await shot(page, '00-defaults');
+  await pipelineSwitch.click();
+  assert(await page.locator('tr.project-row').count() > pipelineRows, 'turning Pipeline only off shows won and lost workstreams');
+  // The rest of the run uses the full layout: grouped by client and expanded.
+  await groupBy.selectOption('client');
+  await page.locator('.corner-actions').getByRole('button', { name: 'Expand all', exact: true }).click();
   await shot(page, '01-projects-week');
 
   // Sample conflicts are visible.
@@ -130,6 +161,7 @@ const moreMenu = (page, item) => choose(page, page.getByRole('button', { name: '
   await shot(page, '03-circles');
   await page.reload();
   await page.waitForSelector('.grid');
+  await allStages(page);
   assert((await page.locator('.grid svg.pie').count()) > 20, 'the display choice survives a reload');
   await page.getByRole('button', { name: 'Bars', exact: true }).click();
 
@@ -164,11 +196,9 @@ const moreMenu = (page, item) => choose(page, page.getByRole('button', { name: '
   assert(people.some((t) => t.includes('Sam Patel')) && !people.some((t) => t.includes('Taylor Brooks')), 'Sam (over) stays, Taylor (clear) hidden');
   await shot(page, '18-conflicts-only-people');
   await page.getByLabel('View').getByRole('button', { name: 'Workstreams' }).click();
-  const ws = await page.locator('tr[id^="row-p:"]').count();
-  assert(ws > 0 && ws < 6, `conflicts-only keeps ${ws} workstreams`);
-  await toggle.click();
-  assert(await page.locator('tr[id^="row-p:"]').count() === 6, 'toggle off restores all workstreams');
+  assert(await page.locator('tr[id^="row-p:"]').count() === 6, 'Issues only from Resources never hides workstreams');
   await page.getByLabel('View').getByRole('button', { name: 'Resources' }).click();
+  await toggle.click();
 
   // Conflict click jumps to resource row and expands it.
   await page.getByRole('button', { name: 'Workstreams', exact: true }).click();
@@ -202,6 +232,7 @@ const moreMenu = (page, item) => choose(page, page.getByRole('button', { name: '
   // Persistence across reload (Drew 150s remain).
   await page.reload();
   await page.waitForSelector('.grid');
+  await allStages(page);
   const st = await page.evaluate(() => JSON.parse(localStorage.getItem('capacity-plan:v1')).state.plan);
   assert(Object.keys(st.assignments.find((x) => x.id === 'sample-a11').weekly).length === 16, 'data persisted across reload');
 
@@ -289,13 +320,45 @@ const moreMenu = (page, item) => choose(page, page.getByRole('button', { name: '
   assert(clientTitles.length >= 3, `client groups shown: ${clientTitles.length}`);
   assert(clientTitles[clientTitles.length - 1].startsWith('No client'), 'workstreams without a client grouped last');
   await shot(page, '20-group-by-client');
-  await page.getByRole('button', { name: 'Clients only' }).click();
-  assert(await page.locator('tr.project-row').count() === 0, 'Clients only collapses to client rows');
+  await page.getByRole('button', { name: 'Groups only' }).click();
+  assert(await page.locator('tr.project-row').count() === 0, 'Groups only collapses to one row per client');
   await page.locator('.corner-actions').getByRole('button', { name: 'Expand all', exact: true }).click();
-  assert((await page.getByRole('switch', { name: 'By client' }).getAttribute('aria-checked')) === 'true', 'By client is a switch, on by default');
-  await page.getByRole('switch', { name: 'By client' }).click();
-  assert(await page.locator('tr.group-row').count() === 0, 'By client toggles grouping off');
-  await page.getByRole('switch', { name: 'By client' }).click();
+  assert((await groupBy.inputValue()) === 'client', 'Group by stays on Client as chosen earlier');
+  await groupBy.selectOption('none');
+  assert(await page.locator('tr.group-row').count() === 0, 'Group by None removes the group rows');
+  await groupBy.selectOption('stage');
+  const stageTitles = await page.locator('tr.group-row .row-title strong').allInnerTexts();
+  assert(JSON.stringify(stageTitles) === '["Pipeline","Won","Lost"]', `grouped by stage in pipeline → won → lost order: ${stageTitles}`);
+  await groupBy.selectOption('seller');
+  const sellerTitles = await page.locator('tr.group-row .row-title').allInnerTexts();
+  assert(sellerTitles.length >= 2 && sellerTitles.every((t) => !t.includes('No client')), `grouped by seller: ${sellerTitles.length} groups`);
+  await shot(page, '20b-group-by-seller');
+  await groupBy.selectOption('client');
+
+  // ---- Win % on pipeline workstreams: sorts, filters, and lightens the risk it causes
+  const contosoWs = page.locator('[id="row-p:proj-contoso"]');
+  const win = contosoWs.getByLabel(/^Win probability for/);
+  assert((await win.inputValue()) === '', 'a pipeline workstream starts with no win %');
+  assert(await page.locator('[id="row-p:proj-northwind"]').getByLabel(/^Win probability for/).count() === 0, 'won workstreams have no win %');
+  const alexRisk = () => page.locator('tr.role-row', { hasText: 'Alex Rivera' }).locator('.badge-risk').first();
+  assert((await alexRisk().innerText()) === 'Low risk' && (await page.locator('.issue-band.issue-low').count()) > 0, 'unset win %: the pipeline risk is a low (lighter) risk');
+  await win.selectOption('90');
+  assert((await alexRisk().innerText()) === 'At risk' && (await page.locator('.issue-band.issue-low').count()) === 0, 'at 90% it is a full risk');
+  assert((await plan()).projects.find((p) => p.id === 'proj-contoso').winProbability === 90, 'win % is saved on the workstream');
+  await page.getByRole('button', { name: 'Filters', exact: true }).click();
+  await page.getByLabel('Filter by win probability').selectOption('90');
+  assert(await contosoWs.count() === 1, '≥90% filter keeps a 90% workstream');
+  await win.selectOption('50');
+  assert(await contosoWs.count() === 0, '…and hides it once it drops to 50%');
+  assert(await page.locator('[id="row-p:proj-northwind"]').count() === 1, '…without hiding won workstreams');
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: /^Filters/ }).click();
+  await page.getByLabel('Filter by win probability').selectOption('');
+  await page.keyboard.press('Escape');
+  await page.locator('.grid-scroll').focus();
+  await page.keyboard.press('Control+z');
+  await page.keyboard.press('Control+z');
+  assert((await plan()).projects.find((p) => p.id === 'proj-contoso').winProbability === undefined, 'undo clears the win % again');
 
   // ---- Capacity panel + underutilized filter (#12)
   await page.getByRole('button', { name: /Capacity/ }).click();
@@ -434,7 +497,7 @@ const moreMenu = (page, item) => choose(page, page.getByRole('button', { name: '
   const contoso = before.projects.find((p) => p.id === 'proj-contoso');
   const alexBefore = before.assignments.find((a) => a.projectId === 'proj-contoso' && a.resourceId === 'res-alex').weekly;
   const plus = (w, n) => { const d = new Date(w + 'T00:00:00'); d.setDate(d.getDate() + 7 * n); return d.toISOString().slice(0, 10); };
-  await contosoRow.getByRole('button', { name: 'Agentforce Service Pilot', exact: true }).click();
+  await rowMenu(page, contosoRow, 'Details');
   // ---- Details modal (workstream)
   const details = page.locator('dialog[open]');
   assert((await details.locator('h2').first().innerText()) === 'Agentforce Service Pilot', 'clicking a workstream opens its details');

@@ -827,7 +827,15 @@ button:focus-visible {
 }
 
 .corner-title {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   font-size: 14px;
+}
+
+.link-small,
+.group-by {
+  white-space: nowrap;
 }
 
 .corner-actions {
@@ -1004,6 +1012,40 @@ button:focus-visible {
 .ws-name {
   font-size: 13.5px;
   font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex-shrink: 1;
+}
+
+/* The client, after the workstream's name; it gives way first when space runs out. */
+.row-title > .client {
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex-shrink: 2;
+}
+
+/* Workstream and client rows expand and collapse from anywhere on the row. */
+.row-toggle {
+  cursor: pointer;
+}
+
+.group-by {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.group-by select {
+  font-size: 11px;
+  padding: 2px 4px;
 }
 
 .row-meta {
@@ -1371,6 +1413,15 @@ button:focus-visible {
 /* Past the red threshold: a stronger tint, still letting the booking show through. */
 .issue-critical {
   background: color-mix(in srgb, var(--danger) 20%, transparent);
+}
+
+/* Low risk (over only if pipeline work under 75% likely is won): the dashed outline, faded. */
+.issue-band.issue-low {
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+}
+
+.issue-low .issue-icon {
+  opacity: 0.5;
 }
 
 /* Over only if pipeline work is won: dashed. */
@@ -3855,4 +3906,48 @@ tr.archived {
 .density-compact .cell.summary.edge-end::before {
   top: 1px;
   font-size: 8px;
+}
+
+/* ---------- Win probability and low risk ---------- */
+
+.win-select {
+  appearance: none;
+  font-size: 10px;
+  line-height: 16px;
+  padding: 0 6px;
+  border-radius: 5px;
+  border: 1px solid var(--pipeline-border);
+  background: transparent;
+  color: var(--pipeline-text);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.win-select.unset {
+  border-style: dashed;
+  color: var(--muted);
+}
+
+.win-select:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.badge-risk.low {
+  border-color: color-mix(in srgb, var(--risk-strong) 45%, transparent);
+  color: color-mix(in srgb, var(--risk) 60%, var(--muted));
+  background: none;
+}
+
+.grid tr.depth-0 td.heat-risk.heat-risk-low {
+  color: color-mix(in srgb, var(--risk) 55%, var(--muted));
+  outline-color: color-mix(in srgb, var(--danger) 40%, transparent);
+}
+
+.conflicts li.low-risk button {
+  opacity: 0.7;
+}
+
+.swatch-potential.low {
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
 }

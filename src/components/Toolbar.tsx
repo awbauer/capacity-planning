@@ -5,7 +5,7 @@ import { hashString } from '../domain/hash';
 import { STATUS_LABELS } from '../domain/labels';
 import { serializePlan } from '../domain/plans';
 import { parsePlanFile } from '../domain/schema';
-import type { ProjectStatus, Zoom } from '../domain/types';
+import { WIN_PROBABILITIES, type ProjectStatus, type Zoom } from '../domain/types';
 import { LOOKAHEAD_WEEKS } from '../domain/utilization';
 import { issueCounts, openRoleDemand } from '../domain/capacity';
 import { formatWeekRange, shiftAnchor, type Bucket } from '../domain/weeks';
@@ -141,7 +141,9 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
   };
 
   const rangeLabel = buckets.length ? formatWeekRange(buckets[0].weeks[0], buckets[buckets.length - 1].weeks.at(-1)!) : '';
-  const activeFilters = [ui.filters.tagId, ui.filters.status, ui.filters.sellerId].filter(Boolean).length;
+  const activeFilters = [ui.filters.tagId, ui.filters.status, ui.filters.sellerId, ui.filters.minWinProbability].filter(
+    (v) => v !== null && v !== '',
+  ).length;
   const issueParts = [
     issues.conflicts > 0 && { n: issues.conflicts, label: issues.conflicts === 1 ? 'conflict' : 'conflicts', cls: 'danger' },
     issues.risks > 0 && { n: issues.risks, label: 'at risk', cls: 'risk' },
@@ -305,6 +307,8 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
                 Stage
                 <select
                   aria-label="Filter by status"
+                  disabled={ui.view === 'projects' && ui.filters.pipelineOnly}
+                  title={ui.view === 'projects' && ui.filters.pipelineOnly ? 'Turn off Pipeline only to filter by another stage' : undefined}
                   value={ui.filters.status ?? ''}
                   onChange={(e) => ui.setFilters({ status: (e.target.value || null) as ProjectStatus | null })}
                 >
@@ -329,26 +333,49 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
                     ))}
                 </select>
               </label>
+              {ui.view === 'projects' && (
+                <label>
+                  Win %
+                  <select
+                    aria-label="Filter by win probability"
+                    title="Pipeline workstreams at least this likely to be won (won and lost ones aren't affected)"
+                    value={ui.filters.minWinProbability ?? ''}
+                    onChange={(e) => ui.setFilters({ minWinProbability: e.target.value ? Number(e.target.value) : null })}
+                  >
+                    <option value="">Any</option>
+                    {WIN_PROBABILITIES.map((n) => (
+                      <option key={n} value={n}>
+                        {n}% or more
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <button
                 type="button"
                 className="btn btn-small"
                 disabled={!activeFilters}
-                onClick={() => ui.setFilters({ tagId: null, status: null, sellerId: null })}
+                onClick={() => ui.setFilters({ tagId: null, status: null, sellerId: null, minWinProbability: null })}
               >
                 Reset filters
               </button>
             </div>
           </Popover>
-          <Toggle
-            label="Issues only"
-            checked={ui.filters.conflictsOnly}
-            title={
-              ui.view === 'projects'
-                ? 'Show only workstreams with an issue in the visible weeks: someone over capacity or at risk, a skill mismatch, an uncovered capability or an open role to fill'
-                : 'Show only people with an issue: over capacity or at risk in the visible weeks, or a skill mismatch'
-            }
-            onChange={(conflictsOnly) => ui.setFilters({ conflictsOnly })}
-          />
+          {ui.view === 'projects' ? (
+            <Toggle
+              label="Pipeline only"
+              checked={ui.filters.pipelineOnly}
+              title="Show only workstreams still in the pipeline (turn off to see won and lost ones too)"
+              onChange={(pipelineOnly) => ui.setFilters({ pipelineOnly })}
+            />
+          ) : (
+            <Toggle
+              label="Issues only"
+              checked={ui.filters.conflictsOnly}
+              title="Show only people with an issue: over capacity or at risk in the visible weeks, or a skill mismatch"
+              onChange={(conflictsOnly) => ui.setFilters({ conflictsOnly })}
+            />
+          )}
           {ui.view === 'resources' && (
             <Toggle
               label="Underutilized"

@@ -60,6 +60,7 @@ const BASE = process.env.BASE_URL || 'http://localhost:5173';
       useUIStore.getState().setAnchor(week);
       useUIStore.getState().setCellStyle('bars');
       useUIStore.getState().setExpanded('p:qa-project', true);
+      useUIStore.getState().setFilters({ pipelineOnly: false }); // The QA workstream is won.
     }, result.week);
     const cells = editor.locator('[id="row-a:qa-role"] td.cell.edit');
     await cells.first().waitFor();

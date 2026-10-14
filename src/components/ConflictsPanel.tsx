@@ -1,7 +1,8 @@
 import { requiredTags, type Overallocation } from '../domain/conflicts';
+import { LIKELY_WIN } from '../domain/load';
 import { currentWeek, formatWeek, formatWeekRange } from '../domain/weeks';
 import { usePlan } from '../store/planStore';
-import { clientGroupKey, levelGroupKey, useUIStore } from '../store/uiStore';
+import { levelGroupKey, useUIStore, workstreamGroupKeys } from '../store/uiStore';
 import { useDerived } from '../store/useDerived';
 
 /** Lists current/future overallocations, pipeline risks and skill gaps; clicking one jumps to the row. */
@@ -14,7 +15,7 @@ export function ConflictsPanel() {
   const pastCount = d.overallocations.length - upcoming.length;
   const toResource = (id: string, week?: string) =>
     jumpTo('resources', `r:${id}`, week, [levelGroupKey(d.resourcesById.get(id)?.level)]);
-  const toProject = (id: string) => jumpTo('projects', `p:${id}`, undefined, [clientGroupKey(d.projectsById.get(id)?.client)]);
+  const toProject = (id: string) => jumpTo('projects', `p:${id}`, undefined, workstreamGroupKeys(d.projectsById.get(id)));
   const name = {
     resource: (id: string) => d.resourcesById.get(id)?.name ?? 'Unknown',
     project: (id: string) => d.projectsById.get(id)?.name ?? 'Unknown',
@@ -31,11 +32,17 @@ export function ConflictsPanel() {
     ) : (
       <ul>
         {items.map((o) => (
-          <li key={`${o.resourceId}-${o.severity}-${o.from}`}>
+          <li key={`${o.resourceId}-${o.severity}-${o.from}`} className={o.low ? 'low-risk' : undefined}>
             <button type="button" onClick={() => toResource(o.resourceId, o.from)}>
               <span className="conflict-title">
                 {name.resource(o.resourceId)}{' '}
                 <span className={`pill-${o.severity}`}>{o.peak}%</span>
+                {o.low && (
+                  <span className="muted small" title={`Only if pipeline work under ${LIKELY_WIN}% likely to be won comes through`}>
+                    {' '}
+                    · low risk
+                  </span>
+                )}
               </span>
               <span className="muted small">
                 {formatWeekRange(o.from, o.to)} · {o.weeks.length} wk

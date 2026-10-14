@@ -27,6 +27,7 @@ const project = z.strictObject({
   client: text().optional(),
   sellerId: entityId.nullable(),
   status: z.enum(['pipeline', 'won', 'lost']),
+  winProbability: z.union([z.literal(25), z.literal(50), z.literal(75), z.literal(90)]).optional(),
   tagIds,
   startWeek: weekKey.optional(),
   endWeek: weekKey.optional(),

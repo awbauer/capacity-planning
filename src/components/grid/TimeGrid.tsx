@@ -11,7 +11,7 @@ import {
 import { bucketStats, type BucketStats } from '../../domain/aggregate';
 import { colorFor } from '../../domain/colors';
 import { assignmentFlagWeeks } from '../../domain/conflicts';
-import { weekClass, weekKind, type Severity } from '../../domain/load';
+import { lowRiskAt, weekClass, weekKind, type Severity } from '../../domain/load';
 import {
   BOOKING_LABELS,
   bookingState,
@@ -97,9 +97,10 @@ interface CellKey {
 
 /**
  * 'critical': committed work past the red threshold. 'conflict': committed
- * work over capacity. 'potential': over only if pipeline work is won.
+ * work over capacity. 'potential': over only if pipeline work is won;
+ * 'potential-low': only if pipeline work under LIKELY_WIN% likely is won.
  */
-type IssueKind = 'critical' | 'conflict' | 'potential';
+type IssueKind = 'critical' | 'conflict' | 'potential' | 'potential-low';
 
 interface RowTimeline {
   stats: BucketStats[];
@@ -538,7 +539,15 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
       isFilled(a) ? assignmentFlagWeeks(a, b.weeks, d.loads, plan.settings) : { over: [], stretch: [], risk: [] },
     );
     const issues = flags.map((f): IssueKind | null =>
-      f.over.length ? 'critical' : f.stretch.length ? 'conflict' : f.risk.length ? 'potential' : null,
+      f.over.length
+        ? 'critical'
+        : f.stretch.length
+          ? 'conflict'
+          : f.risk.length
+            ? a.resourceId && f.risk.every((w) => lowRiskAt(d.loads, a.resourceId!, w, plan.settings))
+              ? 'potential-low'
+              : 'potential'
+            : null,
     );
     const shown = stats.map((st) => (zoom === 'week' ? st.avg : st[rollup]));
     return {
@@ -639,7 +648,7 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     if (notes.length) title = [title, ...notes].filter(Boolean).join('\n');
     const spoken =
       st.avg > 0 && state
-        ? [row.name, BOOKING_LABELS[state], fteLabel(v), when, issue === 'critical' || issue === 'conflict' ? 'over capacity' : issue === 'potential' ? 'over capacity if pipeline is won' : '']
+        ? [row.name, BOOKING_LABELS[state], fteLabel(v), when, issue === 'critical' || issue === 'conflict' ? 'over capacity' : issue === 'potential-low' ? 'low risk: over capacity only if unlikely pipeline work is won' : issue === 'potential' ? 'over capacity if pipeline is won' : '']
             .filter(Boolean)
             .join(', ')
         : undefined;
@@ -706,7 +715,10 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
           </span>
         )}
         {issue && issueEdge && (
-          <span className={`issue-band issue-${issue === 'potential' ? 'potential' : 'conflict'}${issue === 'critical' ? ' issue-critical' : ''}${edgeClasses(issueEdge)}`} aria-hidden="true">
+          <span
+            className={`issue-band ${issue.startsWith('potential') ? 'issue-potential' : 'issue-conflict'}${issue === 'critical' ? ' issue-critical' : ''}${issue === 'potential-low' ? ' issue-low' : ''}${edgeClasses(issueEdge)}`}
+            aria-hidden="true"
+          >
             {issueEdge.end && <span className="issue-icon">⚠</span>}
           </span>
         )}

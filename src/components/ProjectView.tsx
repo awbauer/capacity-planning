@@ -3,32 +3,36 @@ import { bucketStats } from '../domain/aggregate';
 import { initials } from '../collab/format';
 import { fte, fteLabel } from '../domain/timeline';
 import { MenuItem, Popover } from './Popover';
-import { useState } from 'react';
+import { useState, type MouseEvent } from 'react';
 import type { Derived } from '../domain/derive';
 import { assignmentFlagWeeks } from '../domain/conflicts';
 import { slug, workstreamCsv } from '../domain/csv';
-import { weekKind, type Severity } from '../domain/load';
-import { isFilled, type Assignment, type Project } from '../domain/types';
+import { LIKELY_WIN, lowRiskAt, weekKind, type Severity } from '../domain/load';
+import { isFilled, WIN_PROBABILITIES, type Assignment, type Project, type ProjectStatus, type WinProbability } from '../domain/types';
 import type { Bucket } from '../domain/weeks';
 import { usePlan, usePlanStore } from '../store/planStore';
 import { useCan } from '../store/useCan';
-import { clientGroupKey, isExpanded, useUIStore, type Filters } from '../store/uiStore';
+import { clientGroupKey, isExpanded, sellerGroupKey, stageGroupKey, useUIStore, type Filters, type GroupBy } from '../store/uiStore';
+import { STATUS_LABELS } from '../domain/labels';
 import { useDerived } from '../store/useDerived';
 import { AddAssignmentDialog } from './AddAssignmentDialog';
 import { downloadText, today } from './download';
 import { FillRoleDialog } from './FillRoleDialog';
 import { RoleDialog } from './RoleDialog';
 import { TimeGrid, type GridRow } from './grid/TimeGrid';
-import { Toggle } from './Toggle';
 import { ProjectDialog } from './ProjectDialog';
 import { AssignmentBadges, StatusSelect } from './StatusControls';
+
+const STAGE_ORDER: ProjectStatus[] = ['pipeline', 'won', 'lost'];
 
 interface Props {
   buckets: Bucket[];
 }
 
-function matchesFilters(p: Project, f: Filters, d: Derived, hasConflict: boolean): boolean {
-  if (f.conflictsOnly && !hasConflict) return false;
+/** Issues only belongs to the Resources view; here Pipeline only takes its place. */
+function matchesFilters(p: Project, f: Filters, d: Derived): boolean {
+  if (f.pipelineOnly && p.status !== 'pipeline') return false;
+  if (f.minWinProbability !== null && p.status === 'pipeline' && (p.winProbability ?? 0) < f.minWinProbability) return false;
   if (f.tagId && !p.tagIds.includes(f.tagId)) return false;
   if (f.sellerId && p.sellerId !== f.sellerId) return false;
   if (f.status && p.status !== f.status) return false;
@@ -47,11 +51,14 @@ function matchesFilters(p: Project, f: Filters, d: Derived, hasConflict: boolean
   return haystack.some((s) => s.toLowerCase().includes(q));
 }
 
-/** By start date, with lost projects last. */
+/** How sure a workstream is: won counts as 100%, a pipeline one its win % (0 if unset), lost last. */
+const certainty = (p: Project) => (p.status === 'won' ? 100 : p.status === 'pipeline' ? (p.winProbability ?? 0) : -1);
+
+/** Most likely first (won, then pipeline by win %), then by start date. */
 function sortProjects(projects: Project[]): Project[] {
   return [...projects].sort(
     (a, b) =>
-      Number(a.status === 'lost') - Number(b.status === 'lost') ||
+      certainty(b) - certainty(a) ||
       (a.startWeek ?? '9999').localeCompare(b.startWeek ?? '9999') ||
       a.name.localeCompare(b.name),
   );
@@ -72,8 +79,8 @@ export function ProjectView({ buckets }: Props) {
   const expanded = useUIStore((s) => s.expanded);
   const setExpanded = useUIStore((s) => s.setExpanded);
   const setAllExpanded = useUIStore((s) => s.setAllExpanded);
-  const groupByClient = useUIStore((s) => s.groupByClient);
-  const setGroupByClient = useUIStore((s) => s.setGroupByClient);
+  const groupBy = useUIStore((s) => s.groupBy);
+  const setGroupBy = useUIStore((s) => s.setGroupBy);
   const showDetails = useUIStore((s) => s.showDetails);
   const removeAssignment = usePlanStore((s) => s.removeAssignment);
   const can = useCan();
@@ -85,6 +92,11 @@ export function ProjectView({ buckets }: Props) {
   const [editing, setEditing] = useState<Project | 'new' | null>(null);
 
   const visibleWeeks = buckets.flatMap((b) => b.weeks);
+  /** Clicking anywhere on a workstream or client row expands or collapses it, except on its own controls. */
+  const toggleOnRowClick = (key: string, open: boolean) => (e: MouseEvent) => {
+    if ((e.target as HTMLElement).closest('button, select, input, a, [role=menuitem]')) return;
+    setExpanded(key, !open);
+  };
   // A workstream has a conflict if someone on it is over/at risk in the visible range,
   // someone on it has none of its required skills, a required capability is uncovered,
   // or it has an open role still to fill.
@@ -97,7 +109,7 @@ export function ProjectView({ buckets }: Props) {
       return flags.over.length + flags.stretch.length + flags.risk.length > 0;
     });
   const conflicted = new Set(plan.projects.filter(hasConflict).map((p) => p.id));
-  const projects = sortProjects(plan.projects.filter((p) => matchesFilters(p, filters, d, conflicted.has(p.id))));
+  const projects = sortProjects(plan.projects.filter((p) => matchesFilters(p, filters, d)));
 
   const rows: GridRow[] = [];
   const pushProject = (p: Project) => {
@@ -122,17 +134,14 @@ export function ProjectView({ buckets }: Props) {
     const overPeople = flagged('over');
     const stretchPeople = [...flagged('stretch')].filter((id) => !overPeople.has(id));
     const riskPeople = [...flagged('risk')].filter((id) => !overPeople.has(id) && !stretchPeople.includes(id));
+    // A person's risk here is low when every at-risk week is only through pipeline work under LIKELY_WIN% likely.
+    const lowRiskOf = (a: Assignment) =>
+      !!a.resourceId && (flagsByAssignment.get(a.id)?.risk ?? []).every((w) => lowRiskAt(d.loads, a.resourceId!, w, plan.settings));
+    const allRiskLow = riskPeople.every((id) => assignments.filter((a) => a.resourceId === id).every(lowRiskOf));
     const uncovered = d.uncoveredByProject.get(p.id) ?? [];
     const seller = p.sellerId ? d.sellersById.get(p.sellerId) : undefined;
     const totals = d.projectLoad.get(p.id);
 
-    // Demand over the visible weeks (staffed + open, not counting lost delivery), shown as where it starts and ends.
-    const demandAt = (w: string) => (totals?.get(w) ?? 0) + roles.reduce((n, r) => n + (r.weekly[w] ?? 0), 0);
-    const demandWeeks = visibleWeeks.map(demandAt).filter((v) => v > 0);
-    const demandFrom = demandWeeks[0];
-    const demandTo = demandWeeks[demandWeeks.length - 1];
-    const demandText =
-      demandFrom === undefined ? '' : Math.round(demandFrom) === Math.round(demandTo) ? fteLabel(demandFrom) : `${fte(demandFrom)} → ${fteLabel(demandTo)}`;
     const conflictPeople = overPeople.size + stretchPeople.length;
 
     rows.push({
@@ -141,34 +150,44 @@ export function ProjectView({ buckets }: Props) {
       className: p.status === 'lost' ? 'project-row lost' : 'project-row',
       range: { start: p.startWeek, end: p.endWeek },
       label: (
-        <div className="row-label">
+        <div className="row-label row-toggle" onClick={toggleOnRowClick(key, open)}>
           <button
             type="button"
             className="twisty"
             aria-expanded={open}
-            aria-label={open ? 'Collapse' : 'Expand'}
+            aria-label={open ? `Collapse ${p.name}` : `Expand ${p.name}`}
             onClick={() => setExpanded(key, !open)}
           >
             {open ? '▾' : '▸'}
           </button>
           <div className="row-main">
-            <div className="row-title">
-              <button
-                type="button"
-                className="link ws-name"
-                onClick={() => showDetails({ kind: 'project', id: p.id })}
-                title={`${p.name}${p.client ? ` · ${p.client}` : ''}${seller ? ` · seller ${seller.name}` : ''}. Open details: checks, filled and open roles`}
-              >
-                {p.name}
-              </button>
+            <div
+              className="row-title"
+              title={`${p.name}${p.client ? ` · ${p.client}` : ''}${seller ? ` · seller ${seller.name}` : ''}. Click to ${open ? 'collapse' : 'expand'}; ••• → Details for checks and roles`}
+            >
+              <span className="ws-name">{p.name}</span>
+              {p.client && groupBy !== 'client' && <span className="client">· {p.client}</span>}
             </div>
             <div className="row-meta">
-              {p.client && !groupByClient && <span className="client">{p.client}</span>}
               <StatusSelect compact disabled={!can.edit} value={p.status} onChange={(status) => updateProject(p.id, { status })} />
-              {demandText && (
-                <span className="fte" title="Demand in the visible weeks (filled and open roles), where it starts → where it ends">
-                  {demandText}
-                </span>
+              {p.status === 'pipeline' && (
+                <select
+                  className={p.winProbability ? 'win-select' : 'win-select unset'}
+                  aria-label={`Win probability for ${p.name}`}
+                  title={`Chance of winning it. Sorts and filters workstreams; under ${LIKELY_WIN}%, the risk it puts on people is a low risk. Loads aren't weighted by it.`}
+                  disabled={!can.edit}
+                  value={p.winProbability ?? ''}
+                  onChange={(e) =>
+                    updateProject(p.id, { winProbability: e.target.value ? (Number(e.target.value) as WinProbability) : undefined })
+                  }
+                >
+                  <option value="">–%</option>
+                  {WIN_PROBABILITIES.map((n) => (
+                    <option key={n} value={n}>
+                      {n}%
+                    </option>
+                  ))}
+                </select>
               )}
               {conflictPeople > 0 && (
                 <span
@@ -179,8 +198,15 @@ export function ProjectView({ buckets }: Props) {
                 </span>
               )}
               {riskPeople.length > 0 && (
-                <span className="badge badge-risk" title={`${riskPeople.length} at risk: people who would be over capacity if pipeline work is won`}>
-                  {riskPeople.length} at risk
+                <span
+                  className={allRiskLow ? 'badge badge-risk low' : 'badge badge-risk'}
+                  title={
+                    allRiskLow
+                      ? `${riskPeople.length} low risk: over capacity only if pipeline work under ${LIKELY_WIN}% likely to be won comes through`
+                      : `${riskPeople.length} at risk: people who would be over capacity if pipeline work is won`
+                  }
+                >
+                  {riskPeople.length} {allRiskLow ? 'low risk' : 'at risk'}
                 </span>
               )}
               {roles.length > 0 && (
@@ -306,7 +332,7 @@ export function ProjectView({ buckets }: Props) {
                         {a.name}
                       </button>
                     )}
-                    <AssignmentBadges worst={rowWorst} mismatch={d.mismatchedAssignmentIds.has(a.id)} />
+                    <AssignmentBadges worst={rowWorst} mismatch={d.mismatchedAssignmentIds.has(a.id)} lowRisk={lowRiskOf(a)} />
                   </>
                 ) : (
                   <>
@@ -346,24 +372,32 @@ export function ProjectView({ buckets }: Props) {
     }
   };
 
-  // Client groups: named clients A–Z (case-insensitive), then workstreams without a client.
-  const groups: { key: string; client: string | undefined; projects: Project[] }[] = [];
-  if (groupByClient) {
+  // Groups, when grouping: clients and sellers A–Z (case-insensitive) with "No client" / "No seller" last;
+  // stages in pipeline → won → lost order.
+  const groups: { key: string; name: string | undefined; projects: Project[]; order: number }[] = [];
+  if (groupBy !== 'none') {
     const byKey = new Map<string, (typeof groups)[number]>();
     for (const p of projects) {
-      const key = clientGroupKey(p.client);
-      const group = byKey.get(key) ?? { key, client: p.client?.trim() || undefined, projects: [] };
+      const seller = p.sellerId ? d.sellersById.get(p.sellerId) : undefined;
+      const [key, name, order] =
+        groupBy === 'client'
+          ? [clientGroupKey(p.client), p.client?.trim() || undefined, 0]
+          : groupBy === 'seller'
+            ? [sellerGroupKey(seller ? p.sellerId : null), seller?.name, 0]
+            : [stageGroupKey(p.status), STATUS_LABELS[p.status], STAGE_ORDER.indexOf(p.status)];
+      const group = byKey.get(key) ?? { key, name, projects: [], order };
       group.projects.push(p);
       byKey.set(key, group);
     }
     groups.push(
       ...[...byKey.values()].sort(
-        (a, b) => Number(!a.client) - Number(!b.client) || (a.client ?? '').localeCompare(b.client ?? ''),
+        (a, b) => a.order - b.order || Number(!a.name) - Number(!b.name) || (a.name ?? '').localeCompare(b.name ?? ''),
       ),
     );
   }
+  const groupNoun = groupBy === 'seller' ? 'seller' : groupBy === 'stage' ? 'stage' : 'client';
 
-  if (!groupByClient) projects.forEach(pushProject);
+  if (groupBy === 'none') projects.forEach(pushProject);
   for (const g of groups) {
     const open = isExpanded(expanded, g.key);
     const issues = g.projects.filter((p) => conflicted.has(p.id)).length;
@@ -373,7 +407,7 @@ export function ProjectView({ buckets }: Props) {
       depth: 0,
       className: 'group-row',
       label: (
-        <div className="row-label">
+        <div className="row-label row-toggle" onClick={toggleOnRowClick(g.key, open)}>
           <button
             type="button"
             className="twisty"
@@ -385,12 +419,12 @@ export function ProjectView({ buckets }: Props) {
           </button>
           <div className="row-main">
             <div className="row-title">
-              {g.client ? <strong>{g.client}</strong> : <em className="muted">No client</em>}{' '}
+              {g.name ? <strong>{g.name}</strong> : <em className="muted">No {groupNoun}</em>}{' '}
               <span className="muted small">
                 · {g.projects.length} {g.projects.length === 1 ? 'workstream' : 'workstreams'}
               </span>
               {issues > 0 && (
-                <span className="badge badge-warn" title={`${issues} of this client's workstreams have an issue`}>
+                <span className="badge badge-warn" title={`${issues} of these workstreams have an issue`}>
                   ⚠ {issues}
                 </span>
               )}
@@ -405,7 +439,7 @@ export function ProjectView({ buckets }: Props) {
           band: 'staffed',
           short: { text: avg ? fteLabel(avg).replace(/ FTE$/, '') : '' },
           className: 'group-sum',
-          title: avg ? `${fteLabel(avg)} staffed across this client's workstreams${b.weeks.length > 1 ? ` (${rollWord})` : ''}` : undefined,
+          title: avg ? `${fteLabel(avg)} staffed across these workstreams${b.weeks.length > 1 ? ` (${rollWord})` : ''}` : undefined,
         };
       },
     });
@@ -425,6 +459,16 @@ export function ProjectView({ buckets }: Props) {
           <div className="corner-content">
             <div className="corner-title">
               <strong>Workstreams</strong> <span className="muted">({projects.length})</span>
+              <span className="spacer" />
+              <label className="group-by">
+                Group by
+                <select aria-label="Group by" value={groupBy} onChange={(e) => setGroupBy(e.target.value as GroupBy)}>
+                  <option value="none">None</option>
+                  <option value="client">Client</option>
+                  <option value="seller">Seller</option>
+                  <option value="stage">Stage</option>
+                </select>
+              </label>
             </div>
             <div className="corner-actions">
               <button type="button" className="link-small" onClick={() => setAllExpanded([...groupKeys, ...projectKeys], true)}>
@@ -433,13 +477,11 @@ export function ProjectView({ buckets }: Props) {
               <button type="button" className="link-small" onClick={() => setAllExpanded(projectKeys, false)}>
                 Collapse all
               </button>
-              {groupByClient && (
-                <button type="button" className="link-small" onClick={() => setAllExpanded(groupKeys, false)}>
-                  Clients only
+              {groupBy !== 'none' && (
+                <button type="button" className="link-small" onClick={() => setAllExpanded(groupKeys, false)} title="Collapse to one row per group">
+                  Groups only
                 </button>
               )}
-              <span className="spacer" />
-              <Toggle small label="By client" checked={groupByClient} onChange={setGroupByClient} title="Group workstreams by client" />
             </div>
           </div>
         }
@@ -451,8 +493,8 @@ export function ProjectView({ buckets }: Props) {
                 Create one
               </button>
             </span>
-          ) : filters.conflictsOnly ? (
-            'No workstream has an issue in the visible weeks. Turn off Issues only to see them all.'
+          ) : filters.pipelineOnly && plan.projects.every((p) => p.status !== 'pipeline') ? (
+            'No workstreams are in the pipeline. Turn off Pipeline only to see won and lost ones.'
           ) : (
             'No workstreams match the filters.'
           )

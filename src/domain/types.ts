@@ -6,6 +6,10 @@ export type Zoom = 'week' | 'month' | 'quarter';
 /** Pipeline = not yet won; delivery staffing on it is tentative. */
 export type ProjectStatus = 'pipeline' | 'won' | 'lost';
 
+/** How likely a pipeline workstream is to be won, in %. A label for sorting and filtering; loads are never weighted by it. */
+export const WIN_PROBABILITIES = [25, 50, 75, 90] as const;
+export type WinProbability = (typeof WIN_PROBABILITIES)[number];
+
 /**
  * Presales vs delivery is not stored: it's decided per week by the
  * workstream's start date (see weekKind in load.ts).
@@ -44,6 +48,8 @@ export interface Project {
   client?: string;
   sellerId: string | null;
   status: ProjectStatus;
+  /** Pipeline only: the chance of winning it. Kept if the stage changes, but only shown and used while in the pipeline. */
+  winProbability?: WinProbability;
   /** Capabilities the project needs. */
   tagIds: string[];
   startWeek?: WeekKey;
