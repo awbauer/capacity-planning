@@ -6,6 +6,13 @@ require('fs').mkdirSync(path.join(SP, 'shots'), { recursive: true });
 const BASE = process.env.BASE_URL || 'http://localhost:5173';
 const shot = (page, name) => page.screenshot({ path: path.join(SP, 'shots', name + '.png') });
 const assert = (cond, msg) => { if (!cond) { throw new Error('ASSERT: ' + msg); } console.log('ok -', msg); };
+/** Opens a row's ••• menu (or the header's ⋯ menu) and picks an item. */
+const choose = async (page, trigger, item) => {
+  await trigger.click();
+  await page.getByRole('menuitem', { name: item }).click();
+};
+const rowMenu = (page, row, item) => choose(page, row.locator('.row-more').first(), item);
+const moreMenu = (page, item) => choose(page, page.getByRole('button', { name: 'More', exact: true }), item);
 
 (async () => {
   const browser = await chromium.launch();
@@ -37,7 +44,10 @@ const assert = (cond, msg) => { if (!cond) { throw new Error('ASSERT: ' + msg); 
 
   const val = (loc) => loc.getAttribute('data-value').then(Number);
   const plan = () => page.evaluate(() => JSON.parse(localStorage.getItem('capacity-plan:v1')).state.plan);
-  assert(await page.locator('svg.pie').count() > 20, 'cells render as circles');
+  assert(await page.locator('.grid svg.pie').count() > 20 && await page.locator('.grid .bar').count() === 0, 'allocations render as circles by default');
+  await page.getByRole('button', { name: 'Bars', exact: true }).click();
+  assert(await page.locator('.bar').count() > 20, 'the Bars display draws bars');
+  assert(await page.locator('[id="row-a:sample-a1"] .bar-label').count() < await page.locator('[id="row-a:sample-a1"] td.filled').count(), 'FTE is labelled where a bar starts or changes, not every week');
 
   // Click cycles an empty cell 0 → 25 → 50 → 100 → 0 (Drew on Initech, before the project starts).
   const row = page.locator('[id="row-a:sample-a11"]');
@@ -47,7 +57,7 @@ const assert = (cond, msg) => { if (!cond) { throw new Error('ASSERT: ' + msg); 
   assert((await val(cells.nth(0))) === 0, 'single click only selects');
   for (let i = 0; i < 4; i++) { await cells.nth(0).dblclick(); seen.push(await val(cells.nth(0))); }
   assert(JSON.stringify(seen) === '[25,50,100,0]', `double-click cycles 25,50,100,0: ${seen}`);
-  await shot(page, '02-pies');
+  await shot(page, '02-bars');
 
   // Range: click, shift-click to extend, type an off-step value → snaps.
   await cells.nth(0).click();
@@ -113,8 +123,15 @@ const assert = (cond, msg) => { if (!cond) { throw new Error('ASSERT: ' + msg); 
 
   // Numbers display toggle.
   await page.getByRole('button', { name: 'Numbers', exact: true }).click();
-  assert((await page.locator('.grid svg.pie').count()) === 0 && (await a1.nth(5).innerText()).trim() === '50', 'number display shows values');
+  assert((await a1.nth(5).innerText()).trim() === '50', 'number display shows every week\'s value');
   await page.getByRole('button', { name: 'Circles', exact: true }).click();
+  assert((await page.locator('.grid svg.pie').count()) > 20 && (await page.locator('.grid .bar').count()) === 0, 'circles display draws a Harvey ball per booked week instead of bars');
+  assert(await page.locator('.grid .pie-tentative').count() > 0 && await page.locator('.grid .pie-open').count() > 0, 'circles keep the booking state (tentative, open role)');
+  await shot(page, '03-circles');
+  await page.reload();
+  await page.waitForSelector('.grid');
+  assert((await page.locator('.grid svg.pie').count()) > 20, 'the display choice survives a reload');
+  await page.getByRole('button', { name: 'Bars', exact: true }).click();
 
   // Quarter view + resources view screenshots.
   await page.getByRole('button', { name: 'Quarter', exact: true }).click();
@@ -137,9 +154,9 @@ const assert = (cond, msg) => { if (!cond) { throw new Error('ASSERT: ' + msg); 
   await shot(page, '06-resources-week');
 
   // Conflicts-only filter: people on Resources, workstreams on Workstreams.
-  const toggle = page.getByRole('switch', { name: 'Conflicts only' });
+  const toggle = page.getByRole('switch', { name: 'Issues only' });
   const peopleBefore = await page.locator('tr[id^="row-r:"]').count();
-  assert((await toggle.getAttribute('aria-checked')) === 'false', 'Conflicts only is a switch, off by default');
+  assert((await toggle.getAttribute('aria-checked')) === 'false', 'Issues only is a switch, off by default');
   await toggle.click();
   assert((await toggle.getAttribute('aria-checked')) === 'true', 'switch turns on');
   const people = await page.locator('tr[id^="row-r:"] .row-title').allInnerTexts();
@@ -157,7 +174,7 @@ const assert = (cond, msg) => { if (!cond) { throw new Error('ASSERT: ' + msg); 
   await page.getByRole('button', { name: 'Workstreams', exact: true }).click();
   await panel.getByRole('button', { name: /Sam Patel/ }).first().click();
   await page.waitForTimeout(200);
-  assert(await page.locator('.segmented button[aria-pressed="true"]', { hasText: 'Resources' }).count() === 1, 'jumped to resource view');
+  assert(await page.locator('nav[aria-label=View] button[aria-pressed="true"]', { hasText: 'Resources' }).count() === 1, 'jumped to resource view');
   assert(await page.locator('[id="row-r:res-sam"].flash').count() === 1, 'Sam row flashed');
   assert(await page.locator('[id="row-a:sample-a2"]').count() === 1, 'Sam row expanded showing assignments');
   await shot(page, '07-jump-to-conflict');
@@ -190,7 +207,7 @@ const assert = (cond, msg) => { if (!cond) { throw new Error('ASSERT: ' + msg); 
 
   // Add person dialog from project view.
   await page.getByRole('button', { name: 'Workstreams', exact: true }).click();
-  await page.locator('[id="row-p:proj-northwind"]').getByRole('button', { name: '+ Person' }).click();
+  await rowMenu(page, page.locator('[id="row-p:proj-northwind"]'), 'Add a person…');
   await shot(page, '08-add-person-dialog');
   assert(await page.locator('.modal [aria-label="Type of work"]').count() === 0, 'no presales/delivery picker');
   assert(await page.locator('.modal .segmented[aria-label="Allocation"] button').count() === 3, 'dialog offers 25/50/100');
@@ -216,7 +233,7 @@ const assert = (cond, msg) => { if (!cond) { throw new Error('ASSERT: ' + msg); 
   await page.keyboard.press('Escape');
 
   // New project with a brand-new tag and a new seller-less project.
-  await page.getByRole('button', { name: '+ New workstream' }).click();
+  await page.getByRole('button', { name: '+ Workstream', exact: true }).click();
   await page.locator('.modal input').first().fill('Heroku Migration');
   await page.locator('.modal .combo input').fill('Heroku');
   await page.keyboard.press('Enter');
@@ -230,21 +247,21 @@ const assert = (cond, msg) => { if (!cond) { throw new Error('ASSERT: ' + msg); 
   const fs = require('fs');
   const [csv1] = await Promise.all([
     page.waitForEvent('download'),
-    page.locator('[id="row-p:proj-contoso"]').getByRole('button', { name: 'Download CSV' }).click(),
+    rowMenu(page, page.locator('[id="row-p:proj-contoso"]'), 'Download CSV'),
   ]);
   const f1 = path.join(SP, 'contoso.csv');
   await csv1.saveAs(f1);
   const t1 = fs.readFileSync(f1, 'utf8');
   assert(csv1.suggestedFilename().startsWith('staffing-agentforce-service-pilot-'), `workstream CSV filename: ${csv1.suggestedFilename()}`);
   assert(t1.startsWith('\uFEFFWorkstream,Agentforce Service Pilot') && t1.includes('\r\nPhase,') && t1.includes('\r\nTotal FTE,'), 'workstream CSV content');
-  const [csv2] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'CSV', exact: true }).click()]);
+  const [csv2] = await Promise.all([page.waitForEvent('download'), moreMenu(page, 'Export staffing (CSV)')]);
   const f2 = path.join(SP, 'all.csv');
   await csv2.saveAs(f2);
   assert(fs.readFileSync(f2, 'utf8').startsWith('\uFEFFWorkstream,Client,Seller,Status,Role,Person,Level,Week of,Phase,Allocation %'), 'all-workstreams CSV content');
   await shot(page, '16-csv-buttons');
 
   // Export, clear, import.
-  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Export' }).click()]);
+  const [download] = await Promise.all([page.waitForEvent('download'), moreMenu(page, 'Export plan (JSON)')]);
   const file = path.join(SP, 'export.json');
   await download.saveAs(file);
   assert(await page.locator('.export-status.dirty').count() === 0, 'export status clean after export');
@@ -274,21 +291,28 @@ const assert = (cond, msg) => { if (!cond) { throw new Error('ASSERT: ' + msg); 
   await shot(page, '20-group-by-client');
   await page.getByRole('button', { name: 'Clients only' }).click();
   assert(await page.locator('tr.project-row').count() === 0, 'Clients only collapses to client rows');
-  await page.locator('.corner-actions').getByRole('button', { name: 'Expand', exact: true }).click();
+  await page.locator('.corner-actions').getByRole('button', { name: 'Expand all', exact: true }).click();
   assert((await page.getByRole('switch', { name: 'By client' }).getAttribute('aria-checked')) === 'true', 'By client is a switch, on by default');
   await page.getByRole('switch', { name: 'By client' }).click();
   assert(await page.locator('tr.group-row').count() === 0, 'By client toggles grouping off');
   await page.getByRole('switch', { name: 'By client' }).click();
 
-  // ---- Utilization sidebar + underutilized filter (#12)
-  await page.getByRole('button', { name: 'Utilization', exact: true }).click();
-  const util = page.locator('aside[aria-label=Utilization]');
-  assert(await util.count() === 1, 'utilization sidebar opens');
-  const bigs = await util.locator('.util-big').allInnerTexts();
-  assert(bigs.length === 2 && bigs.every((t) => /^\d+%$/.test(t)), `team delivery/pipeline numbers: ${bigs}`);
-  assert(await util.locator('.util-table tbody tr').count() >= 8, 'one row per person');
-  await shot(page, '21-utilization');
-  await util.locator('.util-table .link').first().click();
+  // ---- Capacity panel + underutilized filter (#12)
+  await page.getByRole('button', { name: /Capacity/ }).click();
+  const util = page.locator('aside[aria-label=Capacity]');
+  assert(await util.count() === 1, 'capacity panel opens');
+  assert(await page.locator('.conflicts').count() === 0, 'one side panel at a time');
+  assert(/^\d+%$/.test(await util.locator('.metric-big').innerText()), 'planned utilization headline');
+  const shares = await util.locator('.metric-row strong').allInnerTexts();
+  assert(shares.length === 3 && shares.every((t) => /^\d+%$/.test(t)), `won / pipeline / headroom shares: ${shares}`);
+  assert((await util.locator('.metric-caption').innerText()).includes('FTE-weeks'), 'states the denominator');
+  assert(await util.locator('.person-cap').count() >= 8, 'one row per person');
+  await util.locator('.person-cap-main', { hasText: 'Sam Patel' }).click();
+  assert(await page.locator('tr.highlighted').count() > 0 && await page.locator('tr.dimmed').count() > 0, 'clicking a person highlights their rows and dims the rest');
+  await shot(page, '21-capacity');
+  await util.locator('.person-cap-main', { hasText: 'Sam Patel' }).click();
+  assert(await page.locator('tr.dimmed').count() === 0, 'clicking again clears the highlight');
+  await util.getByRole('button', { name: /^Show .* in Resources$/ }).first().click();
   assert(await page.locator('tr.flash, tr.resource-row').count() > 0, 'clicking a person jumps to Resources');
   const allPeople = await page.locator('tr.resource-row').count();
   await page.getByRole('switch', { name: 'Underutilized' }).click();
@@ -339,18 +363,19 @@ const assert = (cond, msg) => { if (!cond) { throw new Error('ASSERT: ' + msg); 
   const planNow = () => page.evaluate(() => JSON.parse(localStorage.getItem('capacity-plan:v1')).state.plan);
   await page.getByRole('button', { name: 'Workstreams', exact: true }).first().click();
   const contosoRow = page.locator('[id="row-p:proj-contoso"]');
-  assert((await contosoRow.locator('.badge-open').innerText()) === 'Open 1', 'workstream shows its open role count');
+  assert((await contosoRow.locator('.badge-open').innerText()) === '1 open', 'workstream shows its open role count');
   const roleRow = page.locator('[id="row-a:sample-role1"]');
   assert(await roleRow.count() === 1, 'open role row sits under the workstream');
   assert(await roleRow.locator('td.cell.open-role.filled').count() > 0, 'open role cells drawn as demand');
   assert(await roleRow.locator('td.cell.over, td.cell.risk, td.cell.stretch').count() === 0, 'open roles are never flagged');
+  if (await page.locator('.conflicts').count() === 0) await page.locator('.issue-chip').click();
   assert(await page.locator('.conflicts').getByText('Agentforce Architect').count() > 0, 'conflicts panel lists the open role');
-  await contosoRow.getByRole('button', { name: '+ Role' }).click();
+  await rowMenu(page, contosoRow, 'Add an open role…');
   await page.locator('.modal input').first().fill('Service Cloud Lead');
   await page.getByRole('button', { name: 'Add open role' }).click();
-  assert((await contosoRow.locator('.badge-open').innerText()) === 'Open 2', 'open role added from the workstream row');
+  assert((await contosoRow.locator('.badge-open').innerText()) === '2 open', 'open role added from the workstream row');
   // A role with someone in it from the start.
-  await contosoRow.getByRole('button', { name: '+ Role' }).click();
+  await rowMenu(page, contosoRow, 'Add an open role…');
   await page.locator('.modal input').first().fill('Engagement Lead');
   await page.locator('.modal select[aria-label=Person]').selectOption({ label: 'Drew Okafor (M)' });
   await page.getByRole('button', { name: 'Add role', exact: true }).click();
@@ -361,7 +386,7 @@ const assert = (cond, msg) => { if (!cond) { throw new Error('ASSERT: ' + msg); 
   await page.locator(`[id="row-a:${lead.id}"] .person-name`).click();
   await page.getByRole('button', { name: 'Leave open' }).click();
   assert(await page.locator(`[id="row-a:${lead.id}"] .badge-open`).count() === 1, 'Leave open frees the person and keeps the role');
-  assert((await contosoRow.locator('.badge-open').innerText()) === 'Open 3', 'now three open roles');
+  assert((await contosoRow.locator('.badge-open').innerText()) === '3 open', 'now three open roles');
   await shot(page, '30-open-roles');
   await roleRow.getByRole('button', { name: 'Fill…' }).click();
   const firstCandidate = await page.locator('.modal .candidate-name').first().innerText();
@@ -370,20 +395,23 @@ const assert = (cond, msg) => { if (!cond) { throw new Error('ASSERT: ' + msg); 
   await page.locator('.modal .candidate', { hasText: 'Casey Nguyen' }).click();
   await page.getByRole('button', { name: 'Fill with Casey Nguyen' }).click();
   assert((await roleRow.locator('.person-name').innerText()) === 'Casey Nguyen', 'Casey is now in the role, on its own row');
-  assert((await contosoRow.locator('.badge-open').innerText()) === 'Open 2', 'one fewer open role');
+  assert((await contosoRow.locator('.badge-open').innerText()) === '2 open', 'one fewer open role');
   const filledRole = (await planNow()).assignments.find((a) => a.id === 'sample-role1');
   assert(filledRole.resourceId === 'res-casey' && filledRole.name === 'Agentforce Architect', 'role keeps its name and weeks');
   await page.locator('.grid-scroll').focus();
   await page.keyboard.press('Control+z');
   assert(await roleRow.locator('.badge-open').count() === 1, 'undo makes it open again');
-  const util2 = page.locator('aside[aria-label=Utilization]');
-  if (await util2.count() === 0) await page.getByRole('button', { name: 'Utilization', exact: true }).click();
-  assert(await util2.getByText('Open demand vs bench').count() === 1, 'sidebar shows demand vs bench');
-  assert(await util2.locator('.util-table').nth(1).getByText('Agentforce').count() === 1, 'Agentforce demand row');
+  const util2 = page.locator('aside[aria-label=Capacity]');
+  if (await util2.count() === 0) await page.getByRole('button', { name: /Capacity/ }).click();
+  await util2.getByRole('button', { name: 'Open roles' }).click();
+  assert(await util2.locator('.role-caps li', { hasText: 'Agentforce Architect' }).count() === 1, 'capacity panel lists open roles in the window');
+  await util2.getByRole('button', { name: 'Capabilities' }).click();
+  assert(await util2.locator('.util-table').getByText('Agentforce').count() === 1, 'Agentforce demand vs bench row');
   await shot(page, '32-demand-vs-bench');
 
   // ---- Utilization targets (#21)
-  assert(await util2.locator('th', { hasText: 'vs tgt' }).count() === 1, 'sidebar compares with level targets');
+  await util2.getByRole('button', { name: 'People' }).click();
+  assert(await util2.locator('.psub', { hasText: 'vs target' }).count() >= 8, 'capacity panel compares with level targets');
   await page.getByRole('button', { name: 'Resources', exact: true }).first().click();
   await page.getByRole('switch', { name: 'Underutilized' }).click();
   const underDefault = await page.locator('tr.resource-row').count();
@@ -406,7 +434,7 @@ const assert = (cond, msg) => { if (!cond) { throw new Error('ASSERT: ' + msg); 
   const contoso = before.projects.find((p) => p.id === 'proj-contoso');
   const alexBefore = before.assignments.find((a) => a.projectId === 'proj-contoso' && a.resourceId === 'res-alex').weekly;
   const plus = (w, n) => { const d = new Date(w + 'T00:00:00'); d.setDate(d.getDate() + 7 * n); return d.toISOString().slice(0, 10); };
-  await contosoRow.getByRole('button', { name: 'Agentforce Service Pilot' }).click();
+  await contosoRow.getByRole('button', { name: 'Agentforce Service Pilot', exact: true }).click();
   // ---- Details modal (workstream)
   const details = page.locator('dialog[open]');
   assert((await details.locator('h2').first().innerText()) === 'Agentforce Service Pilot', 'clicking a workstream opens its details');
@@ -440,7 +468,7 @@ const assert = (cond, msg) => { if (!cond) { throw new Error('ASSERT: ' + msg); 
 
   // ---- Details modal (person)
   await page.getByRole('button', { name: 'Resources', exact: true }).first().click();
-  await page.locator('tr.resource-row').getByRole('button', { name: 'Sam Patel' }).click();
+  await page.locator('tr.resource-row').getByRole('button', { name: 'Sam Patel', exact: true }).click();
   const pd = page.locator('dialog[open]');
   assert((await pd.locator('h2').first().innerText()) === 'Sam Patel', 'clicking a person opens their details');
   assert(await pd.locator('.check.fail', { hasText: 'Not over capacity' }).count() === 1, 'person details: overallocation warning');
@@ -465,6 +493,88 @@ const assert = (cond, msg) => { if (!cond) { throw new Error('ASSERT: ' + msg); 
   await contosoDemand.locator('td').nth(3).locator('.role-chip').first().click();
   assert(await page.locator('dialog[open] .stat-label', { hasText: 'target' }).count() === 1, 'demand: person chip opens person details');
   await page.keyboard.press('Escape');
+
+  // ---- Drag bars, rollups, inspector, density (design follow-ups)
+  await page.getByRole('button', { name: 'Workstreams', exact: true }).first().click();
+  await page.getByRole('button', { name: 'Week', exact: true }).click();
+  // A bar whose end has two empty weeks after it.
+  const target = await page.evaluate(() => {
+    for (const td of document.querySelectorAll('tr[id^="row-a:"] td.cell')) {
+      if (!td.querySelector('.bar-handle.end')) continue;
+      const n1 = td.nextElementSibling, n2 = n1?.nextElementSibling;
+      if (n1?.dataset.value === '0' && n2?.dataset.value === '0') return { row: td.closest('tr').id, pos: td.dataset.pos, value: Number(td.dataset.value) };
+    }
+    return null;
+  });
+  assert(target, 'found a bar to drag');
+  const [tr, tc] = target.pos.split(':').map(Number);
+  const cellAt = (c) => page.locator(`[data-pos="${tr}:${c}"]`);
+  const roleId = target.row.slice('row-a:'.length);
+  const weeksOf = async () => Object.keys((await planNow()).assignments.find((x) => x.id === roleId).weekly).length;
+  const before2 = await weeksOf();
+  const handle = cellAt(tc).locator('.bar-handle.end');
+  await cellAt(tc).hover();
+  const hb = await handle.boundingBox();
+  await page.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2);
+  await page.mouse.down();
+  const tb = await cellAt(tc + 2).boundingBox();
+  await page.mouse.move(tb.x + tb.width / 2, tb.y + tb.height / 2, { steps: 5 });
+  assert(await page.locator('td.drag-add').count() === 2, 'drag previews the two added weeks');
+  await page.mouse.up();
+  assert((await weeksOf()) === before2 + 2 && (await val(cellAt(tc + 2))) === target.value, 'dragging the end handle extends the bar with its %');
+  await page.locator('.grid-scroll').focus();
+  await page.keyboard.press('Control+z');
+  assert((await weeksOf()) === before2, 'one undo reverts the drag');
+  // Alt+drag moves the whole bar one week later.
+  const ab = await cellAt(tc).boundingBox();
+  await page.keyboard.down('Alt');
+  await page.mouse.move(ab.x + ab.width / 2, ab.y + ab.height / 2);
+  await page.mouse.down();
+  const nb = await cellAt(tc + 1).boundingBox();
+  await page.mouse.move(nb.x + nb.width / 2, nb.y + nb.height / 2, { steps: 5 });
+  await page.mouse.up();
+  await page.keyboard.up('Alt');
+  assert((await val(cellAt(tc + 1))) === target.value && (await weeksOf()) === before2, 'Alt+drag moves the bar, keeping its length');
+  await page.locator('.grid-scroll').focus();
+  await page.keyboard.press('Control+z');
+  assert((await val(cellAt(tc + 1))) === 0, 'undo moves it back');
+  await shot(page, '35-drag');
+
+  // Inspector: I opens details for the focused week.
+  await cellAt(tc).click();
+  await page.keyboard.press('i');
+  const insp = page.locator('aside[aria-label=Details]');
+  assert(await insp.count() === 1 && (await insp.locator('.inspector-facts').innerText()).includes('This bar'), 'I opens the inspector on the focused bar');
+  assert(await page.locator('.conflicts').count() === 0, 'inspector replaces the issues panel');
+  await shot(page, '36-inspector');
+  await page.keyboard.press('i');
+  assert(await insp.count() === 0, 'I closes it again');
+
+  // Month rollups: Avg / Peak, and a month header drills down to weeks.
+  await page.getByRole('button', { name: 'Month', exact: true }).click();
+  const peakBtn = page.getByLabel('Rollup').getByRole('button', { name: 'Peak' });
+  assert(await peakBtn.count() === 1, 'Avg / Peak shown at Month zoom');
+  const monthVals = () => page.locator('tr[id^="row-a:"] td.cell.filled').evaluateAll((tds) => tds.map((td) => Number(td.dataset.value)));
+  const avgVals = await monthVals();
+  await peakBtn.click();
+  const peakVals = await monthVals();
+  assert(peakVals.every((v, i) => v >= avgVals[i]) && peakVals.some((v, i) => v > avgVals[i]), 'Peak shows each month\'s busiest week');
+  await page.getByLabel('Rollup').getByRole('button', { name: 'Avg' }).click();
+  await page.locator('.col-drill').nth(2).click();
+  assert(await page.locator('nav[aria-label=Zoom] button[aria-pressed=true]', { hasText: 'Week' }).count() === 1, 'clicking a month header drills down to its weeks');
+
+  // Compact density.
+  const rowH = () => page.locator('tr.role-row').first().evaluate((el) => el.getBoundingClientRect().height);
+  const comfy = await rowH();
+  await page.getByRole('button', { name: 'Manage', exact: true }).click();
+  await page.getByRole('button', { name: 'Settings & data' }).click();
+  await page.getByRole('navigation', { name: 'Density' }).getByRole('button', { name: 'Compact' }).click();
+  await page.getByRole('button', { name: 'Workstreams', exact: true }).first().click();
+  const compact = await rowH();
+  assert(compact < comfy, `compact rows are shorter (${comfy} → ${compact})`);
+  await shot(page, '37-compact');
+  await page.getByRole('button', { name: 'Manage', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Density' }).getByRole('button', { name: 'Comfortable' }).click();
 
   // ---- Theme: Auto follows the system; Light / Dark override it and survive a reload
   const bg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);

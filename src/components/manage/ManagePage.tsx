@@ -499,6 +499,8 @@ const THEME_OPTIONS: { id: Theme; label: string }[] = [
 /** Light, dark, or the system's choice; saved in this browser. */
 function AppearanceSetting() {
   const theme = useTheme();
+  const density = useUIStore((s) => s.density);
+  const setDensity = useUIStore((s) => s.setDensity);
   return (
     <fieldset className="shared-setting">
       <legend>Appearance</legend>
@@ -510,6 +512,14 @@ function AppearanceSetting() {
         ))}
       </nav>
       <p className="muted small">Auto follows your system’s light or dark setting. Saved in this browser.</p>
+      <nav className="segmented" aria-label="Density">
+        {(['comfortable', 'compact'] as const).map((d) => (
+          <button key={d} type="button" aria-pressed={density === d} onClick={() => setDensity(d)}>
+            {d === 'comfortable' ? 'Comfortable' : 'Compact'}
+          </button>
+        ))}
+      </nav>
+      <p className="muted small">Compact rows fit more workstreams and people on screen.</p>
     </fieldset>
   );
 }
@@ -582,7 +592,7 @@ function SettingsPanel() {
       {shared && <PastWeeksLock />}
       <fieldset className="plain-fieldset" disabled={!can.admin}>
       <label>
-        Yellow above (%)
+        Over capacity above (%)
         <input
           type="number"
           min={1}
@@ -594,12 +604,12 @@ function SettingsPanel() {
           }}
         />
         <span className="muted small">
-          Committed weekly load above this is flagged yellow (stretched). Pipeline delivery that would push someone over
-          it is flagged amber (at risk).
+          Committed weekly load above this is a conflict (red outline). Pipeline delivery that would push someone over
+          it is flagged at risk (dashed red outline).
         </span>
       </label>
       <label>
-        Red above (%)
+        Critical above (%)
         <input
           type="number"
           min={1}
@@ -610,7 +620,7 @@ function SettingsPanel() {
             if (v > 0) s.setThresholds({ criticalThreshold: v });
           }}
         />
-        <span className="muted small">Committed weekly load above this is flagged red (overallocated).</span>
+        <span className="muted small">Committed weekly load above this is a critical conflict (overallocated).</span>
       </label>
       <fieldset className="targets">
         <legend>Utilization targets by level (%)</legend>

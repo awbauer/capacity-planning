@@ -14,8 +14,22 @@ export type DetailsTarget = { kind: 'project'; id: string } | { kind: 'resource'
 /** `users` only exists in shared mode. */
 export type ManageTab = 'resources' | 'projects' | 'tags' | 'sellers' | 'plans' | 'users' | 'settings';
 
-/** How allocation cells render: Harvey-ball circles or plain numbers. */
-export type CellStyle = 'pie' | 'number';
+/**
+ * How allocations render: Harvey-ball circles in every week (the default),
+ * bars labelled in FTE where they change, or bars with every week's %.
+ */
+export type CellStyle = 'bars' | 'pie' | 'number';
+
+/** Month/Quarter columns show each period's average or its busiest week. */
+export type Rollup = 'avg' | 'peak';
+
+export type Density = 'comfortable' | 'compact';
+
+/** The cell the inspector shows: a role and one of its weeks. */
+export interface FocusedCell {
+  roleId: string;
+  week: WeekKey;
+}
 
 export interface Filters {
   text: string;
@@ -68,6 +82,14 @@ interface UIState {
   showHelp: boolean;
   details: DetailsTarget | null;
   cellStyle: CellStyle;
+  /** Capacity panel: the person whose rows are highlighted (others dimmed). Not persisted. */
+  highlightResource: string | null;
+  rollup: Rollup;
+  density: Density;
+  /** Grid views: the inspector side panel for the focused cell. */
+  showInspector: boolean;
+  /** The grid's focused cell (not persisted), for the inspector. */
+  focusedCell: FocusedCell | null;
   /** Row to scroll to and highlight once it renders. */
   focusRow: RowKey | null;
   /** Last export per plan id (drives the "unsaved changes" hint). */
@@ -88,6 +110,11 @@ interface UIState {
   setShowHelp: (show: boolean) => void;
   showDetails: (target: DetailsTarget | null) => void;
   setCellStyle: (style: CellStyle) => void;
+  setHighlightResource: (id: string | null) => void;
+  setRollup: (rollup: Rollup) => void;
+  setDensity: (density: Density) => void;
+  toggleInspector: (show?: boolean) => void;
+  setFocusedCell: (cell: FocusedCell | null) => void;
   /** Opens a view on a row, expanding it and any `parents` (its group rows). */
   jumpTo: (view: View, row: RowKey, week?: WeekKey, parents?: RowKey[]) => void;
   clearFocusRow: () => void;
@@ -112,6 +139,11 @@ export const useUIStore = create<UIState>()(
       showHelp: false,
       details: null,
       cellStyle: 'pie',
+      highlightResource: null,
+      rollup: 'avg',
+      density: 'comfortable',
+      showInspector: false,
+      focusedCell: null,
       focusRow: null,
       exports: {},
 
@@ -126,13 +158,31 @@ export const useUIStore = create<UIState>()(
         set((s) => ({
           expanded: { ...s.expanded, ...Object.fromEntries(keys.map((k) => [k, expanded])) },
         })),
-      toggleConflicts: () => set((s) => ({ showConflicts: !s.showConflicts })),
-      toggleUtilization: () => set((s) => ({ showUtilization: !s.showUtilization })),
+      // One side panel at a time (issues, capacity, inspector), so the timeline keeps its width.
+      toggleConflicts: () =>
+        set((s) =>
+          s.showConflicts ? { showConflicts: false } : { showConflicts: true, showUtilization: false, showInspector: false, highlightResource: null },
+        ),
+      toggleUtilization: () =>
+        set((s) =>
+          s.showUtilization
+            ? { showUtilization: false, highlightResource: null }
+            : { showUtilization: true, showConflicts: false, showInspector: false },
+        ),
+      toggleInspector: (show) =>
+        set((s) => {
+          const on = show ?? !s.showInspector;
+          return on ? { showInspector: true, showConflicts: false, showUtilization: false, highlightResource: null } : { showInspector: false };
+        }),
+      setRollup: (rollup) => set({ rollup }),
+      setDensity: (density) => set({ density }),
+      setFocusedCell: (focusedCell) => set({ focusedCell }),
       setGroupByClient: (groupByClient) => set({ groupByClient }),
       resetFilters: () => set({ filters: NO_FILTERS }),
       setShowHelp: (showHelp) => set({ showHelp }),
       showDetails: (details) => set({ details }),
       setCellStyle: (cellStyle) => set({ cellStyle }),
+      setHighlightResource: (highlightResource) => set({ highlightResource }),
       jumpTo: (view, row, week, parents = []) =>
         set((s) => ({
           view,
@@ -158,6 +208,8 @@ export const useUIStore = create<UIState>()(
         showUtilization: s.showUtilization,
         groupByClient: s.groupByClient,
         cellStyle: s.cellStyle,
+        rollup: s.rollup,
+        density: s.density,
         exports: s.exports,
       }),
       migrate: (persisted) => {
@@ -176,6 +228,7 @@ export const useUIStore = create<UIState>()(
         return {
           ...current,
           ...p,
+          cellStyle: p.cellStyle === 'number' || p.cellStyle === 'bars' ? p.cellStyle : 'pie',
           view: (p.view === 'activity' || p.view === 'mentions') && !isShared() ? 'projects' : (p.view ?? current.view),
           manageTab: p.manageTab === 'users' && !isShared() ? 'settings' : (p.manageTab ?? current.manageTab),
         };

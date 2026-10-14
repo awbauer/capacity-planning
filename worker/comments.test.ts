@@ -182,6 +182,24 @@ describe('WorkspaceEngine mentions', () => {
     planId = ws.createPlan('alice@x.com', 'Plan A').id;
   });
 
+  it('keeps who resolved a thread, when, and who wrote its last comment', () => {
+    ws.indexThreads(
+      planId,
+      [row('t1', { resolved: true, resolvedBy: 'carol@x.com', resolvedAt: 4242, lastActor: 'carol@x.com', lastCommentBy: 'alice@x.com' })],
+      [],
+      [],
+      false,
+    );
+    expect(ws.mentions('bob@x.com', {}).entries[0]).toEqual(
+      expect.objectContaining({ resolved: true, resolvedBy: 'carol@x.com', resolvedAt: 4242, lastActor: 'carol@x.com', lastCommentBy: 'alice@x.com' }),
+    );
+    // Reopening clears it.
+    ws.indexThreads(planId, [row('t1', { lastCommentBy: 'alice@x.com' })], [], [], false);
+    const reopened = ws.mentions('bob@x.com', {}).entries[0];
+    expect(reopened.resolved).toBe(false);
+    expect(reopened.resolvedBy).toBeUndefined();
+  });
+
   it('lists threads that mention someone, by status, with unread until read', () => {
     ws.indexThreads(planId, [row('t1'), row('t2', { resolved: true }), row('t3', { mentions: ['carol@x.com'] })], [], [], false);
     expect(ws.mentions('bob@x.com', { status: 'all' }).entries.map((e) => e.threadId)).toEqual(['t2', 't1']);

@@ -16,6 +16,9 @@ interface MentionEntry {
   resolved: boolean;
   lastTs: number;
   lastActor: string;
+  lastCommentBy?: string;
+  resolvedBy?: string;
+  resolvedAt?: number;
   lastExcerpt: string;
   commentCount: number;
   unread: boolean;
@@ -129,7 +132,12 @@ export function MentionsView() {
                   <div className="muted small">{e.planName}</div>
                 </td>
                 <td className="small">
-                  <strong>{nameOf(e.lastActor)}:</strong> {excerpt(e.lastExcerpt, 140, nameOf)}
+                  <strong>{nameOf(e.lastCommentBy ?? e.lastActor)}:</strong> {excerpt(e.lastExcerpt, 140, nameOf)}
+                  {e.resolved && e.resolvedAt !== undefined && (
+                    <div className="resolved-by">
+                      ✓ Resolved by <strong>{e.resolvedBy ? nameOf(e.resolvedBy) : 'someone'}</strong> · {when(e.resolvedAt)}
+                    </div>
+                  )}
                   <div className="muted small">
                     {e.commentCount} comment{e.commentCount === 1 ? '' : 's'}
                   </div>

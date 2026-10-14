@@ -91,7 +91,8 @@ async function until(fn, msg, timeout = 5000) {
   for (const [p, n] of [[bob, 'bob'], [carol, 'carol']]) {
     await p.waitForSelector('.grid');
     assert(await p.locator('.app.view-only').count() === 1, `${n} starts read-only (viewer)`);
-    assert(await p.getByRole('button', { name: '+ New workstream' }).count() === 0, `${n} sees no add buttons`);
+    assert(await p.getByRole('button', { name: '+ Workstream', exact: true }).count() === 0, `${n} sees no add buttons`);
+    assert(await p.locator('.bar-handle').count() === 0, `${n} gets no drag handles on bars`);
   }
   const before = await val(cell(carol, 'sample-a1', 3));
   await cell(carol, 'sample-a1', 3).dblclick();
@@ -216,10 +217,15 @@ async function until(fn, msg, timeout = 5000) {
   await until(() => alice.locator('.comments-panel .comment').count().then((n) => n === 2), 'Alice sees Bob’s reply live');
   await bob.getByRole('button', { name: 'Resolve', exact: true }).click();
   await until(() => alice.locator('.comments-panel .thread.resolved').count().then((n) => n === 1), 'Alice sees the thread resolved');
+  const resolvedLine = await alice.locator('.comments-panel .thread.resolved .resolved-by').innerText();
+  assert(/^✓ Resolved by Bob\b.* · /.test(resolvedLine), `resolved threads say who resolved them and when: ${resolvedLine}`);
   await until(() => cell(alice, 'sample-a1', 2).locator('.comment-mark').count().then((n) => n === 0), 'resolved threads leave no cell marker');
   await mentionsTab(bob).click();
   await bob.getByRole('button', { name: 'Resolved', exact: true }).click();
   await until(() => bob.locator('.mentions-table tbody tr').count().then((n) => n === 1), 'the thread moves to Bob’s Resolved tab');
+  const inboxRow = bob.locator('.mentions-table tbody tr').first();
+  assert((await inboxRow.locator('.resolved-by').innerText()).startsWith('✓ Resolved by Bob'), 'the inbox says who resolved it');
+  assert((await inboxRow.innerText()).includes('Bob: Confirmed with the client.'), 'the last comment is credited to its author, not the resolver');
 
   // A viewer comments on a row; authors edit and delete their own.
   await carol.getByRole('button', { name: 'Workstreams', exact: true }).first().click();

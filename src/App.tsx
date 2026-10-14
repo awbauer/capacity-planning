@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
+import { CapacityPanel } from './components/CapacityPanel';
 import { ConflictsPanel } from './components/ConflictsPanel';
 import { DemandView } from './components/DemandView';
 import { DetailsModal } from './components/DetailsModal';
 import { HelpDialog } from './components/HelpDialog';
+import { InspectorPanel } from './components/InspectorPanel';
 import { ActivityView } from './collab/ActivityView';
 import { CommentsPanel } from './collab/CommentsPanel';
 import { MentionsView } from './collab/MentionsView';
@@ -12,7 +14,6 @@ import { ManagePage } from './components/manage/ManagePage';
 import { ProjectView } from './components/ProjectView';
 import { ResourceView } from './components/ResourceView';
 import { Toolbar } from './components/Toolbar';
-import { UtilizationPanel } from './components/UtilizationPanel';
 import { buckets as makeBuckets } from './domain/weeks';
 import { useCollabStore } from './store/collabStore';
 import { isShared, setPreferredMode } from './store/mode';
@@ -83,6 +84,8 @@ function PlannerApp() {
   const anchor = useUIStore((s) => s.anchor);
   const showConflicts = useUIStore((s) => s.showConflicts);
   const showUtilization = useUIStore((s) => s.showUtilization);
+  const showInspector = useUIStore((s) => s.showInspector);
+  const density = useUIStore((s) => s.density);
   const showHelp = useUIStore((s) => s.showHelp);
   const setShowHelp = useUIStore((s) => s.setShowHelp);
   const buckets = useMemo(() => makeBuckets(zoom, anchor), [zoom, anchor]);
@@ -114,7 +117,7 @@ function PlannerApp() {
   }, []);
 
   return (
-    <div className={can.edit ? 'app' : 'app view-only'}>
+    <div className={['app', can.edit ? '' : 'view-only', density === 'compact' ? 'density-compact' : ''].filter(Boolean).join(' ')}>
       <Toolbar buckets={buckets} />
       {view === 'manage' ? (
         <main className="main main-scroll">
@@ -138,25 +141,38 @@ function PlannerApp() {
             <div className="grid-area">
               {view === 'projects' ? <ProjectView buckets={buckets} /> : <ResourceView buckets={buckets} />}
             </div>
-            {view === 'projects' && showUtilization && <UtilizationPanel />}
+            {view === 'projects' && showUtilization && <CapacityPanel buckets={buckets} />}
+            {showInspector && <InspectorPanel />}
             {shared && <CommentsPanel />}
             {showConflicts && !(shared && commentsOpen) && <ConflictsPanel />}
           </main>
           <footer className="legend">
+            <span className="legend-keys" aria-label="Key">
+              <span className="legend-title">Key</span>
+              <span className="legend-item">
+                <i className="swatch swatch-confirmed" /> Confirmed
+              </span>
+              <span className="legend-item" title="Delivery on a pipeline workstream: counts only if it's won">
+                <i className="swatch swatch-tentative" /> Tentative
+              </span>
+              <span className="legend-item">
+                <i className="swatch swatch-open" /> Open role
+              </span>
+              <span className="legend-item" title="Committed work over capacity in these weeks">
+                <i className="swatch swatch-conflict" /> Conflict
+              </span>
+              <span className="legend-item" title="Over capacity only if pipeline work is won">
+                <i className="swatch swatch-potential" /> At risk
+              </span>
+              <span className="legend-item">
+                <i className="swatch swatch-today" /> This week
+              </span>
+            </span>
             <span>
-              Double-click a cell to cycle 0 → 25 → 50 → 100%.{' '}
+              Double-click a week to cycle 0 → 25 → 50 → 100%. Drag a bar’s end to resize it, Alt+drag to move it. I shows details.{' '}
               <button type="button" className="link-inline" onClick={() => setShowHelp(true)}>
                 All shortcuts (?)
               </button>
-            </span>
-            <span className="legend-keys">
-              <span className="swatch swatch-presales" /> presales
-              <span className="swatch swatch-edge" /> workstream start / end
-              <span className="swatch swatch-over" /> overallocated (150%+, incl. pipeline)
-              <span className="swatch swatch-stretch" /> stretched (101–149%) or at risk (pipeline)
-              <span className="swatch swatch-tentative" /> tentative (pipeline delivery)
-              <span className="swatch swatch-outside" /> outside workstream dates
-              <span className="mixed">~</span> varies by week
             </span>
           </footer>
         </>

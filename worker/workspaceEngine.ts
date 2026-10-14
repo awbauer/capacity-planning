@@ -37,6 +37,12 @@ const MIGRATIONS = [
   CREATE INDEX mail_outbox_due ON mail_outbox (next_at);
   ALTER TABLE users ADD COLUMN mention_email INTEGER NOT NULL DEFAULT 1;
   `,
+  // Who resolved a thread and when, and who wrote its last comment (a resolve is the last activity, not the last comment).
+  `
+  ALTER TABLE threads ADD COLUMN resolved_by TEXT;
+  ALTER TABLE threads ADD COLUMN resolved_at INTEGER;
+  ALTER TABLE threads ADD COLUMN last_comment_by TEXT;
+  `,
 ];
 
 /** Mentions wait this long before being emailed, so a burst becomes one email (and reading it first cancels it). */
@@ -110,8 +116,12 @@ export interface MentionEntry {
   lastTs: number;
   lastActor: string;
   lastExcerpt: string;
+  /** Who wrote the last comment; missing for threads indexed before it was kept. */
+  lastCommentBy?: string;
   commentCount: number;
   unread: boolean;
+  resolvedBy?: string;
+  resolvedAt?: number;
 }
 
 /** One email to send: every mention of one person waiting to go. */
@@ -446,10 +456,12 @@ export class WorkspaceEngine {
     this.sql.transaction(() => {
       for (const t of threads) {
         this.sql.all(
-          `INSERT INTO threads (plan_id, thread_id, label, resolved, created_by, created_at, last_ts, last_actor, last_excerpt, comment_count)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `INSERT INTO threads (plan_id, thread_id, label, resolved, created_by, created_at, last_ts, last_actor, last_excerpt, comment_count,
+             resolved_by, resolved_at, last_comment_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(plan_id, thread_id) DO UPDATE SET label = excluded.label, resolved = excluded.resolved, last_ts = excluded.last_ts,
-             last_actor = excluded.last_actor, last_excerpt = excluded.last_excerpt, comment_count = excluded.comment_count`,
+             last_actor = excluded.last_actor, last_excerpt = excluded.last_excerpt, comment_count = excluded.comment_count,
+             resolved_by = excluded.resolved_by, resolved_at = excluded.resolved_at, last_comment_by = excluded.last_comment_by`,
           planId,
           t.threadId,
           t.label.slice(0, 300),
@@ -460,6 +472,9 @@ export class WorkspaceEngine {
           t.lastActor,
           t.lastExcerpt.slice(0, 1000),
           t.commentCount,
+          t.resolvedAt !== undefined ? (t.resolvedBy ?? '') : null,
+          t.resolvedAt ?? null,
+          t.lastCommentBy ?? null,
         );
         this.sql.all('DELETE FROM thread_mentions WHERE plan_id = ? AND thread_id = ?', planId, t.threadId);
         for (const email of t.mentions.slice(0, 500)) {
@@ -524,6 +539,10 @@ export class WorkspaceEngine {
       lastActor: String(r.last_actor),
       lastExcerpt: String(r.last_excerpt),
       commentCount: Number(r.comment_count),
+      ...(r.last_comment_by !== null && r.last_comment_by !== undefined ? { lastCommentBy: String(r.last_comment_by) } : {}),
+      ...(Number(r.resolved) === 1 && r.resolved_at !== null && r.resolved_at !== undefined
+        ? { resolvedBy: String(r.resolved_by ?? ''), resolvedAt: Number(r.resolved_at) }
+        : {}),
       unread: String(r.last_actor) !== email && (r.read_ts === null || Number(r.last_ts) > Number(r.read_ts)),
     }));
     const last = entries[entries.length - 1];

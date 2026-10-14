@@ -11,17 +11,16 @@ By default it runs entirely in your browser. Optionally, a **shared workspace** 
 - **Workstream:** anything someone can be allocated to. It has a status (*Pipeline*, *Won* or *Lost*), optional start and end dates, a client, a seller and the capabilities it needs. (The code and saved files call these `projects`.)
 - **Role:** a seat on a workstream, such as "Solution Architect", with a weekly % and the person in it. A role with nobody in it is an **open role**: demand that isn't anyone's load yet.
 - **Presales vs delivery:** weeks before a workstream's start date are presales; weeks from the start date on are delivery. If a deal slips, move the start date. Keep *Move the delivery staffing too* ticked and the delivery weeks shift with it.
-- **What counts toward someone's load:**
-  - Presales always counts.
-  - Delivery counts once the workstream is *Won*.
-  - Delivery on a *Pipeline* workstream is **tentative**. It's drawn dashed and shown as `+N`.
-  - Delivery on a *Lost* workstream isn't counted.
-- **Flags**, on a person's weekly load:
-  - **Red, overallocated:** 150% or more.
-  - **Orange, stretched:** committed work of 101–149%.
-  - **At risk:** committed work fits, but would go over 100% if pipeline work is won.
+- **Bookings**, drawn as bars across the weeks, labelled in FTE where they start or change (50% = 0.5 FTE):
+  - **Confirmed** (solid blue): counts toward load. That's presales, and delivery once the workstream is *Won*.
+  - **Tentative** (hatched purple): delivery on a *Pipeline* workstream. Counts only if it's won.
+  - **Open role** (dashed outline): demand nobody covers yet.
+  - Delivery on a *Lost* workstream isn't counted (grey).
+- **Issues**, from a person's total across all their workstreams in a week (an overlap alone isn't one):
+  - **Conflict** (red outline over the weeks): committed work over 100%. Past 150% it's critical (stronger red).
+  - **At risk** (dashed red outline): committed work fits, but goes over 100% if pipeline work is won.
 
-  Both thresholds are under Manage → Settings & data. There's deliberately no win-probability weighting.
+  Both thresholds are under Manage → Settings & data. There's deliberately no win-probability weighting. Commercial stage (Won / Pipeline, green / amber) is shown on the workstream; red only ever means an issue.
 - **Capabilities** (tags) go on people, roles and workstreams. Mismatches and uncovered capabilities are flagged.
 - **Levels** (D, SM, M, SA, A) each have a utilization target. Defaults are 40, 60, 80, 90 and 90%, and 100% for people without a level.
 
@@ -29,14 +28,14 @@ By default it runs entirely in your browser. Optionally, a **shared workspace** 
 
 | View | What it shows |
 | --- | --- |
-| **Workstreams** | One row per workstream (grouped by client by default), expandable to its roles (*Role › Person* or *Role › Open*). Badges flag conflicts, gaps and open roles. **+ Person** and **+ Role** staff it; click a person to swap them or leave the role open. |
+| **Workstreams** | One row per workstream (grouped by client by default) with its client, stage, demand in FTE and any issues, and a band showing staffing over time. Expand it to see each person and open role as bars. The row's **•••** menu adds people and open roles, edits the workstream and downloads its CSV; click a person to swap them or leave the role open. |
 | **Resources** | One row per person, grouped by level, showing total weekly load as a heat map. Expand a person to edit their allocations. *Underutilized* shows people below their level's target over the next 10 weeks. |
 | **Demand** | Live workstreams split into Pipeline and Won: who's supporting each pursuit, who's staffed, open roles and FTE. |
 | **Details** | Click a workstream or person name: a summary, a checklist of problems, roles, and open roles a person could fill. |
-| **Conflicts** (panel) | Upcoming overallocations, at-risk weeks, skill gaps and open roles. Click one to jump to it. |
-| **Utilization** (panel) | Everyone's delivery and pipeline % over the next 10 weeks against their target, and open demand compared with free capacity, by capability. |
+| **Issues** (panel) | The toolbar's issue counts (conflicts, at risk and open roles in the visible weeks, across the whole plan) open the list: overallocations, at-risk weeks, skill gaps and open roles. Click one to jump to it. |
+| **Capacity** (panel) | Team capacity in FTE-weeks for the next 10 weeks or the weeks on screen: won delivery, pipeline and headroom (or overbooked) as shares of the same supply, then people (click one to highlight their rows), open roles and capabilities. Everyone counts as 1.0 FTE a week. |
 
-Zoom between Week, Month and Quarter. At month and quarter zoom a cell shows the period's average and is flagged if any week in it is over.
+Zoom between Week, Month and Quarter. At month and quarter zoom a cell shows the period's average, or its busiest week with **Peak** (`~` when its weeks differ; hover for both). Click a month or quarter header to drill down to its weeks and is flagged if any week in it is over. *Issues only* hides workstreams or people without an issue in the visible weeks; *Filters* narrows by capability, stage and seller.
 
 ## Editing allocations
 
@@ -44,19 +43,21 @@ Zoom between Week, Month and Quarter. At month and quarter zoom a cell shows the
 | --- | --- |
 | Change one week | Double-click: 0 → 25 → 50 → 100 → 0 |
 | Change a range | Drag (or Shift+click), then Space to step, or type 25 / 50 / 100 and Enter |
+| Lengthen, shorten or move a booking | Week view: drag a bar's start or end handle; Alt+drag the bar to move it. One undo step, locked weeks left alone |
+| See a week's details | Select it and press **I** (or **Details** in the toolbar): the booking, the person's whole load that week, why it's flagged, and the role's actions |
 | Clear | Select, then Delete |
 | Move around | Arrow keys, Tab / Shift+Tab |
 | Staff someone for a date range | **+ Person** on a workstream or **+ Workstream** on a person |
 | Undo / redo | Ctrl/⌘+Z, Ctrl/⌘+Shift+Z |
 
-Press **?** in the app for every shortcut. Totals aren't rounded. The ◑ / % toolbar toggle switches cells between circles and numbers.
+Press **?** in the app for every shortcut. Totals aren't rounded. The toolbar's display toggle switches between **circles** (the default: a Harvey ball in every booked week, filled to its %), **bars** (labelled in FTE where they start or change) and **%** (every week's number).
 
 ## Plans, export and settings
 
 - **Plans:** keep several independent plans (such as scenarios) and switch between them from the dropdown next to the title.
-- **Export / Import:** export saves the open plan as versioned JSON. Importing a file with the same plan name overwrites that plan (you're warned if it's older); a new name adds a plan.
-- **CSV:** **⤓ CSV** on a workstream exports its staffing plan. **CSV** in the toolbar exports everything as one pivot-ready table.
-- **Theme:** Manage → Settings & data → *Appearance*: Auto (follows your system), Light or Dark. Saved in this browser.
+- **Export / Import** (header **⋯** menu): export saves the open plan as versioned JSON. Importing a file with the same plan name overwrites that plan (you're warned if it's older); a new name adds a plan.
+- **CSV:** a workstream's **•••** menu → *Download CSV* exports its staffing plan. **⋯** → *Export staffing (CSV)* exports everything as one pivot-ready table.
+- **Theme:** Manage → Settings & data → *Appearance*: Auto (follows your system), Light or Dark. Saved in this browser, as is *Density* (Comfortable or Compact rows). Colors are design tokens at the top of `src/styles.css`.
 
 **Storage:** without the shared workspace, everything lives in this browser's `localStorage`. It doesn't sync, and clearing site data wipes it, so export regularly. The toolbar shows when you last exported.
 
@@ -75,7 +76,7 @@ Opt-in, per browser: Manage → Settings & data → *Use the shared workspace in
 - **Freeze locks:** right-click to lock cells, a role or a workstream, with a note. Only the lock's owner (or an admin) can change what it covers. Admins can also lock all past weeks.
 - **Comments:**
   - Start one from a cell (right-click → *Comment…*, or **M**) or a row's 💬 button.
-  - Threads can be resolved and reopened.
+  - Threads can be resolved and reopened. A resolved thread says who resolved it and when.
   - The toolbar's *Comments* lists every thread in the plan.
 - **@mentions:**
   - Type `@` to mention someone.

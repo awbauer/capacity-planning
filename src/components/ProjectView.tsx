@@ -1,4 +1,8 @@
 import { RowComments } from '../collab/RowComments';
+import { bucketStats } from '../domain/aggregate';
+import { initials } from '../collab/format';
+import { fte, fteLabel } from '../domain/timeline';
+import { MenuItem, Popover } from './Popover';
 import { useState } from 'react';
 import type { Derived } from '../domain/derive';
 import { assignmentFlagWeeks } from '../domain/conflicts';
@@ -14,7 +18,6 @@ import { AddAssignmentDialog } from './AddAssignmentDialog';
 import { downloadText, today } from './download';
 import { FillRoleDialog } from './FillRoleDialog';
 import { RoleDialog } from './RoleDialog';
-import { TagChips } from './Chips';
 import { TimeGrid, type GridRow } from './grid/TimeGrid';
 import { Toggle } from './Toggle';
 import { ProjectDialog } from './ProjectDialog';
@@ -58,6 +61,13 @@ export function ProjectView({ buckets }: Props) {
   const plan = usePlan();
   const d = useDerived();
   const zoom = useUIStore((s) => s.zoom);
+  const rollup = useUIStore((s) => s.rollup);
+  /** A Month/Quarter column's value: the average of its weeks, or the busiest one. */
+  const roll = (valueOf: (w: string) => number, weeks: string[]) => {
+    const st = bucketStats(valueOf, weeks);
+    return zoom === 'week' ? st.avg : st[rollup];
+  };
+  const rollWord = rollup === 'peak' ? 'peak week' : 'average';
   const filters = useUIStore((s) => s.filters);
   const expanded = useUIStore((s) => s.expanded);
   const setExpanded = useUIStore((s) => s.setExpanded);
@@ -116,6 +126,15 @@ export function ProjectView({ buckets }: Props) {
     const seller = p.sellerId ? d.sellersById.get(p.sellerId) : undefined;
     const totals = d.projectLoad.get(p.id);
 
+    // Demand over the visible weeks (staffed + open, not counting lost delivery), shown as where it starts and ends.
+    const demandAt = (w: string) => (totals?.get(w) ?? 0) + roles.reduce((n, r) => n + (r.weekly[w] ?? 0), 0);
+    const demandWeeks = visibleWeeks.map(demandAt).filter((v) => v > 0);
+    const demandFrom = demandWeeks[0];
+    const demandTo = demandWeeks[demandWeeks.length - 1];
+    const demandText =
+      demandFrom === undefined ? '' : Math.round(demandFrom) === Math.round(demandTo) ? fteLabel(demandFrom) : `${fte(demandFrom)} → ${fteLabel(demandTo)}`;
+    const conflictPeople = overPeople.size + stretchPeople.length;
+
     rows.push({
       key,
       depth: 0,
@@ -136,100 +155,84 @@ export function ProjectView({ buckets }: Props) {
             <div className="row-title">
               <button
                 type="button"
-                className="link"
+                className="link ws-name"
                 onClick={() => showDetails({ kind: 'project', id: p.id })}
-                title="Details: checks, filled and open roles"
+                title={`${p.name}${p.client ? ` · ${p.client}` : ''}${seller ? ` · seller ${seller.name}` : ''}. Open details: checks, filled and open roles`}
               >
                 {p.name}
               </button>
-              {p.client && !groupByClient && <span className="muted"> · {p.client}</span>}
             </div>
             <div className="row-meta">
+              {p.client && !groupByClient && <span className="client">{p.client}</span>}
               <StatusSelect compact disabled={!can.edit} value={p.status} onChange={(status) => updateProject(p.id, { status })} />
-              <span className="seller" title={seller ? `Seller: ${seller.name}` : 'No seller'}>
-                {seller ? seller.name : <em className="muted">No seller</em>}
-              </span>
-            {(overPeople.size > 0 ||
-              stretchPeople.length > 0 ||
-              riskPeople.length > 0 ||
-              uncovered.length > 0 ||
-              roles.length > 0 ||
-              assignments.length === 0) && (
-              <span className="row-badges">
-                {overPeople.size > 0 && (
-                  <span className="badge badge-danger" title={`${overPeople.size} overallocated: people on this workstream with committed work above ${plan.settings.criticalThreshold}% in the visible range`}>
-                    ⚠ {overPeople.size}
-                  </span>
-                )}
-                {stretchPeople.length > 0 && (
-                  <span className="badge badge-stretch" title={`${stretchPeople.length} stretched: people on this workstream with committed work above ${plan.settings.overallocationThreshold}% in the visible range`}>
-                    {stretchPeople.length}
-                  </span>
-                )}
-                {riskPeople.length > 0 && (
-                  <span className="badge badge-risk" title={`${riskPeople.length} at risk: people who would be over capacity if pipeline work is won`}>
-                    {riskPeople.length}
-                  </span>
-                )}
-                {uncovered.length > 0 && (
-                  <span className="badge badge-warn" title={`Uncovered capabilities: ${uncovered.map((t) => d.tagsById.get(t)?.name).join(', ')} (nobody on the workstream has them)`}>
-                    Gap{uncovered.length > 1 ? ` ${uncovered.length}` : ''}
-                  </span>
-                )}
-                {roles.length > 0 && (
-                  <span className="badge badge-open" title={`Open roles: ${roles.map((r) => r.name).join(', ')}`}>
-                    Open {roles.length}
-                  </span>
-                )}
-                {assignments.length === 0 && roles.length === 0 && <span className="badge">Unstaffed</span>}
-              </span>
-            )}
-              <TagChips tagIds={p.tagIds} tagsById={d.tagsById} />
+              {demandText && (
+                <span className="fte" title="Demand in the visible weeks (filled and open roles), where it starts → where it ends">
+                  {demandText}
+                </span>
+              )}
+              {conflictPeople > 0 && (
+                <span
+                  className={overPeople.size ? 'badge badge-danger' : 'badge badge-stretch'}
+                  title={`${conflictPeople} ${conflictPeople === 1 ? 'person' : 'people'} on this workstream over capacity on committed work in the visible weeks`}
+                >
+                  ⚠ {conflictPeople} over
+                </span>
+              )}
+              {riskPeople.length > 0 && (
+                <span className="badge badge-risk" title={`${riskPeople.length} at risk: people who would be over capacity if pipeline work is won`}>
+                  {riskPeople.length} at risk
+                </span>
+              )}
+              {roles.length > 0 && (
+                <span className="badge badge-open" title={`Open roles: ${roles.map((r) => r.name || 'Unnamed role').join(', ')}`}>
+                  {roles.length} open
+                </span>
+              )}
+              {uncovered.length > 0 && (
+                <span className="badge badge-warn" title={`Uncovered capabilities: ${uncovered.map((t) => d.tagsById.get(t)?.name).join(', ')} (nobody on the workstream has them)`}>
+                  Gap{uncovered.length > 1 ? ` ${uncovered.length}` : ''}
+                </span>
+              )}
+              {assignments.length === 0 && roles.length === 0 && <span className="badge">Unstaffed</span>}
             </div>
           </div>
-          <div className="row-actions">
-            <RowComments kind="project" id={p.id} name={p.name} />
-            <button type="button" className="btn btn-small edit-only" onClick={() => setAdding(p.id)}>
-              + Person
-            </button>
-            <button
-              type="button"
-              className="btn btn-small edit-only"
-              title="Add demand you haven't chosen a person for yet"
-              onClick={() => setRoleDialog({ projectId: p.id })}
-            >
-              + Role
-            </button>
-            <button
-              type="button"
-              className="btn btn-small"
-              title="Download this workstream's staffing plan as CSV"
-              aria-label="Download CSV"
+          <RowComments kind="project" id={p.id} name={p.name} />
+          <Popover className="icon-btn row-more" label="•••" ariaLabel={`Actions for ${p.name}`}>
+            {can.edit && <MenuItem onClick={() => setAdding(p.id)}>Add a person…</MenuItem>}
+            {can.edit && (
+              <MenuItem onClick={() => setRoleDialog({ projectId: p.id })} title="Add demand you haven't chosen a person for yet">
+                Add an open role…
+              </MenuItem>
+            )}
+            {can.edit && <MenuItem onClick={() => setEditing(p)}>Edit workstream…</MenuItem>}
+            <MenuItem onClick={() => showDetails({ kind: 'project', id: p.id })}>Details</MenuItem>
+            <MenuItem
               onClick={() => downloadText(`staffing-${slug(p.name)}-${today()}.csv`, workstreamCsv(plan, p.id), 'text/csv')}
+              title="Download this workstream's staffing plan as CSV"
             >
-              ⤓
-            </button>
-          </div>
+              Download CSV
+            </MenuItem>
+          </Popover>
         </div>
       ),
       summary: (b) => {
-        const avg = b.weeks.reduce((s, w) => s + (totals?.get(w) ?? 0), 0) / b.weeks.length;
+        const avg = roll((w) => totals?.get(w) ?? 0, b.weeks);
         const inBucket = (sev: Severity) =>
           assignments.some((a) => flagsByAssignment.get(a.id)![sev].some((w) => b.weeks.includes(w)));
         const worst: Severity | null = inBucket('over') ? 'over' : inBucket('stretch') ? 'stretch' : inBucket('risk') ? 'risk' : null;
         const note =
-          worst === 'over'
-            ? ' · someone is overallocated'
-            : worst === 'stretch'
-              ? ' · someone is stretched'
-              : worst === 'risk'
-                ? ' · someone is at risk if pipeline work is won'
-                : '';
-        const openFte = b.weeks.reduce((n, w) => n + roles.reduce((m, r) => m + (r.weekly[w] ?? 0), 0), 0) / b.weeks.length;
-        const openNote = openFte ? ` · +${(openFte / 100).toFixed(2)} FTE in open roles` : '';
+          worst === 'over' || worst === 'stretch'
+            ? ' · someone is over capacity'
+            : worst === 'risk'
+              ? ' · someone is over capacity if pipeline work is won'
+              : '';
+        const openFte = roll((w) => roles.reduce((m, r) => m + (r.weekly[w] ?? 0), 0), b.weeks);
+        const openNote = openFte ? ` · +${fteLabel(openFte)} in open roles` : '';
         return {
-          text: avg ? (avg / 100).toFixed(1) : '',
-          extra: openFte ? `+${(openFte / 100).toFixed(1)}` : undefined,
+          text: avg ? fteLabel(avg) : '',
+          extra: openFte ? `+${fte(openFte)} open` : undefined,
+          band: avg ? 'staffed' : 'open',
+          short: { text: avg ? fte(avg) : '', extra: openFte ? `+${fte(openFte)}` : undefined },
           className: [
             'fte',
             worst ? `has-${worst}` : '',
@@ -239,7 +242,7 @@ export function ProjectView({ buckets }: Props) {
           ].join(' '),
           title:
             avg || openFte
-              ? `${(avg / 100).toFixed(2)} FTE staffed${b.weeks.length > 1 ? ' (average)' : ''}${openNote}${note}`
+              ? `${fteLabel(avg)} staffed${b.weeks.length > 1 ? ` (${rollWord})` : ''}${openNote}${note}`
               : undefined,
         };
       },
@@ -260,41 +263,63 @@ export function ProjectView({ buckets }: Props) {
               : null;
       const needs = (a.tagIds.length ? a.tagIds : p.tagIds).map((t) => d.tagsById.get(t)?.name).join(', ');
       const roleLabel = a.name || 'Unnamed role';
+      const removeRole = () => {
+        const weeks = Object.keys(a.weekly).length;
+        const who = r ? ` and take ${r.name} off ${p.name}` : '';
+        if (weeks === 0 || window.confirm(`Remove the ${roleLabel} role${who}? This clears ${weeks} week(s) of allocation (undo with Ctrl+Z).`)) {
+          removeAssignment(a.id);
+        }
+      };
       rows.push({
         key: `a:${a.id}`,
         depth: 1,
         assignmentId: a.id,
+        resourceId: r?.id,
+        name: `${r ? r.name : `${roleLabel}, open role`}, ${p.name}`,
         className: r ? 'role-row' : 'role-row open',
         range: { start: p.startWeek, end: p.endWeek },
         label: (
           <div className="row-label">
+            <span className={r ? 'avatar-mini' : 'avatar-mini open'} aria-hidden="true">
+              {r ? initials(r.name) : '◇'}
+            </span>
             <div className="row-main">
               <div className="row-title">
-                <button
-                  type="button"
-                  className={a.name ? 'link role-name' : 'link role-name unnamed'}
-                  title={`Edit role${a.level ? ` · ${a.level}` : ''}${needs ? ` · needs ${needs}` : ''}`}
-                  onClick={() => can.edit && setRoleDialog({ role: a })}
-                >
-                  {roleLabel}
-                </button>
                 {r ? (
                   <>
                     <button
                       type="button"
                       className="link person-name"
-                      title={`${r.name}${r.role ? `, ${r.role}` : ''}. Change who's in this role`}
+                      title={`${r.name}${r.role ? `, ${r.role}` : ''}. ${can.edit ? "Change who's in this role" : 'Details'}`}
                       onClick={() => (can.edit ? setFilling(a) : showDetails({ kind: 'resource', id: r.id }))}
                     >
                       {r.name}
                     </button>
                     {r.level && <span className="level-badge">{r.level}</span>}
+                    {a.name && (
+                      <button
+                        type="button"
+                        className="link role-name"
+                        title={`Role: ${a.name}${a.level ? ` · ${a.level}` : ''}${needs ? ` · needs ${needs}` : ''}${can.edit ? '. Edit role' : ''}`}
+                        onClick={() => can.edit && setRoleDialog({ role: a })}
+                      >
+                        {a.name}
+                      </button>
+                    )}
                     <AssignmentBadges worst={rowWorst} mismatch={d.mismatchedAssignmentIds.has(a.id)} />
                   </>
                 ) : (
                   <>
-                    <span className="badge badge-open">Open</span>
+                    <button
+                      type="button"
+                      className={a.name ? 'link role-name' : 'link role-name unnamed'}
+                      title={`Open role${a.level ? ` · ${a.level}` : ''}${needs ? ` · needs ${needs}` : ''}${can.edit ? '. Choose the person for it' : ''}`}
+                      onClick={() => can.edit && setFilling(a)}
+                    >
+                      {roleLabel}
+                    </button>
                     {a.level && <span className="level-badge">{a.level}</span>}
+                    <span className="badge badge-open">Open</span>
                   </>
                 )}
               </div>
@@ -305,21 +330,16 @@ export function ProjectView({ buckets }: Props) {
               </button>
             )}
             <RowComments kind="role" id={a.id} name={`${roleLabel}${r ? ` (${r.name})` : ''}`} />
-            <button
-              type="button"
-              className="icon-btn edit-only"
-              aria-label={`Remove role ${roleLabel}${r ? ` (${r.name})` : ''} from ${p.name}`}
-              title={r ? 'Remove this role (to keep the role but free the person, click their name)' : 'Remove this open role'}
-              onClick={() => {
-                const weeks = Object.keys(a.weekly).length;
-                const who = r ? ` and take ${r.name} off ${p.name}` : '';
-                if (weeks === 0 || window.confirm(`Remove the ${roleLabel} role${who}? This clears ${weeks} week(s) of allocation (undo with Ctrl+Z).`)) {
-                  removeAssignment(a.id);
-                }
-              }}
-            >
-              ×
-            </button>
+            <Popover className="icon-btn row-more" label="•••" ariaLabel={`Actions for ${roleLabel}${r ? ` (${r.name})` : ''}`}>
+              {can.edit && <MenuItem onClick={() => setFilling(a)}>{r ? 'Change person…' : 'Fill role…'}</MenuItem>}
+              {can.edit && <MenuItem onClick={() => setRoleDialog({ role: a })}>Edit role…</MenuItem>}
+              {r && <MenuItem onClick={() => showDetails({ kind: 'resource', id: r.id })}>{r.name}: details</MenuItem>}
+              {can.edit && (
+                <MenuItem danger onClick={removeRole} title={r ? 'Remove this role (to keep the role but free the person, use Change person…)' : 'Remove this open role'}>
+                  Remove role
+                </MenuItem>
+              )}
+            </Popover>
           </div>
         ),
       });
@@ -370,7 +390,7 @@ export function ProjectView({ buckets }: Props) {
                 · {g.projects.length} {g.projects.length === 1 ? 'workstream' : 'workstreams'}
               </span>
               {issues > 0 && (
-                <span className="badge badge-warn" title={`${issues} of this client's workstreams have a conflict`}>
+                <span className="badge badge-warn" title={`${issues} of this client's workstreams have an issue`}>
                   ⚠ {issues}
                 </span>
               )}
@@ -379,11 +399,13 @@ export function ProjectView({ buckets }: Props) {
         </div>
       ),
       summary: (b) => {
-        const avg = b.weeks.reduce((n, w) => n + fte(w), 0) / b.weeks.length;
+        const avg = roll(fte, b.weeks);
         return {
-          text: avg ? (avg / 100).toFixed(1) : '',
+          text: avg ? fteLabel(avg) : '',
+          band: 'staffed',
+          short: { text: avg ? fteLabel(avg).replace(/ FTE$/, '') : '' },
           className: 'group-sum',
-          title: avg ? `${(avg / 100).toFixed(2)} FTE across this client's workstreams${b.weeks.length > 1 ? ' (average)' : ''}` : undefined,
+          title: avg ? `${fteLabel(avg)} staffed across this client's workstreams${b.weeks.length > 1 ? ` (${rollWord})` : ''}` : undefined,
         };
       },
     });
@@ -401,22 +423,22 @@ export function ProjectView({ buckets }: Props) {
         rows={rows}
         corner={
           <div className="corner-content">
-            <strong>Workstreams</strong> <span className="muted">({projects.length})</span>
+            <div className="corner-title">
+              <strong>Workstreams</strong> <span className="muted">({projects.length})</span>
+            </div>
             <div className="corner-actions">
-              <button type="button" className="btn btn-small btn-primary edit-only" onClick={() => setEditing('new')}>
-                + New workstream
+              <button type="button" className="link-small" onClick={() => setAllExpanded([...groupKeys, ...projectKeys], true)}>
+                Expand all
               </button>
-              <button type="button" className="btn btn-small" onClick={() => setAllExpanded([...groupKeys, ...projectKeys], true)}>
-                Expand
-              </button>
-              <button type="button" className="btn btn-small" onClick={() => setAllExpanded(projectKeys, false)}>
-                Collapse
+              <button type="button" className="link-small" onClick={() => setAllExpanded(projectKeys, false)}>
+                Collapse all
               </button>
               {groupByClient && (
-                <button type="button" className="btn btn-small" onClick={() => setAllExpanded(groupKeys, false)}>
+                <button type="button" className="link-small" onClick={() => setAllExpanded(groupKeys, false)}>
                   Clients only
                 </button>
               )}
+              <span className="spacer" />
               <Toggle small label="By client" checked={groupByClient} onChange={setGroupByClient} title="Group workstreams by client" />
             </div>
           </div>
@@ -430,7 +452,7 @@ export function ProjectView({ buckets }: Props) {
               </button>
             </span>
           ) : filters.conflictsOnly ? (
-            'No workstream has a conflict in this view. 🎉'
+            'No workstream has an issue in the visible weeks. Turn off Issues only to see them all.'
           ) : (
             'No workstreams match the filters.'
           )

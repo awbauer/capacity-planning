@@ -8,13 +8,28 @@ import {
   type MouseEvent,
   type ReactNode,
 } from 'react';
-import { bucketStats } from '../../domain/aggregate';
+import { bucketStats, type BucketStats } from '../../domain/aggregate';
 import { colorFor } from '../../domain/colors';
 import { assignmentFlagWeeks } from '../../domain/conflicts';
-import { totalIsCritical, weekClass, weekKind, type Severity } from '../../domain/load';
+import { weekClass, weekKind, type Severity } from '../../domain/load';
+import {
+  BOOKING_LABELS,
+  bookingState,
+  edges,
+  fteLabel,
+  moveEdits,
+  resizeEdits,
+  segmentEdges,
+  valueRun,
+  type BookingState,
+  type DragEdits,
+  type SegmentEdge,
+  type WeekRun,
+} from '../../domain/timeline';
 import { isFilled, type Assignment, type WeekKey, type Zoom } from '../../domain/types';
 import { nextStep } from '../../domain/steps';
-import { currentWeek, formatWeek, type Bucket } from '../../domain/weeks';
+import { format } from 'date-fns';
+import { currentWeek, formatWeek, formatWeekRange, weekMonth, type Bucket } from '../../domain/weeks';
 import { cellLockedFor, lockCoversCell, type Lock } from '../../domain/locks';
 import { useCollabStore } from '../../store/collabStore';
 import { isShared } from '../../store/mode';
@@ -34,6 +49,14 @@ export interface SummaryCell {
   extra?: string;
   className?: string;
   title?: string;
+  /**
+   * Drawn as a continuous band instead of a number per column: the text is
+   * shown only where it changes. Rows without it (e.g. a person's weekly
+   * load) show their value in every column.
+   */
+  band?: 'staffed' | 'open';
+  /** Shorter text and extra for the circles and % displays, which repeat the value in every column. */
+  short?: { text: string; extra?: string };
 }
 
 export interface GridRow {
@@ -47,6 +70,10 @@ export interface GridRow {
   summary?: (bucket: Bucket) => SummaryCell;
   /** Project date range: drawn as start/end lines; cells outside it are shaded (see rangeClasses). */
   range?: { start?: WeekKey; end?: WeekKey };
+  /** The person on an allocation row: dimmed when someone else is highlighted. */
+  resourceId?: string;
+  /** Spoken name of an allocation row's bars, e.g. "Andrew Kim, MCN Agent". */
+  name?: string;
 }
 
 interface Props {
@@ -67,6 +94,35 @@ interface CellKey {
   row: string;
   bucket: string;
 }
+
+/**
+ * 'critical': committed work past the red threshold. 'conflict': committed
+ * work over capacity. 'potential': over only if pipeline work is won.
+ */
+type IssueKind = 'critical' | 'conflict' | 'potential';
+
+interface RowTimeline {
+  stats: BucketStats[];
+  /** What each column shows: its average, or at Month/Quarter zoom its peak if chosen. */
+  shown: number[];
+  states: (BookingState | null)[];
+  bars: (SegmentEdge | null)[];
+  flags: Record<Severity, WeekKey[]>[];
+  issues: (IssueKind | null)[];
+  issueEdges: (SegmentEdge | null)[];
+}
+
+/** A bar being dragged: one edge (resize) or the whole bar (move), on one row. */
+interface BarDrag {
+  kind: 'start' | 'end' | 'move';
+  r: number;
+  /** Column the drag started in, and the one under the pointer now. */
+  c0: number;
+  c: number;
+  run: WeekRun;
+}
+
+const edgeClasses = (e: SegmentEdge) => `${e.start ? ' seg-start' : ''}${e.end ? ' seg-end' : ''}`;
 
 const relativeMins = (ts: number) => {
   const m = Math.round((Date.now() - ts) / 60000);
@@ -149,6 +205,25 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
   );
 
   const bucketIndex = useMemo(() => new Map(buckets.map((b, i) => [b.key, i])), [buckets]);
+  /** Week columns that start a month: drawn with a stronger line. */
+  const monthStarts = useMemo(() => {
+    const out = new Set<number>();
+    if (zoom !== 'week') return out;
+    buckets.forEach((b, i) => {
+      const m = weekMonth(b.weeks[0]);
+      const prev = i > 0 ? weekMonth(buckets[i - 1].weeks[0]) : null;
+      if (i > 0 && prev && prev.month !== m.month) out.add(i);
+    });
+    return out;
+  }, [buckets, zoom]);
+  const highlight = useUIStore((s) => s.highlightResource);
+  const rollup = useUIStore((s) => s.rollup);
+  const setFocusedCell = useUIStore((s) => s.setFocusedCell);
+  const [barDrag, setBarDrag] = useState<BarDrag | null>(null);
+  const barDragRef = useRef<BarDrag | null>(null);
+  const commitDragRef = useRef<(d: BarDrag) => void>(() => {});
+  /** Bars can be dragged where a column is one week. */
+  const canDrag = zoom === 'week' && can.edit && cellStyle === 'bars';
   const [anchorKey, setAnchorKey] = useState<CellKey | null>(null);
   const [focusKey, setFocusKey] = useState<CellKey | null>(null);
   const [draft, setDraft] = useState<string | null>(null);
@@ -171,10 +246,24 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
   if (draft !== null && !focus) setDraft(null);
 
   useEffect(() => {
-    const up = () => (dragging.current = false);
+    const up = () => {
+      dragging.current = false;
+      const drag = barDragRef.current;
+      if (!drag) return;
+      barDragRef.current = null;
+      setBarDrag(null);
+      commitDragRef.current(drag);
+    };
     window.addEventListener('mouseup', up);
     return () => window.removeEventListener('mouseup', up);
   }, []);
+
+  // The inspector follows the focused cell.
+  const focusedRole = focusKey ? editRows[editIndex.get(focusKey.row) ?? -1]?.assignmentId : undefined;
+  const focusedWeek = focusKey ? buckets[bucketIndex.get(focusKey.bucket) ?? -1]?.weeks[0] : undefined;
+  useEffect(() => {
+    setFocusedCell(focusedRole && focusedWeek ? { roleId: focusedRole, week: focusedWeek } : null);
+  }, [focusedRole, focusedWeek, setFocusedCell]);
 
   useEffect(() => {
     if (!focus) return;
@@ -224,14 +313,12 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     if (shared) toast(me && me.role === 'viewer' ? 'You have view-only access.' : 'You’re offline; editing is paused.');
   };
 
-  const applyToCells = (area: { r0: number; r1: number; c0: number; c1: number }, percent: number) => {
+  /** Applies edits as one change (one undo step), leaving out locked weeks with a note. */
+  const applyEdits = (wanted: { a: Assignment; weeks: WeekKey[]; percent: number }[]) => {
     if (!can.edit) return readOnlyNotice();
-    const weeks = buckets.slice(area.c0, area.c1 + 1).flatMap((b) => b.weeks);
     const edits: AllocationEdit[] = [];
     let blocked: Lock | undefined;
-    for (let r = area.r0; r <= area.r1; r++) {
-      const a = assignmentsById.get(editRows[r].assignmentId!);
-      if (!a) continue;
+    for (const { a, weeks, percent } of wanted) {
       // Locked weeks are left out (the server would refuse the whole edit).
       const open = weeks.filter((w) => {
         const l = lockedFor(a, w);
@@ -250,6 +337,57 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     }
     setAllocations(edits);
   };
+
+  const applyToCells = (area: { r0: number; r1: number; c0: number; c1: number }, percent: number) => {
+    const weeks = buckets.slice(area.c0, area.c1 + 1).flatMap((b) => b.weeks);
+    applyEdits(
+      editRows
+        .slice(area.r0, area.r1 + 1)
+        .map((row) => assignmentsById.get(row.assignmentId!))
+        .filter((a): a is Assignment => !!a)
+        .map((a) => ({ a, weeks, percent })),
+    );
+  };
+
+  /** What a bar drag would change, for the preview and the commit. */
+  const dragEdits = (drag: BarDrag): DragEdits =>
+    drag.kind === 'move'
+      ? moveEdits(drag.run, drag.c - drag.c0)
+      : resizeEdits(drag.run, drag.kind, buckets[drag.c].weeks[0]);
+
+  const commitDrag = (drag: BarDrag) => {
+    const a = assignmentsById.get(editRows[drag.r]?.assignmentId ?? '');
+    if (!a) return;
+    const e = dragEdits(drag);
+    applyEdits([
+      { a, weeks: e.set, percent: e.value },
+      { a, weeks: e.clear, percent: 0 },
+    ]);
+  };
+  // The window's mouseup handler commits with this render's plan and locks.
+  useEffect(() => {
+    commitDragRef.current = commitDrag;
+  });
+
+  /** Starts dragging a bar's edge, or (Alt+drag) the whole bar. */
+  const startBarDrag = (kind: BarDrag['kind'], r: number, c: number, e: MouseEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (!can.edit) return readOnlyNotice();
+    const a = assignmentsById.get(editRows[r].assignmentId!);
+    if (!a) return;
+    const project = d.projectsById.get(a.projectId);
+    const week = buckets[c].weeks[0];
+    const state = (w: WeekKey) => bookingState(weekClass(project, w), isFilled(a));
+    const run = valueRun(a.weekly, week, (w) => state(w) === state(week));
+    if (!run) return;
+    const drag = { kind, r, c0: c, c, run };
+    barDragRef.current = drag;
+    setBarDrag(drag);
+  };
+
+  const dragPreview = barDrag ? { r: barDrag.r, ...dragEdits(barDrag) } : null;
 
   const applyToSelection = (percent: number) => {
     if (rect) applyToCells(rect, percent);
@@ -316,6 +454,9 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     } else if (e.key === 'Escape') {
       setAnchor(null);
       setFocus(null);
+    } else if ((e.key === 'i' || e.key === 'I') && !mod) {
+      e.preventDefault();
+      useUIStore.getState().toggleInspector();
     } else if (shared && (e.key === 'h' || e.key === 'H') && !mod) {
       e.preventDefault();
       openMenuAt(focus, null, 'history');
@@ -342,6 +483,10 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
 
   const onCellMouseDown = (pos: Pos, e: MouseEvent) => {
     if (e.button !== 0) return;
+    if (e.altKey && zoom === 'week') {
+      const a = assignmentsById.get(editRows[pos.r].assignmentId!);
+      if (a?.weekly[buckets[pos.c].weeks[0]]) return startBarDrag('move', pos.r, pos.c, e);
+    }
     dragging.current = true;
     setFocus(pos);
     if (!e.shiftKey || !anchor) setAnchor(pos);
@@ -371,48 +516,69 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     return `${head} in the week of ${formatWeek(week)}: ${parts.join(', ')}`;
   };
 
-  const renderEditCell = (row: GridRow, r: number, b: Bucket, c: number) => {
+  /** A row's columns as bars and issue bands, computed once per row per render. */
+  const rowTimeline = (a: Assignment): RowTimeline => {
+    const project = d.projectsById.get(a.projectId);
+    const stats = buckets.map((b) => bucketStats((w) => a.weekly[w] ?? 0, b.weeks));
+    const states = buckets.map((b, i): BookingState | null => {
+      if (!(stats[i].avg > 0)) return null;
+      // A month/quarter column can straddle the start date; it's drawn as its first booked week.
+      const repWeek = b.weeks.find((w) => a.weekly[w]) ?? b.weeks[0];
+      return bookingState(weekClass(project, repWeek), isFilled(a));
+    });
+    // An open role is nobody's load, so it's never flagged.
+    const flags = buckets.map((b) =>
+      isFilled(a) ? assignmentFlagWeeks(a, b.weeks, d.loads, plan.settings) : { over: [], stretch: [], risk: [] },
+    );
+    const issues = flags.map((f): IssueKind | null =>
+      f.over.length ? 'critical' : f.stretch.length ? 'conflict' : f.risk.length ? 'potential' : null,
+    );
+    const shown = stats.map((st) => (zoom === 'week' ? st.avg : st[rollup]));
+    return {
+      stats,
+      shown,
+      states,
+      bars: segmentEdges(shown.map((value, i) => ({ value, state: states[i] }))),
+      flags,
+      issues,
+      issueEdges: edges(issues),
+    };
+  };
+
+  const renderEditCell = (row: GridRow, r: number, b: Bucket, c: number, tl: RowTimeline) => {
     const a = assignmentsById.get(row.assignmentId!);
     if (!a) return <td key={b.key} />;
-    const st = cellValue(a.id, b);
-    // A month/quarter cell can straddle the start date; style it by its first allocated week.
+    const st = tl.stats[c];
+    const v = tl.shown[c];
     const repWeek = b.weeks.find((w) => a.weekly[w]) ?? b.weeks[0];
     const kind = weekKind(d.projectsById.get(a.projectId), repWeek);
     const cls = weekClass(d.projectsById.get(a.projectId), repWeek);
     const person = isFilled(a) ? a : null;
     const role = person ? null : a;
-    // An open role is nobody's load, so it's never flagged.
-    const flags = person
-      ? assignmentFlagWeeks(person, b.weeks, d.loads, plan.settings)
-      : { over: [] as WeekKey[], stretch: [] as WeekKey[], risk: [] as WeekKey[] };
+    const flags = tl.flags[c];
     const flag: Severity | null = flags.over.length ? 'over' : flags.stretch.length ? 'stretch' : flags.risk.length ? 'risk' : null;
     const flagWeek = flag ? flags[flag][0] : undefined;
+    const state = tl.states[c];
+    const bar = tl.bars[c];
+    const issue = tl.issues[c];
+    const issueEdge = tl.issueEdges[c];
     const selected = inSelection(r, c);
     const isFocus = focus?.r === r && focus?.c === c;
     const classes = ['cell', 'edit', kind, ...rangeClasses(row.range, b, 'allocation')];
     if (selected) classes.push('selected');
     if (isFocus) classes.push('focus');
     if (flag) classes.push(flag);
-    // Pipeline-driven overload past the red threshold is drawn red, like an overallocation.
-    if (
-      person &&
-      flag === 'risk' &&
-      flags.risk.some((w) =>
-        totalIsCritical(
-          d.loads.committed.get(person.resourceId)?.get(w) ?? 0,
-          d.loads.tentative.get(person.resourceId)?.get(w) ?? 0,
-          plan.settings,
-        ),
-      )
-    ) {
-      classes.push('risk-critical');
-    }
     if (cls === 'tentative') classes.push('tentative');
     if (cls === 'excluded') classes.push('excluded');
     if (b.weeks.includes(thisWeek)) classes.push('today');
+    if (monthStarts.has(c)) classes.push('month-start');
     if (st.avg > 0) classes.push('filled');
     if (role) classes.push('open-role');
     if (!can.edit) classes.push('read-only');
+    if (dragPreview?.r === r) {
+      if (b.weeks.some((w) => dragPreview.set.includes(w))) classes.push('drag-add');
+      if (b.weeks.some((w) => dragPreview.clear.includes(w))) classes.push('drag-remove');
+    }
 
     // Shared mode: locks, who else has this cell selected, and recent changes by others.
     let lockNote: string | undefined;
@@ -447,12 +613,16 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
       commentCount = (cellThreads.get(a.id) ?? []).filter((t) => anchorOnCell(t.anchor, a.id, b.weeks)).length;
     }
 
+    const when = b.weeks.length > 1 ? formatWeekRange(b.weeks[0], b.weeks[b.weeks.length - 1]) : `week of ${formatWeek(b.weeks[0])}`;
+    const amount = st.mixed
+      ? `${fteLabel(v)} ${rollup === 'peak' ? 'peak' : 'average'} (avg ${Math.round(st.avg)}%, peak ${st.peak}%)`
+      : `${fteLabel(v)} (${Math.round(v)}%)`;
     let title: string | undefined;
-    if (person && flag && flagWeek) title = `This row: ${Math.round(st.avg)}%. ${loadTitle(person.resourceId, flagWeek, flag)}`;
-    else if (role && st.avg > 0) title = `Open role: ${Math.round(st.avg)}% needed${st.mixed ? ' (average)' : ''}. Not anyone's load until filled.`;
-    else if (cls === 'excluded' && st.avg > 0) title = 'Delivery on a lost workstream: not counted toward load.';
-    else if (st.mixed) title = `Varies by week: avg ${Math.round(st.avg)}%, peak ${st.peak}%. Double-clicking or typing sets every week.`;
-    else if (st.avg > 0) title = `${Math.round(st.avg)}%`;
+    if (person && flag && flagWeek) title = `This row: ${amount}. ${loadTitle(person.resourceId, flagWeek, flag)}`;
+    else if (role && st.avg > 0) title = `Open role: ${amount} needed, ${when}. Not anyone's load until filled.`;
+    else if (cls === 'excluded' && st.avg > 0) title = `${amount}, ${when}. Delivery on a lost workstream: not counted toward load.`;
+    else if (st.avg > 0 && state)
+      title = `${BOOKING_LABELS[state]}${kind === 'presales' ? ' (presales)' : ''}: ${amount}, ${when}.${st.mixed ? ` Varies by week, peak ${st.peak}%. Double-clicking or typing sets every week.` : ''}`;
     const notes = [
       lockNote && `🔒 ${lockNote}`,
       presenceNames.length && `${presenceNames.join(', ')} ${presenceNames.length === 1 ? 'has' : 'have'} this selected`,
@@ -460,14 +630,21 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
       commentCount && `💬 ${commentCount} open comment thread${commentCount === 1 ? '' : 's'} (M to open)`,
     ].filter(Boolean);
     if (notes.length) title = [title, ...notes].filter(Boolean).join('\n');
+    const spoken =
+      st.avg > 0 && state
+        ? [row.name, BOOKING_LABELS[state], fteLabel(v), when, issue === 'critical' || issue === 'conflict' ? 'over capacity' : issue === 'potential' ? 'over capacity if pipeline is won' : '']
+            .filter(Boolean)
+            .join(', ')
+        : undefined;
 
     return (
       <td
         key={b.key}
         data-pos={`${r}:${c}`}
-        data-value={Math.round(st.avg)}
+        data-value={Math.round(v)}
         className={classes.join(' ')}
         title={title}
+        aria-label={spoken}
         style={
           presenceColor || recentBy
             ? ({
@@ -486,15 +663,47 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
             : undefined
         }
         onMouseEnter={() => {
+          const drag = barDragRef.current;
+          if (drag) {
+            if (drag.c !== c) setBarDrag((barDragRef.current = { ...drag, c }));
+            return;
+          }
           if (dragging.current) setFocus({ r, c });
         }}
         onDoubleClick={() => {
           // A single click only selects; a double-click cycles 0 → 25 → 50 → 100 → 0.
           if (draft !== null) return;
-          applyToCells({ r0: r, r1: r, c0: c, c1: c }, nextStep(st.avg));
+          applyToCells({ r0: r, r1: r, c0: c, c1: c }, nextStep(v));
         }}
       >
-        {isFocus && draft !== null ? (
+        {state && cellStyle === 'pie' && (
+          <span className={`pie-wrap pie-${state}`} aria-hidden="true">
+            {st.mixed && <span className="mixed">~</span>}
+            <Pie value={v} />
+          </span>
+        )}
+        {state && bar && cellStyle !== 'pie' && (
+          <span className={`bar bar-${state}${edgeClasses(bar)}`} aria-hidden="true">
+            {canDrag && bar.start && (
+              <span className="bar-handle start" title="Drag to change when this starts" onMouseDown={(e) => startBarDrag('start', r, c, e)} />
+            )}
+            {canDrag && bar.end && (
+              <span className="bar-handle end" title="Drag to change when this ends" onMouseDown={(e) => startBarDrag('end', r, c, e)} />
+            )}
+            {(bar.start || cellStyle === 'number') && (
+              <span className="bar-label">
+                {st.mixed && '~'}
+                {cellStyle === 'number' ? formatPct(v) : fteLabel(v)}
+              </span>
+            )}
+          </span>
+        )}
+        {issue && issueEdge && (
+          <span className={`issue-band issue-${issue === 'potential' ? 'potential' : 'conflict'}${issue === 'critical' ? ' issue-critical' : ''}${edgeClasses(issueEdge)}`} aria-hidden="true">
+            {issueEdge.end && <span className="issue-icon">⚠</span>}
+          </span>
+        )}
+        {isFocus && draft !== null && (
           <input
             className="cell-input"
             autoFocus
@@ -529,35 +738,45 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
               }
             }}
           />
-        ) : cellStyle === 'pie' ? (
-          st.avg > 0 && (
-            <span className="pie-wrap">
-              {st.mixed && <span className="mixed">~</span>}
-              <Pie value={st.avg} />
-            </span>
-          )
-        ) : (
-          <>
-            {st.mixed && st.avg > 0 && <span className="mixed">~</span>}
-            {formatPct(st.avg)}
-          </>
         )}
         {commentCount > 0 && <span className="comment-mark" aria-label={`${commentCount} open comment thread${commentCount === 1 ? '' : 's'}`} />}
       </td>
     );
   };
 
-  const renderSummaryCell = (row: GridRow, b: Bucket) => {
-    const cell = row.summary?.(b);
+  const renderSummaryCell = (row: GridRow, cells: (SummaryCell | undefined)[], b: Bucket, c: number, bands: (SegmentEdge | null)[]) => {
+    const cell = cells[c];
     const classes = ['cell', 'summary', cell?.className ?? '', ...rangeClasses(row.range, b, 'summary')];
     if (b.weeks.includes(thisWeek)) classes.push('today');
+    if (monthStarts.has(c)) classes.push('month-start');
+    const band = bands[c];
+    // Banded rows say their value where it changes, not in every column.
+    const prev = cells[c - 1];
+    const changed = !band || band.start || cellStyle !== 'bars' || prev?.text !== cell?.text || prev?.extra !== cell?.extra;
+    const shown = cellStyle !== 'bars' && cell?.short ? cell.short : cell;
     return (
       <td key={b.key} className={classes.join(' ')} title={cell?.title}>
-        {cell?.text}
-        {cell?.extra && <span className="extra">{cell.extra}</span>}
+        {band && cell?.band && <span className={`demand-band demand-${cell.band}${edgeClasses(band)}`} aria-hidden="true" />}
+        {changed && (shown?.text || shown?.extra) && (
+          <span className={band ? 'band-label' : undefined}>
+            {shown?.text}
+            {shown?.extra && <span className="extra">{shown.extra}</span>}
+          </span>
+        )}
       </td>
     );
   };
+
+  /** Header groups: months over weeks, years over months and quarters. */
+  const headerGroups: { key: string; label: string; span: number }[] = [];
+  for (const b of buckets) {
+    // A week belongs to the month holding its Wednesday (see weekMonth), as in the Month view.
+    const m = weekMonth(b.weeks[0]);
+    const label = zoom === 'week' ? format(new Date(m.year, m.month, 1), 'MMMM yyyy') : (b.sublabel ?? '');
+    const last = headerGroups[headerGroups.length - 1];
+    if (last && last.label === label) last.span++;
+    else headerGroups.push({ key: b.key, label, span: 1 });
+  }
 
   return (
     <div
@@ -569,12 +788,40 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     >
       <table className="grid">
         <thead>
-          <tr>
-            <th className="corner">{corner}</th>
-            {buckets.map((b) => (
-              <th key={b.key} className={b.weeks.includes(thisWeek) ? 'col today' : 'col'} title={b.weeks.length > 1 ? `${b.weeks.length} weeks` : undefined}>
-                <span className="col-label">{b.label}</span>
-                {b.sublabel && <span className="col-sub">{b.sublabel}</span>}
+          <tr className="head-groups">
+            <th className="corner" rowSpan={2}>
+              {corner}
+            </th>
+            {headerGroups.map((g) => (
+              <th key={g.key} className="col-group" colSpan={g.span}>
+                <span>{g.label}</span>
+              </th>
+            ))}
+          </tr>
+          <tr className="head-cols">
+            {buckets.map((b, c) => (
+              <th
+                key={b.key}
+                className={['col', b.weeks.includes(thisWeek) ? 'today' : '', monthStarts.has(c) ? 'month-start' : ''].filter(Boolean).join(' ')}
+                title={b.weeks.length > 1 ? `${b.weeks.length} weeks` : undefined}
+              >
+                {zoom === 'week' ? (
+                  <span className="col-label">{b.label}</span>
+                ) : (
+                  <button
+                    type="button"
+                    className="col-label col-drill"
+                    title={`Show the weeks of ${b.label} ${b.sublabel ?? ''}`.trim()}
+                    onClick={() => {
+                      const ui = useUIStore.getState();
+                      ui.setZoom('week');
+                      ui.setAnchor(b.weeks[0]);
+                    }}
+                  >
+                    {b.label}
+                  </button>
+                )}
+                {zoom === 'week' && b.sublabel && <span className="col-sub">{b.sublabel}</span>}
               </th>
             ))}
           </tr>
@@ -589,11 +836,17 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
           )}
           {rows.map((row) => {
             const r = editIndex.get(row.key);
+            const a = r !== undefined ? assignmentsById.get(row.assignmentId!) : undefined;
+            const tl = a ? rowTimeline(a) : undefined;
+            const cells = r === undefined ? buckets.map((b) => row.summary?.(b)) : [];
+            const bands = edges(cells.map((x) => (x?.band && (x.text || x.extra) ? x.band : null)));
+            const dim = !!highlight && !!row.resourceId && row.resourceId !== highlight;
+            const lit = !!highlight && row.resourceId === highlight;
             return (
               <tr
                 key={row.key}
                 id={`row-${row.key}`}
-                className={[`depth-${row.depth}`, row.className, focusRow === row.key ? 'flash' : '']
+                className={[`depth-${row.depth}`, row.className, focusRow === row.key ? 'flash' : '', dim ? 'dimmed' : '', lit ? 'highlighted' : '']
                   .filter(Boolean)
                   .join(' ')}
               >
@@ -601,7 +854,7 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
                   {row.label}
                 </th>
                 {buckets.map((b, c) =>
-                  r !== undefined ? renderEditCell(row, r, b, c) : renderSummaryCell(row, b),
+                  r !== undefined && tl ? renderEditCell(row, r, b, c, tl) : renderSummaryCell(row, cells, b, c, bands),
                 )}
               </tr>
             );

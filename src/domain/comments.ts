@@ -226,10 +226,13 @@ export interface ThreadIndexRow {
   createdAt: number;
   lastTs: number;
   lastActor: string;
-  /** The last comment's start, mention tokens intact. */
+  /** The last comment's start, mention tokens intact, and who wrote it (not necessarily lastActor: a resolve is activity too). */
   lastExcerpt: string;
+  lastCommentBy?: string;
   commentCount: number;
   mentions: string[];
+  resolvedBy?: string;
+  resolvedAt?: number;
 }
 
 /** A new mention, for notifying the person mentioned. */
@@ -265,7 +268,9 @@ export function indexRow(plan: PlanData, t: Thread): ThreadIndexRow {
     lastTs: last.ts,
     lastActor: last.actor,
     lastExcerpt: lastComment ? rawExcerpt(lastComment.body) : '',
+    ...(lastComment ? { lastCommentBy: lastComment.author } : {}),
     commentCount: live.length,
     mentions: threadMentions(t),
+    ...(t.resolvedAt !== undefined ? { resolvedAt: t.resolvedAt, resolvedBy: t.resolvedBy ?? '' } : {}),
   };
 }
