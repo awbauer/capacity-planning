@@ -186,7 +186,7 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
   const selSig = `${view}|${selRoleIds.join(',')}|${selFrom}|${selTo}`;
   useEffect(() => {
     if (!shared) return;
-    sendPresence({ view, ...(selRoleIds.length && selFrom && selTo ? { sel: { roleIds: selRoleIds.slice(0, 200), from: selFrom, to: selTo } } : {}) });
+    sendPresence({ view, ...(selRoleIds.length && selFrom && selTo ? { sel: { roleIds: selRoleIds.slice(0, 100), from: selFrom, to: selTo } } : {}) });
     // selSig captures everything the message depends on.
   }, [selSig, shared]); // eslint-disable-line react-hooks/exhaustive-deps
 

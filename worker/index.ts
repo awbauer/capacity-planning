@@ -110,6 +110,7 @@ async function route(c: Ctx): Promise<Response> {
   }
 
   let r = m(/^\/api\/plans\/([\w-]{1,64})$/);
+  if (r && method === 'GET') return json({ plan: await planOr404(env, r[1]) });
   if (r && method === 'PATCH') {
     requireRole(me, 'admin');
     const b = await body(request, patchPlanBody);

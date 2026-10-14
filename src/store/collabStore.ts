@@ -59,8 +59,9 @@ interface CollabState {
   locks: Lock[];
   /** Other people with the open plan, by connection. */
   presence: Record<string, Presence>;
-  /** The server's current week (for the past-weeks lock). */
+  /** The current week in the workspace's time zone (for the past-weeks lock); kept current by SharedGate. */
   thisWeek: WeekKey;
+  timeZone?: string;
   /** Cells someone else changed recently, by `${roleId}|${week}`. */
   recent: Record<string, RecentChange>;
   toasts: Toast[];

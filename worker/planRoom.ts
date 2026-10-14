@@ -12,7 +12,7 @@ import {
   type ServerMsg,
 } from '../src/domain/protocol';
 import type { PlanData } from '../src/domain/types';
-import { toWeekKey } from '../src/domain/weeks';
+import { weekInZone } from '../src/domain/weeks';
 import { doSql } from './doSql';
 import { workspaceStub, type Env } from './env';
 import { RoomEngine, type Result, type User } from './roomEngine';
@@ -32,6 +32,9 @@ interface Conn {
   sel?: Presence['sel'];
 }
 
+
+/** Most role ids kept from someone's selection (presence lives in the socket attachment, max 16 KiB). */
+const MAX_PRESENCE_ROLES = 100;
 
 /** Retry flushing the activity index this long after a failure. */
 const FLUSH_RETRY_MS = 30_000;
@@ -56,15 +59,7 @@ export class PlanRoom extends DurableObject<Env> {
   }
 
   private thisWeek(): string {
-    const tz = this.env.TIMEZONE || 'UTC';
-    let ymd: string;
-    try {
-      ymd = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
-    } catch {
-      ymd = new Date().toISOString().slice(0, 10);
-    }
-    const [y, m, d] = ymd.split('-').map(Number);
-    return toWeekKey(new Date(y, m - 1, d));
+    return weekInZone(this.env.TIMEZONE);
   }
 
   // ── WebSocket connections ──
@@ -87,6 +82,7 @@ export class PlanRoom extends DurableObject<Env> {
     };
     this.ctx.acceptWebSocket(server, [`u:${email}`]);
     server.serializeAttachment(conn);
+    await this.scheduleAlarm();
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -125,16 +121,20 @@ export class PlanRoom extends DurableObject<Env> {
           ws.close(CLOSE.protocol, 'The app was updated; reload');
           return;
         }
-        const catchUp = this.room.catchUp(msg.epoch, msg.lastSeq);
+        // The only await comes first. Everything after it runs without yielding, so no
+        // change can land between the catch-up and this socket starting to get broadcasts.
         const meta = await this.planMeta();
         if (meta.archived) {
           ws.close(CLOSE.archived, 'This plan was archived');
           return;
         }
+        // Re-read: a role change may have arrived during the await.
+        const fresh = (ws.deserializeAttachment() as Conn | null) ?? conn;
+        const catchUp = this.room.catchUp(msg.epoch, msg.lastSeq);
         this.send(ws, {
           t: 'welcome',
           proto: PROTOCOL_VERSION,
-          you: { email: conn.email, name: conn.name, role: conn.role, owner: conn.owner, connId: conn.connId, color: conn.color },
+          you: { email: fresh.email, name: fresh.name, role: fresh.role, owner: fresh.owner, connId: fresh.connId, color: fresh.color },
           plan: { id: this.room.planId ?? '', name: meta.name, archived: meta.archived },
           epoch: this.room.epoch,
           seq: this.room.seq,
@@ -142,10 +142,11 @@ export class PlanRoom extends DurableObject<Env> {
           locks: this.room.locks(),
           presence: this.others(ws).filter((c) => c.ready).map(presenceOf),
           thisWeek: this.thisWeek(),
+          timeZone: this.env.TIMEZONE || 'UTC',
         });
-        conn.ready = true;
-        ws.serializeAttachment(conn);
-        this.broadcast({ t: 'presence', presence: presenceOf(conn) }, ws);
+        const ready = { ...fresh, ready: true };
+        ws.serializeAttachment(ready);
+        this.broadcast({ t: 'presence', presence: presenceOf(ready) }, ws);
         return;
       }
       case 'op':
@@ -171,7 +172,7 @@ export class PlanRoom extends DurableObject<Env> {
         const sel = msg.sel;
         conn.sel =
           sel && Array.isArray(sel.roleIds) && typeof sel.from === 'string' && typeof sel.to === 'string'
-            ? { roleIds: sel.roleIds.slice(0, 200).map(String), from: sel.from.slice(0, 10), to: sel.to.slice(0, 10) }
+            ? { roleIds: sel.roleIds.slice(0, MAX_PRESENCE_ROLES).map(String), from: sel.from.slice(0, 10), to: sel.to.slice(0, 10) }
             : undefined;
         ws.serializeAttachment(conn);
         if (conn.ready) this.broadcast({ t: 'presence', presence: presenceOf(conn) }, ws);
@@ -214,7 +215,7 @@ export class PlanRoom extends DurableObject<Env> {
     const forOthers = JSON.stringify(base);
     for (const other of this.ctx.getWebSockets()) {
       const c = other.deserializeAttachment() as Conn | null;
-      if (!c?.ready && other !== ws) continue;
+      if (!c || !this.stillSignedIn(other, c) || (!c.ready && other !== ws)) continue;
       try {
         other.send(other === ws ? JSON.stringify({ ...base, cid }) : forOthers);
       } catch {
@@ -238,7 +239,7 @@ export class PlanRoom extends DurableObject<Env> {
     for (const ws of this.ctx.getWebSockets()) {
       if (ws === except) continue;
       const c = ws.deserializeAttachment() as Conn | null;
-      if (!c?.ready) continue;
+      if (!c?.ready || !this.stillSignedIn(ws, c)) continue;
       try {
         ws.send(text);
       } catch {
@@ -277,12 +278,44 @@ export class PlanRoom extends DurableObject<Env> {
         this.room.flushedSeq = rows[rows.length - 1].seq;
       }
     } catch {
-      if (!(await this.ctx.storage.getAlarm())) await this.ctx.storage.setAlarm(Date.now() + FLUSH_RETRY_MS);
+      await this.scheduleAlarm(Date.now() + FLUSH_RETRY_MS);
     }
   }
 
+  /** Closes a socket whose Access sign-in has expired; returns whether it's still good. */
+  private stillSignedIn(ws: WebSocket, c: Conn): boolean {
+    if (Date.now() <= c.exp) return true;
+    try {
+      ws.close(CLOSE.sessionExpired, 'Your sign-in expired');
+    } catch {
+      // Already closed.
+    }
+    return false;
+  }
+
+  /**
+   * One alarm covers both jobs: retrying the activity flush, and closing
+   * sockets when their sign-in expires (so idle tabs stop receiving updates).
+   */
+  private async scheduleAlarm(retryAt?: number) {
+    const exps = this.ctx
+      .getWebSockets()
+      .map((ws) => (ws.deserializeAttachment() as Conn | null)?.exp)
+      .filter((e): e is number => typeof e === 'number' && e > Date.now());
+    const candidates = [...exps, ...(retryAt ? [retryAt] : [])];
+    if (candidates.length === 0) return;
+    const target = Math.min(...candidates) + 1000;
+    const current = await this.ctx.storage.getAlarm();
+    if (current === null || target < current) await this.ctx.storage.setAlarm(target);
+  }
+
   async alarm() {
+    for (const ws of this.ctx.getWebSockets()) {
+      const c = ws.deserializeAttachment() as Conn | null;
+      if (c) this.stillSignedIn(ws, c);
+    }
     await this.flush();
+    await this.scheduleAlarm();
   }
 
   // ── called by the Worker and the Workspace (RPC) ──

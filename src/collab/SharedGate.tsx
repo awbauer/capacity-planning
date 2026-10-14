@@ -4,6 +4,7 @@ import { readLocalPlans } from '../store/localPlanStore';
 import { useCollabStore } from '../store/collabStore';
 import { bootShared, openSharedPlan, readPrefs, RECENT_MS } from '../store/sharedPlanStore';
 import { useCan } from '../store/useCan';
+import { weekInZone } from '../domain/weeks';
 import { createSharedPlanInteractively } from './sharedPlanActions';
 import { UploadLocalPlansDialog } from './UploadLocalPlansDialog';
 
@@ -51,13 +52,15 @@ export function SharedGate({ children }: { children: ReactNode }) {
   // Offer this browser's plans once, the first time someone who can edit gets in.
   const offer = !dismissed && hasLocal && (status === 'live' || status === 'no-plan') && can.edit && !readPrefs().uploadOffered;
 
-  // Forget "recently changed by" markers once they're old.
+  // Forget "recently changed by" markers once they're old, and keep "this week" current over a Monday.
   useEffect(() => {
     const t = setInterval(() => {
-      const { recent, set } = useCollabStore.getState();
+      const { recent, set, timeZone, thisWeek } = useCollabStore.getState();
       const cutoff = Date.now() - RECENT_MS;
       const kept = Object.fromEntries(Object.entries(recent).filter(([, v]) => v.ts > cutoff));
       if (Object.keys(kept).length !== Object.keys(recent).length) set({ recent: kept });
+      const week = weekInZone(timeZone);
+      if (week !== thisWeek) set({ thisWeek: week });
     }, 30_000);
     return () => clearInterval(t);
   }, []);

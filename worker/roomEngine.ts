@@ -255,8 +255,22 @@ export class RoomEngine {
     if (lastSeq === this.seq) return { puts: [] };
     const replaced = one(this.sql.all('SELECT 1 FROM batches WHERE seq > ? AND op = ? LIMIT 1', lastSeq, 'plan.replace'));
     if (replaced) return { full: plan };
+    // Something deleted and re-created since (an undone delete) moved to the end on the
+    // server; the browser still has it in its old place, so send the whole plan.
+    const recreated = one(
+      this.sql.all(
+        `SELECT 1 FROM changes d JOIN changes c ON c.kind = d.kind AND c.target_id = d.target_id AND c.seq > d.seq
+         WHERE d.seq > ? AND d.field IS NULL AND d.after IS NULL AND c.field IS NULL AND c.before IS NULL LIMIT 1`,
+        lastSeq,
+      ),
+    );
+    if (recreated) return { full: plan };
+    // In stored order, so entities the browser doesn't have yet are added in the same order the
+    // server keeps them (deleted ones, with no row left, come first).
     const touched = this.sql.all<{ kind: EntityKind; target_id: string }>(
-      'SELECT DISTINCT kind, target_id FROM changes WHERE seq > ?',
+      `SELECT c.kind, c.target_id FROM (SELECT DISTINCT kind, target_id FROM changes WHERE seq > ?) c
+       LEFT JOIN entities e ON e.kind = c.kind AND e.id = c.target_id
+       ORDER BY COALESCE(e.ord, -1), c.kind, c.target_id`,
       lastSeq,
     );
     const total = plan.tags.length + plan.sellers.length + plan.resources.length + plan.projects.length + plan.assignments.length;

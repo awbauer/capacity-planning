@@ -74,6 +74,8 @@ export type ServerMsg =
       presence: Presence[];
       /** The current week where the server is (for the past-weeks lock). */
       thisWeek: WeekKey;
+      /** The workspace's time zone, so the browser keeps "this week" current itself. */
+      timeZone: string;
     }
   | {
       t: 'applied';
