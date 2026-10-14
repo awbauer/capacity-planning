@@ -122,6 +122,13 @@ const moreMenu = (page, item) => choose(page, page.getByRole('button', { name: '
   // Numbers display toggle.
   await page.getByRole('button', { name: 'Numbers', exact: true }).click();
   assert((await a1.nth(5).innerText()).trim() === '50', 'number display shows every week\'s value');
+  await page.getByRole('button', { name: 'Circles', exact: true }).click();
+  assert((await page.locator('.grid svg.pie').count()) > 20 && (await page.locator('.grid .bar').count()) === 0, 'circles display draws a Harvey ball per booked week instead of bars');
+  assert(await page.locator('.grid .pie-tentative').count() > 0 && await page.locator('.grid .pie-open').count() > 0, 'circles keep the booking state (tentative, open role)');
+  await shot(page, '03-circles');
+  await page.reload();
+  await page.waitForSelector('.grid');
+  assert((await page.locator('.grid svg.pie').count()) > 20, 'the display choice survives a reload');
   await page.getByRole('button', { name: 'Bars', exact: true }).click();
 
   // Quarter view + resources view screenshots.

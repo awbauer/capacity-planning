@@ -1218,6 +1218,72 @@ button:focus-visible {
   justify-content: center;
 }
 
+/* ---------- Circles display: a Harvey ball in every booked week ---------- */
+
+.pie-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  vertical-align: middle;
+  pointer-events: none;
+  --pie: var(--confirmed);
+}
+
+.pie {
+  display: block;
+  width: 18px;
+  height: 18px;
+}
+
+.pie-ring {
+  fill: var(--grid-bg);
+  stroke: var(--pie);
+  stroke-width: 1.5;
+}
+
+.pie-fill {
+  fill: var(--pie);
+}
+
+.pie-tentative {
+  --pie: var(--tentative);
+}
+
+.pie-tentative .pie-ring,
+.pie-open .pie-ring {
+  stroke-dasharray: 2.5 2;
+}
+
+.pie-open {
+  --pie: var(--open);
+}
+
+.pie-open .pie-fill {
+  opacity: 0.45;
+}
+
+.pie-excluded {
+  --pie: var(--dim);
+  opacity: 0.6;
+}
+
+/* The toolbar's circle icon follows the button's text color. */
+.segmented .pie {
+  --pie: currentColor;
+  width: 16px;
+  height: 16px;
+}
+
+.segmented button:has(.pie) {
+  display: inline-flex;
+  align-items: center;
+}
+
+.segmented .pie-ring {
+  fill: none;
+}
+
 /* Drag handles on a bar's ends (editors, Week zoom). */
 .bar-handle {
   position: absolute;
@@ -1378,7 +1444,8 @@ button:focus-visible {
   pointer-events: none;
 }
 
-.cells-number .band-label {
+.cells-number .band-label,
+.cells-pie .band-label {
   position: static;
 }
 

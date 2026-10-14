@@ -50,7 +50,7 @@ Zoom between Week, Month and Quarter. At month and quarter zoom a cell shows the
 | Staff someone for a date range | **+ Person** on a workstream or **+ Workstream** on a person |
 | Undo / redo | Ctrl/⌘+Z, Ctrl/⌘+Shift+Z |
 
-Press **?** in the app for every shortcut. Totals aren't rounded. The bars / % toolbar toggle switches between FTE labels where bars change and every week's %.
+Press **?** in the app for every shortcut. Totals aren't rounded. The toolbar's display toggle switches between **bars** (labelled in FTE where they start or change), **circles** (a Harvey ball in every booked week, filled to its %) and **%** (every week's number).
 
 ## Plans, export and settings
 

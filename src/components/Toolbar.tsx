@@ -13,6 +13,7 @@ import { findPlanByName, redo, undo, useHistory, usePlan, usePlanMeta, usePlanSt
 import { useUIStore, type View } from '../store/uiStore';
 import { useDerived } from '../store/useDerived';
 import { downloadText, today } from './download';
+import { Pie } from './grid/Pie';
 import { MenuItem, Popover } from './Popover';
 import { ProjectDialog } from './ProjectDialog';
 import { PlanSwitcher } from './PlanSwitcher';
@@ -382,6 +383,15 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
               onClick={() => ui.setCellStyle('bars')}
             >
               <span className="bars-icon" aria-hidden />
+            </button>
+            <button
+              type="button"
+              aria-pressed={ui.cellStyle === 'pie'}
+              aria-label="Circles"
+              title="Circles in every week, filled to its %"
+              onClick={() => ui.setCellStyle('pie')}
+            >
+              <Pie value={50} />
             </button>
             <button
               type="button"

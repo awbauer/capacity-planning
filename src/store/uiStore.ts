@@ -14,8 +14,11 @@ export type DetailsTarget = { kind: 'project'; id: string } | { kind: 'resource'
 /** `users` only exists in shared mode. */
 export type ManageTab = 'resources' | 'projects' | 'tags' | 'sellers' | 'plans' | 'users' | 'settings';
 
-/** How allocations render: bars labelled in FTE where they change, or bars with every column's %. */
-export type CellStyle = 'bars' | 'number';
+/**
+ * How allocations render: bars labelled in FTE where they change, Harvey-ball
+ * circles in every week, or bars with every week's %.
+ */
+export type CellStyle = 'bars' | 'pie' | 'number';
 
 /** Month/Quarter columns show each period's average or its busiest week. */
 export type Rollup = 'avg' | 'peak';
@@ -225,8 +228,7 @@ export const useUIStore = create<UIState>()(
         return {
           ...current,
           ...p,
-          // Circles ('pie') were replaced by bars.
-          cellStyle: p.cellStyle === 'number' ? 'number' : 'bars',
+          cellStyle: p.cellStyle === 'number' || p.cellStyle === 'pie' ? p.cellStyle : 'bars',
           view: (p.view === 'activity' || p.view === 'mentions') && !isShared() ? 'projects' : (p.view ?? current.view),
           manageTab: p.manageTab === 'users' && !isShared() ? 'settings' : (p.manageTab ?? current.manageTab),
         };

@@ -41,6 +41,7 @@ import { useDerived } from '../../store/useDerived';
 import { CellMenu, type CellMenuTarget } from '../../collab/CellMenu';
 import { cellCommentAnchor } from '../../collab/commentAnchors';
 import { anchorOnCell, isOpenThread, type Thread } from '../../domain/comments';
+import { Pie } from './Pie';
 
 export interface SummaryCell {
   text: string;
@@ -54,6 +55,8 @@ export interface SummaryCell {
    * load) show their value in every column.
    */
   band?: 'staffed' | 'open';
+  /** Shorter text and extra for the circles and % displays, which repeat the value in every column. */
+  short?: { text: string; extra?: string };
 }
 
 export interface GridRow {
@@ -220,7 +223,7 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
   const barDragRef = useRef<BarDrag | null>(null);
   const commitDragRef = useRef<(d: BarDrag) => void>(() => {});
   /** Bars can be dragged where a column is one week. */
-  const canDrag = zoom === 'week' && can.edit;
+  const canDrag = zoom === 'week' && can.edit && cellStyle === 'bars';
   const [anchorKey, setAnchorKey] = useState<CellKey | null>(null);
   const [focusKey, setFocusKey] = useState<CellKey | null>(null);
   const [draft, setDraft] = useState<string | null>(null);
@@ -673,7 +676,13 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
           applyToCells({ r0: r, r1: r, c0: c, c1: c }, nextStep(v));
         }}
       >
-        {state && bar && (
+        {state && cellStyle === 'pie' && (
+          <span className={`pie-wrap pie-${state}`} aria-hidden="true">
+            {st.mixed && <span className="mixed">~</span>}
+            <Pie value={v} />
+          </span>
+        )}
+        {state && bar && cellStyle !== 'pie' && (
           <span className={`bar bar-${state}${edgeClasses(bar)}`} aria-hidden="true">
             {canDrag && bar.start && (
               <span className="bar-handle start" title="Drag to change when this starts" onMouseDown={(e) => startBarDrag('start', r, c, e)} />
@@ -743,14 +752,15 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     const band = bands[c];
     // Banded rows say their value where it changes, not in every column.
     const prev = cells[c - 1];
-    const changed = !band || band.start || cellStyle === 'number' || prev?.text !== cell?.text || prev?.extra !== cell?.extra;
+    const changed = !band || band.start || cellStyle !== 'bars' || prev?.text !== cell?.text || prev?.extra !== cell?.extra;
+    const shown = cellStyle !== 'bars' && cell?.short ? cell.short : cell;
     return (
       <td key={b.key} className={classes.join(' ')} title={cell?.title}>
         {band && cell?.band && <span className={`demand-band demand-${cell.band}${edgeClasses(band)}`} aria-hidden="true" />}
-        {changed && (cell?.text || cell?.extra) && (
+        {changed && (shown?.text || shown?.extra) && (
           <span className={band ? 'band-label' : undefined}>
-            {cell?.text}
-            {cell?.extra && <span className="extra">{cell.extra}</span>}
+            {shown?.text}
+            {shown?.extra && <span className="extra">{shown.extra}</span>}
           </span>
         )}
       </td>

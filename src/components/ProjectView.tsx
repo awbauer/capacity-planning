@@ -232,6 +232,7 @@ export function ProjectView({ buckets }: Props) {
           text: avg ? fteLabel(avg) : '',
           extra: openFte ? `+${fte(openFte)} open` : undefined,
           band: avg ? 'staffed' : 'open',
+          short: { text: avg ? fte(avg) : '', extra: openFte ? `+${fte(openFte)}` : undefined },
           className: [
             'fte',
             worst ? `has-${worst}` : '',
@@ -402,6 +403,7 @@ export function ProjectView({ buckets }: Props) {
         return {
           text: avg ? fteLabel(avg) : '',
           band: 'staffed',
+          short: { text: avg ? fteLabel(avg).replace(/ FTE$/, '') : '' },
           className: 'group-sum',
           title: avg ? `${fteLabel(avg)} staffed across this client's workstreams${b.weeks.length > 1 ? ` (${rollWord})` : ''}` : undefined,
         };
