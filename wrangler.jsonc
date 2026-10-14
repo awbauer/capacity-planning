@@ -6,14 +6,8 @@
   "build": {
     "command": "npm run build"
   },
-  "assets": {
-    "directory": "./dist/client",
-    "binding": "ASSETS",
-    "not_found_handling": "single-page-application",
-    // Development only: the build removes this and the Worker serves the app itself
-    // (worker/assets.ts), so Cloudflare Access's ctx.access reaches it. See vite.config.ts.
-    "run_worker_first": ["/api/*"]
-  },
+  // No static assets: the Worker serves the app itself (worker/assets.ts), so Cloudflare
+  // Access's ctx.access reaches it. In development the Vite dev server serves the app.
   // The shared workspace (opt-in per browser). Each plan is one PlanRoom; Workspace
   // holds people, roles, the plan list and the activity log. Both use SQLite storage.
   "durable_objects": {
