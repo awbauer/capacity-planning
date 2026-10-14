@@ -64,6 +64,13 @@ export function normalizeWeek(dateStr: string): WeekKey {
   return toWeekKey(parseISO(dateStr));
 }
 
+/** Validates untrusted week keys without formatting an invalid Date (which throws). */
+export function isWeekKey(key: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) return false;
+  const date = parseISO(key);
+  return !Number.isNaN(date.getTime()) && date.getDay() === 1 && format(date, KEY_FORMAT) === key;
+}
+
 /** Inclusive list of weeks from `from` to `to`. Empty if `to` precedes `from`. */
 export function weeksBetween(from: WeekKey, to: WeekKey): WeekKey[] {
   const out: WeekKey[] = [];

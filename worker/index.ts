@@ -7,6 +7,7 @@ import { clientFiles } from './clientFiles';
 import { roomStub, workspaceStub, type Env } from './env';
 import {
   activityQuery,
+  mentionsQuery,
   body,
   createPlanBody,
   prefsBody,
@@ -56,15 +57,7 @@ async function route(c: Ctx): Promise<Response> {
   if (path === '/api/people' && method === 'GET') return json({ people: await ws.people() });
 
   if (path === '/api/mentions' && method === 'GET') {
-    const p = url.searchParams;
-    const status = p.get('status');
-    return json(
-      await ws.mentions(me.email, {
-        status: status === 'open' || status === 'resolved' ? status : 'all',
-        ...(p.get('cursor') ? { cursor: p.get('cursor')! } : {}),
-        ...(p.get('limit') ? { limit: Number(p.get('limit')) } : {}),
-      }),
-    );
+    return json(await ws.mentions(me.email, mentionsQuery(url)));
   }
   if (path === '/api/mentions/counts' && method === 'GET') return json({ counts: await ws.mentionCounts(me.email) });
   if (path === '/api/mentions/read' && method === 'POST') {

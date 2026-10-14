@@ -22,7 +22,13 @@ export function devAuthAllowed(env: Env, url: URL): boolean {
 function cookie(request: Request, name: string): string | undefined {
   for (const part of (request.headers.get('Cookie') ?? '').split(';')) {
     const [k, ...v] = part.trim().split('=');
-    if (k === name) return decodeURIComponent(v.join('='));
+    if (k === name) {
+      try {
+        return decodeURIComponent(v.join('='));
+      } catch {
+        return undefined;
+      }
+    }
   }
   return undefined;
 }
@@ -46,12 +52,15 @@ const MAX_SESSION_MS = 24 * 3600_000;
  * verifying: it only shortens how long a socket stays open, it never
  * decides who someone is.
  */
-export function sessionExpiry(request: Request, now = Date.now()): number {
-  const token = request.headers.get('Cf-Access-Jwt-Assertion');
+export function sessionExpiry(
+  request: Request,
+  now = Date.now(),
+  token = request.headers.get('Cf-Access-Jwt-Assertion') || cookie(request, 'CF_Authorization'),
+): number {
   try {
     const part = token?.split('.')[1];
     const exp = part ? Number(JSON.parse(atob(part.replace(/-/g, '+').replace(/_/g, '/'))).exp) * 1000 : NaN;
-    if (Number.isFinite(exp) && exp > now) return Math.min(exp, now + MAX_SESSION_MS);
+    if (Number.isFinite(exp) && exp > 0) return Math.min(exp, now + MAX_SESSION_MS);
   } catch {
     // Not a readable token.
   }
@@ -103,9 +112,11 @@ const MAX_CONFIRMED = 500;
 export async function edgeIdentity(request: Request, fetcher: typeof fetch = fetch): Promise<Identity | undefined> {
   const token = cookie(request, 'CF_Authorization') || request.headers.get('Cf-Access-Jwt-Assertion') || '';
   if (!token || token.length > 8192) return undefined;
-  const cached = confirmed.get(token);
+  // Access validates tokens for one application origin, not every hostname this Worker serves.
+  const cacheKey = JSON.stringify([new URL(request.url).origin, token]);
+  const cached = confirmed.get(cacheKey);
   if (cached && cached.exp > Date.now()) return cached;
-  confirmed.delete(token);
+  confirmed.delete(cacheKey);
   let status = 0;
   try {
     const res = await fetcher(new URL('/cdn-cgi/access/get-identity', request.url), {
@@ -118,9 +129,9 @@ export async function edgeIdentity(request: Request, fetcher: typeof fetch = fet
       const email = typeof who?.email === 'string' ? who.email.trim().toLowerCase() : '';
       if (email) {
         const name = typeof who?.name === 'string' && who.name ? who.name : nameFromEmail(email);
-        const identity = { email, name, exp: sessionExpiry(request) };
+        const identity = { email, name, exp: sessionExpiry(request, Date.now(), token) };
         if (confirmed.size >= MAX_CONFIRMED) confirmed.delete(confirmed.keys().next().value!);
-        confirmed.set(token, identity);
+        confirmed.set(cacheKey, identity);
         return identity;
       }
     }

@@ -12,7 +12,7 @@ import {
 } from '../domain/utilization';
 import { currentWeek, formatWeek, formatWeekRange, type Bucket } from '../domain/weeks';
 import { usePlan } from '../store/planStore';
-import { clientGroupKey, levelGroupKey, useUIStore } from '../store/uiStore';
+import { levelGroupKey, useUIStore, workstreamGroupKeys } from '../store/uiStore';
 import { useDerived } from '../store/useDerived';
 
 const pct = (n: number) => `${Math.round(n)}%`;
@@ -202,7 +202,7 @@ export function CapacityPanel({ buckets }: { buckets: Bucket[] }) {
                       type="button"
                       className="link"
                       title="Show this role on its workstream"
-                      onClick={() => jumpTo('projects', `a:${o.roleId}`, o.from, [`p:${o.projectId}`, clientGroupKey(p?.client)])}
+                      onClick={() => jumpTo('projects', `a:${o.roleId}`, o.from, [`p:${o.projectId}`, ...workstreamGroupKeys(p)])}
                     >
                       {role.name || 'Unnamed role'}
                     </button>

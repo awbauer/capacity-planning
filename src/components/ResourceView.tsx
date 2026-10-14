@@ -4,7 +4,7 @@ import { bucketStats, totalsGetter, type BucketStats } from '../domain/aggregate
 import { assignmentFlagWeeks, resourceLoadFlagged } from '../domain/conflicts';
 import type { Derived } from '../domain/derive';
 import { STATUS_LABELS } from '../domain/labels';
-import { severity, totalIsCritical } from '../domain/load';
+import { LIKELY_WIN, lowRiskAt, severity, totalIsCritical } from '../domain/load';
 import { CAREER_LEVELS, type CareerLevel, type Resource } from '../domain/types';
 import {
   LOOKAHEAD_WEEKS,
@@ -90,7 +90,9 @@ export function ResourceView({ buckets }: Props) {
     const sevOf = (w: string) => severity(committed(w), tentative(w), plan.settings);
     const overCount = visibleWeeks.filter((w) => sevOf(w) === 'over').length;
     const stretchCount = visibleWeeks.filter((w) => sevOf(w) === 'stretch').length;
-    const riskCount = visibleWeeks.filter((w) => sevOf(w) === 'risk').length;
+    const riskWeeks = visibleWeeks.filter((w) => sevOf(w) === 'risk');
+    const riskCount = riskWeeks.length;
+    const riskLow = riskWeeks.every((w) => lowRiskAt(d.loads, r.id, w, plan.settings));
     const weeksText = (n: number) => `${n}w`;
     const u = utilizationOf(util, r.id);
     const target = utilizationTarget(plan.settings, r.level);
@@ -152,8 +154,15 @@ export function ResourceView({ buckets }: Props) {
                   </span>
                 )}
                 {riskCount > 0 && (
-                  <span className="badge badge-risk" title="Over capacity only if pipeline delivery work is won">
-                    At risk {weeksText(riskCount)}
+                  <span
+                    className={riskLow ? 'badge badge-risk low' : 'badge badge-risk'}
+                    title={
+                      riskLow
+                        ? `Over capacity only if pipeline work under ${LIKELY_WIN}% likely to be won comes through`
+                        : 'Over capacity if pipeline delivery work is won'
+                    }
+                  >
+                    {riskLow ? 'Low risk' : 'At risk'} {weeksText(riskCount)}
                   </span>
                 )}
               </span>
@@ -178,6 +187,7 @@ export function ResourceView({ buckets }: Props) {
         else if (sevs.includes('stretch')) className += ' heat-stretch';
         else if (sevs.includes('risk')) {
           className += ' heat-risk';
+          if (b.weeks.every((w) => sevOf(w) !== 'risk' || lowRiskAt(d.loads, r.id, w, plan.settings))) className += ' heat-risk-low';
           if (b.weeks.some((w) => sevOf(w) === 'risk' && totalIsCritical(committed(w), tentative(w), plan.settings))) {
             className += ' heat-risk-critical';
           }
@@ -223,6 +233,7 @@ export function ResourceView({ buckets }: Props) {
                 <AssignmentBadges
                   worst={flags.over.length ? 'over' : flags.stretch.length ? 'stretch' : flags.risk.length ? 'risk' : null}
                   mismatch={mismatch}
+                  lowRisk={flags.risk.every((w) => lowRiskAt(d.loads, r.id, w, plan.settings))}
                 />
               </div>
             </div>

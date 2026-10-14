@@ -1,3 +1,4 @@
+import { csvCell } from '../src/domain/csv';
 import { z } from 'zod';
 import { planDataSchema } from '../src/domain/opSchema';
 import { USER_ROLES, type UserRole } from '../src/domain/permissions';
@@ -45,9 +46,38 @@ export const settingsBody = z.object({
   timeZone: z.string().max(64).optional(),
 });
 
+/** Parse numeric query inputs before they reach SQLite bindings or LIMIT. */
+function queryNumber(p: URLSearchParams, key: string, min = 0): number | undefined {
+  const raw = p.get(key);
+  if (raw === null) return undefined;
+  const value = Number(raw);
+  if (!raw.trim() || !Number.isSafeInteger(value) || value < min) throw new HttpError(400, `Invalid ${key}.`);
+  return value;
+}
+
+function queryCursor(p: URLSearchParams, parts: number): string | undefined {
+  const cursor = p.get('cursor');
+  if (cursor === null) return undefined;
+  const [ts, ...ids] = cursor.split('~');
+  if (!/^\d+$/.test(ts) || !Number.isSafeInteger(Number(ts)) || ids.length !== parts || ids.some((id) => !/^[\w-]{1,64}$/.test(id))) {
+    throw new HttpError(400, 'Invalid cursor.');
+  }
+  return cursor;
+}
+
+export function mentionsQuery(url: URL) {
+  const p = url.searchParams;
+  const status = p.get('status');
+  return {
+    status: (status === 'open' || status === 'resolved' ? status : 'all') as 'open' | 'resolved' | 'all',
+    cursor: queryCursor(p, 2),
+    limit: queryNumber(p, 'limit', 1),
+  };
+}
+
 export function activityQuery(url: URL, me: Me): ActivityQuery {
   const p = url.searchParams;
-  const num = (k: string) => (p.get(k) ? Number(p.get(k)) : undefined);
+  const num = (k: string) => queryNumber(p, k, k === 'limit' ? 1 : 0);
   return {
     ...(p.get('plan') !== null ? { planId: p.get('plan')! } : {}),
     ...(p.get('actor') ? { actor: p.get('actor')! } : {}),
@@ -56,15 +86,10 @@ export function activityQuery(url: URL, me: Me): ActivityQuery {
     ...(num('from') !== undefined ? { from: num('from') } : {}),
     ...(num('to') !== undefined ? { to: num('to') } : {}),
     ...(p.get('q') ? { q: p.get('q')!.slice(0, 200) } : {}),
-    ...(p.get('cursor') ? { cursor: p.get('cursor')! } : {}),
+    cursor: queryCursor(p, 1),
     ...(num('limit') !== undefined ? { limit: num('limit') } : {}),
     workspace: me.role === 'admin',
   };
 }
 
-export const csvCell = (v: unknown) => {
-  const s = String(v ?? '');
-  // Leading =+-@ would run as a formula in a spreadsheet.
-  const safe = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
-  return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
-};
+export { csvCell };

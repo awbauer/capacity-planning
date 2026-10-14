@@ -14,7 +14,7 @@ import type { Assignment, Project, Resource } from '../domain/types';
 import { LOOKAHEAD_WEEKS, lookaheadWeeks } from '../domain/utilization';
 import { currentWeek, formatWeek, formatWeekRange } from '../domain/weeks';
 import { usePlan, usePlanStore } from '../store/planStore';
-import { clientGroupKey, levelGroupKey, useUIStore } from '../store/uiStore';
+import { levelGroupKey, useUIStore, workstreamGroupKeys } from '../store/uiStore';
 import { useDerived } from '../store/useDerived';
 import { TagChips } from './Chips';
 import { downloadText, today } from './download';
@@ -238,7 +238,7 @@ function WorkstreamDetails({ project, onClose }: { project: Project; onClose: ()
             className="btn"
             onClick={() => {
               onClose();
-              ui.jumpTo('projects', `p:${project.id}`, undefined, [clientGroupKey(project.client)]);
+              ui.jumpTo('projects', `p:${project.id}`, undefined, workstreamGroupKeys(project));
             }}
           >
             Show in grid

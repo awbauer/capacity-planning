@@ -1,8 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { assetResponse } from './assets';
 import { devAuthAllowed, identify, sameOrigin, sessionExpiry } from './auth';
 import type { Env } from './env';
-import { activityQuery, body, createPlanBody, csvCell, HttpError, requireRole } from './http';
+import { activityQuery, mentionsQuery, body, createPlanBody, csvCell, HttpError, requireRole } from './http';
 
 const admin = { email: 'a@x', name: 'A', role: 'admin' as const, owner: true };
 const viewer = { ...admin, role: 'viewer' as const, owner: false };
@@ -73,13 +73,45 @@ describe('auth', () => {
     expect(calls.length).toBe(before);
   });
 
+  it('does not reuse an Access identity on a different origin', async () => {
+    const token = 'origin-scoped-token';
+    const request = (host: string) => new Request(`https://${host}/api/me`, { headers: { Cookie: `CF_Authorization=${token}` } });
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({ email: 'ann@x.com' })));
+    expect(await identify(request('protected.example.com'), env(), {}, fetcher)).toMatchObject({ ok: true });
+    fetcher.mockImplementation(async () => new Response('', { status: 403 }));
+    expect(await identify(request('unprotected.example.com'), env(), {}, fetcher)).toMatchObject({ ok: false });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it('expires cookie-only identities when the confirmed token expires', async () => {
+    vi.useFakeTimers();
+    try {
+      const now = Date.now();
+      const token = `x.${btoa(JSON.stringify({ exp: now / 1000 + 60 }))}.y`;
+      const req = new Request('https://cookie-expiry.example.com/api/me', { headers: { Cookie: `CF_Authorization=${token}` } });
+      const fetcher = vi.fn(async () => new Response(JSON.stringify({ email: 'ann@x.com' })));
+      expect(await identify(req, env(), {}, fetcher)).toMatchObject({ ok: true, identity: { exp: now + 60_000 } });
+      vi.advanceTimersByTime(61_000);
+      fetcher.mockImplementation(async () => new Response('', { status: 401 }));
+      expect(await identify(req, env(), {}, fetcher)).toMatchObject({ ok: false });
+      expect(fetcher).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('refuses malformed cookies without throwing', async () => {
+    const req = new Request('http://localhost/api/me', { headers: { Cookie: 'dev_user=%ZZ; CF_Authorization=%ZZ' } });
+    await expect(identify(req, env({ DEV_AUTH: '1' }))).resolves.toMatchObject({ ok: false });
+  });
+
   it('reads the session expiry from the Access token, within limits', () => {
     const now = 1_000_000_000_000;
     const tok = (exp: number) => `x.${btoa(JSON.stringify({ exp })).replace(/=+$/, '')}.y`;
     const at = (t?: string) => new Request('https://x/api/me', t ? { headers: { 'Cf-Access-Jwt-Assertion': t } } : {});
     expect(sessionExpiry(at(tok(now / 1000 + 600)), now)).toBe(now + 600_000);
     expect(sessionExpiry(at(tok(now / 1000 + 7 * 86400)), now)).toBe(now + 24 * 3600_000);
-    expect(sessionExpiry(at(tok(now / 1000 - 5)), now)).toBe(now + 3600_000);
+    expect(sessionExpiry(at(tok(now / 1000 - 5)), now)).toBe(now - 5_000);
     expect(sessionExpiry(at('garbage'), now)).toBe(now + 3600_000);
     expect(sessionExpiry(at(), now)).toBe(now + 3600_000);
   });
@@ -142,6 +174,18 @@ describe('router helpers', () => {
     expect(q).toMatchObject({ planId: 'p1', actor: 'bob@x', from: 5, limit: 10, workspace: false });
     expect(q.q).toHaveLength(200);
     expect(activityQuery(new URL('https://x/api/activity'), admin).workspace).toBe(true);
+  });
+
+  it('rejects malformed pagination and time filters before SQL', () => {
+    for (const value of ['NaN', 'Infinity', '1.5', '-1', '', '9007199254740992']) {
+      expect(() => activityQuery(new URL(`https://x/api/activity?limit=${value}`), viewer)).toThrow(HttpError);
+      expect(() => mentionsQuery(new URL(`https://x/api/mentions?limit=${value}`))).toThrow(HttpError);
+    }
+    for (const cursor of ['bad', 'NaN~id', '10', '10~', '10~id~extra']) {
+      expect(() => activityQuery(new URL(`https://x/api/activity?cursor=${cursor}`), viewer)).toThrow(HttpError);
+    }
+    expect(() => activityQuery(new URL('https://x/api/activity?from=nope'), viewer)).toThrow(HttpError);
+    expect(mentionsQuery(new URL('https://x/api/mentions?limit=10&cursor=100~plan~thread'))).toMatchObject({ limit: 10, cursor: '100~plan~thread' });
   });
 
   it('escapes CSV cells, including spreadsheet formulas', () => {

@@ -39,6 +39,7 @@ const FIELD_LABELS: Record<string, string> = {
   tagIds: 'capabilities',
   startWeek: 'start',
   endWeek: 'end',
+  winProbability: 'win %',
 };
 
 /** Every recorded change to some cells, a workstream or a person, newest first (shared mode). */

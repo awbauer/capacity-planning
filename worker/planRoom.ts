@@ -93,15 +93,27 @@ export class PlanRoom extends DurableObject<Env> {
       ws.close(CLOSE.sessionExpired, 'Your sign-in expired');
       return;
     }
-    if (typeof data !== 'string' || data.length > MAX_MESSAGE_BYTES) {
+    if (typeof data !== 'string' || new TextEncoder().encode(data).byteLength > MAX_MESSAGE_BYTES) {
       ws.close(1009, 'Message too large');
       return;
     }
     let msg: ClientMsg;
     try {
-      msg = JSON.parse(data) as ClientMsg;
+      const parsed: unknown = JSON.parse(data);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || typeof (parsed as { t?: unknown }).t !== 'string') return;
+      msg = parsed as ClientMsg;
     } catch {
       return;
+    }
+    if (msg.t === 'hello' && [msg.epoch, msg.lastSeq].some((n) => n !== undefined && (!Number.isSafeInteger(n) || n < 0))) {
+      ws.close(CLOSE.protocol, 'Invalid sync cursor');
+      return;
+    }
+    if (msg.t !== 'hello' && msg.t !== 'presence') {
+      if (!conn.ready || !('cid' in msg) || typeof msg.cid !== 'string' || !/^[A-Za-z0-9_-]{1,200}$/.test(msg.cid)) {
+        ws.close(CLOSE.protocol, 'Send hello and a valid change id first');
+        return;
+      }
     }
     try {
       await this.handle(ws, conn, msg);
@@ -198,7 +210,7 @@ export class PlanRoom extends DurableObject<Env> {
         const sel = msg.sel;
         conn.sel =
           sel && Array.isArray(sel.roleIds) && typeof sel.from === 'string' && typeof sel.to === 'string'
-            ? { roleIds: sel.roleIds.slice(0, MAX_PRESENCE_ROLES).map(String), from: sel.from.slice(0, 10), to: sel.to.slice(0, 10) }
+            ? { roleIds: sel.roleIds.filter((id): id is string => typeof id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(id)).slice(0, MAX_PRESENCE_ROLES), from: sel.from.slice(0, 10), to: sel.to.slice(0, 10) }
             : undefined;
         ws.serializeAttachment(conn);
         if (conn.ready) this.broadcast({ t: 'presence', presence: presenceOf(conn) }, ws);

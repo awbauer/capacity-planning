@@ -14,6 +14,17 @@ describe('parsePlan', () => {
     expect(() => parsePlan(plan)).toThrow(/Mondays/);
   });
 
+  it('reports impossible workstream and allocation dates as invalid plan files', () => {
+    for (const week of ['2026-02-30', '2026-13-07']) {
+      const plan = createSamplePlan('2026-10-05');
+      plan.projects[0].startWeek = week;
+      expect(() => parsePlan(plan)).toThrow(/Invalid plan file/);
+      delete plan.projects[0].startWeek;
+      plan.assignments[0].weekly = { [week]: 50 };
+      expect(() => parsePlan(plan)).toThrow(/Invalid plan file/);
+    }
+  });
+
   it('rejects dangling references', () => {
     const plan = createSamplePlan('2026-10-05');
     plan.assignments[0].resourceId = 'nobody';

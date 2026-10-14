@@ -1,7 +1,7 @@
 const { chromium } = require('playwright');
 const path = require('path');
 // Shared workspace, three people: run with npm run test:e2e (see e2e/run.mjs). Needs DEV_AUTH=1 and
-// OWNER_EMAILS=alice@example.com in .dev.vars and a fresh .wrangler/state.
+// OWNER_EMAILS=alice@example.com in .dev.vars and isolated Durable Object storage.
 const SP = process.argv[2] || require('os').tmpdir();
 require('fs').mkdirSync(path.join(SP, 'shots'), { recursive: true });
 const BASE = process.env.BASE_URL || 'http://localhost:5173';
@@ -23,7 +23,7 @@ async function until(fn, msg, timeout = 5000) {
 }
 
 (async () => {
-  const browser = await chromium.launch();
+  const browser = await chromium.launch({ ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH } : {}) });
   const errors = [];
   async function user(email, { shared = true } = {}) {
     const context = await browser.newContext({ viewport: { width: 1500, height: 900 } });
@@ -49,6 +49,12 @@ async function until(fn, msg, timeout = 5000) {
   }
   const row = (page, id) => page.locator(`[id="row-a:${id}"]`);
   const cell = (page, id, i) => row(page, id).locator('td.cell.edit').nth(i);
+  /** Workstreams open on Pipeline only, collapsed; the sample's rows are on won workstreams too. */
+  const showAll = async (page) => {
+    const sw = page.getByRole('switch', { name: 'Pipeline only' });
+    if ((await sw.getAttribute('aria-checked')) === 'true') await sw.click();
+    await page.locator('.corner-actions').getByRole('button', { name: 'Expand all', exact: true }).click();
+  };
   const val = (loc) => loc.getAttribute('data-value').then(Number);
 
   // ── A viewer on an empty workspace is told why they can't create a plan ──
@@ -78,6 +84,7 @@ async function until(fn, msg, timeout = 5000) {
   await alice.waitForSelector('.toolbar');
   await alice.getByRole('button', { name: 'Workstreams', exact: true }).first().click();
   await alice.waitForSelector('.grid');
+  await showAll(alice);
   assert((await alice.evaluate(() => localStorage.getItem('capacity-plan:v1'))) === localBefore, 'switching modes left local plans byte-for-byte unchanged');
   assert(await alice.locator('.mode-badge.mode-shared').count() === 1, 'toolbar shows Shared');
   await until(() => alice.locator('.conn-pill.conn-live').count().then((n) => n === 1), 'connected live');
@@ -90,6 +97,7 @@ async function until(fn, msg, timeout = 5000) {
   const carol = await user('carol@example.com');
   for (const [p, n] of [[bob, 'bob'], [carol, 'carol']]) {
     await p.waitForSelector('.grid');
+    await showAll(p);
     assert(await p.locator('.app.view-only').count() === 1, `${n} starts read-only (viewer)`);
     assert(await p.getByRole('button', { name: '+ Workstream', exact: true }).count() === 0, `${n} sees no add buttons`);
     assert(await p.locator('.bar-handle').count() === 0, `${n} gets no drag handles on bars`);
@@ -139,13 +147,14 @@ async function until(fn, msg, timeout = 5000) {
   await until(() => val(cell(bob, 'sample-a1', 6)).then((v) => v === a6), 'Bob sees the undo');
 
   // ── Editing a workstream through its dialog (it sends the whole workstream as the patch) ──
-  await alice.getByRole('button', { name: 'Sales Cloud Rollout', exact: true }).click();
-  await alice.getByRole('button', { name: 'Edit workstream' }).click();
+  await alice.getByRole('button', { name: 'Actions for Sales Cloud Rollout', exact: true }).click();
+  await alice.getByRole('menuitem', { name: 'Edit workstream…' }).click();
   await alice.locator('dialog[open] input[required]').first().fill('Sales Cloud Rollout 2');
   await alice.getByRole('button', { name: 'Save', exact: true }).click();
-  await until(() => bob.getByRole('button', { name: 'Sales Cloud Rollout 2', exact: true }).count().then((n) => n === 1), 'a workstream edited in its dialog reaches Bob');
+  const wsName = (page) => page.locator('.ws-name', { hasText: /^Sales Cloud Rollout 2$/ });
+  await until(() => wsName(bob).count().then((n) => n === 1), 'a workstream edited in its dialog reaches Bob');
   await alice.waitForTimeout(500);
-  assert(await alice.getByRole('button', { name: 'Sales Cloud Rollout 2', exact: true }).count() > 0, '…and stays changed for Alice (not rolled back)');
+  assert(await wsName(alice).count() > 0, '…and stays changed for Alice (not rolled back)');
   await alice.keyboard.press('Escape');
 
   // ── Locks ──
@@ -332,6 +341,7 @@ async function until(fn, msg, timeout = 5000) {
 
   console.log('console errors:', errors.length ? errors : 'none');
   await browser.close();
+  assert(errors.length === 0, 'no unexpected browser errors: ' + errors.join('\n'));
 })().catch(async (e) => {
   console.error(e);
   process.exit(1);

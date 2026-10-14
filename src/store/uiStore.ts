@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { ProjectStatus, WeekKey, Zoom } from '../domain/types';
+import type { Project, ProjectStatus, WeekKey, Zoom } from '../domain/types';
 import { DEFAULT_PLAN_ID } from '../domain/plans';
 import { addWeeks, currentWeek } from '../domain/weeks';
 import { isShared } from './mode';
@@ -38,6 +38,10 @@ export interface Filters {
   status: ProjectStatus | null;
   /** Show only people / workstreams that have a conflict. */
   conflictsOnly: boolean;
+  /** Workstreams view: only workstreams still in the pipeline (on by default). */
+  pipelineOnly: boolean;
+  /** Pipeline workstreams at least this likely to be won (unset ones count as 0%). */
+  minWinProbability: number | null;
   /** Resources view: show only people under capacity over the next 10 weeks. */
   underutilized: boolean;
 }
@@ -48,6 +52,8 @@ export const NO_FILTERS: Filters = {
   sellerId: null,
   status: null,
   conflictsOnly: false,
+  pipelineOnly: true,
+  minWinProbability: null,
   underutilized: false,
 };
 
@@ -60,6 +66,16 @@ export type RowKey = string;
 export const levelGroupKey = (level: string | undefined): RowKey => `g:${level ?? 'none'}`;
 /** Clients are grouped case-insensitively; workstreams without one share a group. */
 export const clientGroupKey = (client: string | undefined): RowKey => `c:${client?.trim().toLowerCase() || ''}`;
+export const sellerGroupKey = (sellerId: string | null | undefined): RowKey => `s:${sellerId ?? ''}`;
+export const stageGroupKey = (status: ProjectStatus): RowKey => `st:${status}`;
+
+/** How the Workstreams view groups its rows. */
+export type GroupBy = 'none' | 'client' | 'seller' | 'stage';
+
+/** Every group row a workstream can sit under, so a jump to it opens whichever grouping is on. */
+export function workstreamGroupKeys(p: Pick<Project, 'client' | 'sellerId' | 'status'> | undefined): RowKey[] {
+  return p ? [clientGroupKey(p.client), sellerGroupKey(p.sellerId), stageGroupKey(p.status)] : [];
+}
 
 export interface ExportRecord {
   at: string;
@@ -78,7 +94,7 @@ interface UIState {
   /** Workstreams view: next-10-weeks utilization sidebar. */
   showUtilization: boolean;
   /** Workstreams view: group workstreams under their client. */
-  groupByClient: boolean;
+  groupBy: GroupBy;
   showHelp: boolean;
   details: DetailsTarget | null;
   cellStyle: CellStyle;
@@ -105,7 +121,7 @@ interface UIState {
   setAllExpanded: (keys: RowKey[], expanded: boolean) => void;
   toggleConflicts: () => void;
   toggleUtilization: () => void;
-  setGroupByClient: (on: boolean) => void;
+  setGroupBy: (groupBy: GroupBy) => void;
   resetFilters: () => void;
   setShowHelp: (show: boolean) => void;
   showDetails: (target: DetailsTarget | null) => void;
@@ -135,7 +151,7 @@ export const useUIStore = create<UIState>()(
       expanded: {},
       showConflicts: true,
       showUtilization: false,
-      groupByClient: true,
+      groupBy: 'none',
       showHelp: false,
       details: null,
       cellStyle: 'pie',
@@ -177,7 +193,7 @@ export const useUIStore = create<UIState>()(
       setRollup: (rollup) => set({ rollup }),
       setDensity: (density) => set({ density }),
       setFocusedCell: (focusedCell) => set({ focusedCell }),
-      setGroupByClient: (groupByClient) => set({ groupByClient }),
+      setGroupBy: (groupBy) => set({ groupBy }),
       resetFilters: () => set({ filters: NO_FILTERS }),
       setShowHelp: (showHelp) => set({ showHelp }),
       showDetails: (details) => set({ details }),
@@ -188,7 +204,8 @@ export const useUIStore = create<UIState>()(
           view,
           focusRow: row,
           expanded: { ...s.expanded, [row]: true, ...Object.fromEntries(parents.map((k) => [k, true])) },
-          filters: NO_FILTERS,
+          // The row may be on a Won workstream, which Pipeline only would hide.
+          filters: { ...NO_FILTERS, pipelineOnly: false },
           anchor: week ? addWeeks(week, -2) : s.anchor,
         })),
       clearFocusRow: () => set({ focusRow: null }),
@@ -197,8 +214,8 @@ export const useUIStore = create<UIState>()(
     }),
     {
       name: 'capacity-ui:v1',
-      // v2: export tracking per plan.
-      version: 2,
+      // v2: export tracking per plan. v3: workstreams start ungrouped and collapsed.
+      version: 3,
       partialize: (s) => ({
         view: s.view,
         manageTab: s.manageTab,
@@ -206,21 +223,29 @@ export const useUIStore = create<UIState>()(
         expanded: s.expanded,
         showConflicts: s.showConflicts,
         showUtilization: s.showUtilization,
-        groupByClient: s.groupByClient,
+        groupBy: s.groupBy,
         cellStyle: s.cellStyle,
         rollup: s.rollup,
         density: s.density,
         exports: s.exports,
       }),
-      migrate: (persisted) => {
+      migrate: (persisted, version) => {
         const { lastExportedAt, lastExportedHash, ...rest } = persisted as Record<string, unknown> & {
           lastExportedAt?: string | null;
           lastExportedHash?: string | null;
+          exports?: Record<string, ExportRecord>;
+          groupByClient?: boolean;
         };
         // The single pre-v2 plan is the "Default" plan.
         const exports: Record<string, ExportRecord> =
-          lastExportedAt && lastExportedHash ? { [DEFAULT_PLAN_ID]: { at: lastExportedAt, hash: lastExportedHash } } : {};
-        return { ...rest, exports } as unknown as UIState;
+          version < 2
+            ? lastExportedAt && lastExportedHash
+              ? { [DEFAULT_PLAN_ID]: { at: lastExportedAt, hash: lastExportedHash } }
+              : {}
+            : (rest.exports ?? {});
+        // v3: the new defaults (no grouping, everything collapsed) replace earlier choices once.
+        delete rest.groupByClient;
+        return { ...rest, exports, groupBy: 'none', expanded: {} } as unknown as UIState;
       },
       // Views that exist only in shared mode fall back when the page runs locally.
       merge: (persisted, current) => {
@@ -238,9 +263,9 @@ export const useUIStore = create<UIState>()(
 );
 
 /**
- * Default expansion: workstreams open (to show who's on them), level and
- * client groups open, people closed (to show load).
+ * Default expansion: workstreams and people closed (one line each, staffing
+ * and load at a glance), level and workstream groups (client, seller, stage) open.
  */
 export function isExpanded(expanded: Record<RowKey, boolean>, key: RowKey): boolean {
-  return expanded[key] ?? (key.startsWith('p:') || key.startsWith('g:') || key.startsWith('c:'));
+  return expanded[key] ?? /^(g|c|s|st):/.test(key);
 }

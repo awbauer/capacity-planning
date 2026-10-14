@@ -73,6 +73,13 @@ describe('RoomEngine', () => {
     expect(room.apply(bob, 'ok', { t: 'resource.update', id: 'res-alex', p: { unset: ['role'] } }, NOW)).toMatchObject({ ok: true });
   });
 
+  it('rejects impossible dates without throwing or changing the plan', () => {
+    for (const week of ['2026-02-30', '2026-13-07', '2026-00-05', '2026-10-06']) {
+      expect(room.apply(bob, `bad-${week}`, set('sample-a1', [week], 25), NOW)).toMatchObject({ ok: false, code: 'invalid' });
+    }
+    expect(room.seq).toBe(1);
+  });
+
   it('catches up a browser with what changed, or the whole plan', () => {
     const seen = room.current();
     room.apply(bob, 'c1', set('sample-a1', [NOW], 100), NOW);

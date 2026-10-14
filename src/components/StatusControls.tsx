@@ -1,6 +1,6 @@
 import type { ProjectStatus } from '../domain/types';
 import { STATUS_LABELS } from '../domain/labels';
-import type { Severity } from '../domain/load';
+import { LIKELY_WIN, type Severity } from '../domain/load';
 
 
 interface StatusSelectProps {
@@ -31,18 +31,27 @@ export function StatusSelect({ value, onChange, compact, disabled }: StatusSelec
 interface AssignmentBadgesProps {
   worst: Severity | null;
   mismatch: boolean;
+  /** At risk only through pipeline work under LIKELY_WIN% likely to be won. */
+  lowRisk?: boolean;
 }
 
 /** Warnings shown under an allocation row's name. */
-export function AssignmentBadges({ worst, mismatch }: AssignmentBadgesProps) {
+export function AssignmentBadges({ worst, mismatch, lowRisk }: AssignmentBadgesProps) {
   if (!worst && !mismatch) return null;
   return (
     <span className="row-badges">
       {worst === 'over' && <span className="badge badge-danger">⚠ Overallocated</span>}
       {worst === 'stretch' && <span className="badge badge-stretch">Stretched</span>}
       {worst === 'risk' && (
-        <span className="badge badge-risk" title="Over capacity only if pipeline work is won">
-          At risk
+        <span
+          className={lowRisk ? 'badge badge-risk low' : 'badge badge-risk'}
+          title={
+            lowRisk
+              ? `Over capacity only if pipeline work under ${LIKELY_WIN}% likely to be won comes through`
+              : 'Over capacity if pipeline work is won'
+          }
+        >
+          {lowRisk ? 'Low risk' : 'At risk'}
         </span>
       )}
       {mismatch && (
