@@ -1,4 +1,6 @@
 import type { LoadClass } from './load';
+import type { WeekKey } from './types';
+import { addWeeks, weeksBetween } from './weeks';
 
 /**
  * How a booked week is drawn on the timeline:
@@ -75,4 +77,65 @@ export function runs(flags: boolean[]): [number, number][] {
     else out.push([i, i]);
   });
   return out;
+}
+
+/** A run of consecutive weeks on one row with the same %: what dragging a bar moves or resizes. */
+export interface WeekRun {
+  from: WeekKey;
+  to: WeekKey;
+  value: number;
+}
+
+/**
+ * The run of equal, non-zero weeks containing `week`, or null if the week is
+ * empty. `sameBar` can end the run earlier, e.g. where the booking state
+ * changes and the grid draws a new bar.
+ */
+export function valueRun(
+  weekly: Record<WeekKey, number>,
+  week: WeekKey,
+  sameBar: (w: WeekKey) => boolean = () => true,
+): WeekRun | null {
+  const value = weekly[week];
+  if (!value) return null;
+  const joins = (w: WeekKey) => weekly[w] === value && sameBar(w);
+  let from = week;
+  while (joins(addWeeks(from, -1))) from = addWeeks(from, -1);
+  let to = week;
+  while (joins(addWeeks(to, 1))) to = addWeeks(to, 1);
+  return { from, to, value };
+}
+
+/** Weeks to fill with the run's % and weeks to clear, for one drag. */
+export interface DragEdits {
+  set: WeekKey[];
+  clear: WeekKey[];
+  value: number;
+}
+
+/**
+ * Drags one edge of a run to `target`. Extending fills the new weeks with the
+ * run's %; shrinking clears weeks. An edge can't pass the other one, so a run
+ * shrinks to one week at least (Delete clears it entirely).
+ */
+export function resizeEdits(run: WeekRun, edge: 'start' | 'end', target: WeekKey): DragEdits {
+  const out: DragEdits = { set: [], clear: [], value: run.value };
+  if (edge === 'end') {
+    const to = target < run.from ? run.from : target;
+    if (to > run.to) out.set = weeksBetween(addWeeks(run.to, 1), to);
+    else if (to < run.to) out.clear = weeksBetween(addWeeks(to, 1), run.to);
+  } else {
+    const from = target > run.to ? run.to : target;
+    if (from < run.from) out.set = weeksBetween(from, addWeeks(run.from, -1));
+    else if (from > run.from) out.clear = weeksBetween(run.from, addWeeks(from, -1));
+  }
+  return out;
+}
+
+/** Moves a whole run by `delta` weeks; where it lands on other bookings, the moved % wins. */
+export function moveEdits(run: WeekRun, delta: number): DragEdits {
+  if (delta === 0) return { set: [], clear: [], value: run.value };
+  const set = weeksBetween(addWeeks(run.from, delta), addWeeks(run.to, delta));
+  const landing = new Set(set);
+  return { set, clear: weeksBetween(run.from, run.to).filter((w) => !landing.has(w)), value: run.value };
 }

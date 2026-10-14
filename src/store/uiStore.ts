@@ -17,6 +17,17 @@ export type ManageTab = 'resources' | 'projects' | 'tags' | 'sellers' | 'plans' 
 /** How allocations render: bars labelled in FTE where they change, or bars with every column's %. */
 export type CellStyle = 'bars' | 'number';
 
+/** Month/Quarter columns show each period's average or its busiest week. */
+export type Rollup = 'avg' | 'peak';
+
+export type Density = 'comfortable' | 'compact';
+
+/** The cell the inspector shows: a role and one of its weeks. */
+export interface FocusedCell {
+  roleId: string;
+  week: WeekKey;
+}
+
 export interface Filters {
   text: string;
   tagId: string | null;
@@ -70,6 +81,12 @@ interface UIState {
   cellStyle: CellStyle;
   /** Capacity panel: the person whose rows are highlighted (others dimmed). Not persisted. */
   highlightResource: string | null;
+  rollup: Rollup;
+  density: Density;
+  /** Grid views: the inspector side panel for the focused cell. */
+  showInspector: boolean;
+  /** The grid's focused cell (not persisted), for the inspector. */
+  focusedCell: FocusedCell | null;
   /** Row to scroll to and highlight once it renders. */
   focusRow: RowKey | null;
   /** Last export per plan id (drives the "unsaved changes" hint). */
@@ -91,6 +108,10 @@ interface UIState {
   showDetails: (target: DetailsTarget | null) => void;
   setCellStyle: (style: CellStyle) => void;
   setHighlightResource: (id: string | null) => void;
+  setRollup: (rollup: Rollup) => void;
+  setDensity: (density: Density) => void;
+  toggleInspector: (show?: boolean) => void;
+  setFocusedCell: (cell: FocusedCell | null) => void;
   /** Opens a view on a row, expanding it and any `parents` (its group rows). */
   jumpTo: (view: View, row: RowKey, week?: WeekKey, parents?: RowKey[]) => void;
   clearFocusRow: () => void;
@@ -116,6 +137,10 @@ export const useUIStore = create<UIState>()(
       details: null,
       cellStyle: 'bars',
       highlightResource: null,
+      rollup: 'avg',
+      density: 'comfortable',
+      showInspector: false,
+      focusedCell: null,
       focusRow: null,
       exports: {},
 
@@ -130,14 +155,25 @@ export const useUIStore = create<UIState>()(
         set((s) => ({
           expanded: { ...s.expanded, ...Object.fromEntries(keys.map((k) => [k, expanded])) },
         })),
-      // One side panel at a time, so the timeline keeps its width.
-      toggleConflicts: () => set((s) => ({ showConflicts: !s.showConflicts, showUtilization: s.showConflicts ? s.showUtilization : false })),
+      // One side panel at a time (issues, capacity, inspector), so the timeline keeps its width.
+      toggleConflicts: () =>
+        set((s) =>
+          s.showConflicts ? { showConflicts: false } : { showConflicts: true, showUtilization: false, showInspector: false, highlightResource: null },
+        ),
       toggleUtilization: () =>
-        set((s) => ({
-          showUtilization: !s.showUtilization,
-          showConflicts: s.showUtilization ? s.showConflicts : false,
-          highlightResource: s.showUtilization ? null : s.highlightResource,
-        })),
+        set((s) =>
+          s.showUtilization
+            ? { showUtilization: false, highlightResource: null }
+            : { showUtilization: true, showConflicts: false, showInspector: false },
+        ),
+      toggleInspector: (show) =>
+        set((s) => {
+          const on = show ?? !s.showInspector;
+          return on ? { showInspector: true, showConflicts: false, showUtilization: false, highlightResource: null } : { showInspector: false };
+        }),
+      setRollup: (rollup) => set({ rollup }),
+      setDensity: (density) => set({ density }),
+      setFocusedCell: (focusedCell) => set({ focusedCell }),
       setGroupByClient: (groupByClient) => set({ groupByClient }),
       resetFilters: () => set({ filters: NO_FILTERS }),
       setShowHelp: (showHelp) => set({ showHelp }),
@@ -169,6 +205,8 @@ export const useUIStore = create<UIState>()(
         showUtilization: s.showUtilization,
         groupByClient: s.groupByClient,
         cellStyle: s.cellStyle,
+        rollup: s.rollup,
+        density: s.density,
         exports: s.exports,
       }),
       migrate: (persisted) => {

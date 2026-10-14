@@ -12,7 +12,20 @@ import { bucketStats, type BucketStats } from '../../domain/aggregate';
 import { colorFor } from '../../domain/colors';
 import { assignmentFlagWeeks } from '../../domain/conflicts';
 import { weekClass, weekKind, type Severity } from '../../domain/load';
-import { BOOKING_LABELS, bookingState, edges, fteLabel, segmentEdges, type BookingState, type SegmentEdge } from '../../domain/timeline';
+import {
+  BOOKING_LABELS,
+  bookingState,
+  edges,
+  fteLabel,
+  moveEdits,
+  resizeEdits,
+  segmentEdges,
+  valueRun,
+  type BookingState,
+  type DragEdits,
+  type SegmentEdge,
+  type WeekRun,
+} from '../../domain/timeline';
 import { isFilled, type Assignment, type WeekKey, type Zoom } from '../../domain/types';
 import { nextStep } from '../../domain/steps';
 import { format } from 'date-fns';
@@ -87,11 +100,23 @@ type IssueKind = 'critical' | 'conflict' | 'potential';
 
 interface RowTimeline {
   stats: BucketStats[];
+  /** What each column shows: its average, or at Month/Quarter zoom its peak if chosen. */
+  shown: number[];
   states: (BookingState | null)[];
   bars: (SegmentEdge | null)[];
   flags: Record<Severity, WeekKey[]>[];
   issues: (IssueKind | null)[];
   issueEdges: (SegmentEdge | null)[];
+}
+
+/** A bar being dragged: one edge (resize) or the whole bar (move), on one row. */
+interface BarDrag {
+  kind: 'start' | 'end' | 'move';
+  r: number;
+  /** Column the drag started in, and the one under the pointer now. */
+  c0: number;
+  c: number;
+  run: WeekRun;
 }
 
 const edgeClasses = (e: SegmentEdge) => `${e.start ? ' seg-start' : ''}${e.end ? ' seg-end' : ''}`;
@@ -189,6 +214,13 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     return out;
   }, [buckets, zoom]);
   const highlight = useUIStore((s) => s.highlightResource);
+  const rollup = useUIStore((s) => s.rollup);
+  const setFocusedCell = useUIStore((s) => s.setFocusedCell);
+  const [barDrag, setBarDrag] = useState<BarDrag | null>(null);
+  const barDragRef = useRef<BarDrag | null>(null);
+  const commitDragRef = useRef<(d: BarDrag) => void>(() => {});
+  /** Bars can be dragged where a column is one week. */
+  const canDrag = zoom === 'week' && can.edit;
   const [anchorKey, setAnchorKey] = useState<CellKey | null>(null);
   const [focusKey, setFocusKey] = useState<CellKey | null>(null);
   const [draft, setDraft] = useState<string | null>(null);
@@ -211,10 +243,24 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
   if (draft !== null && !focus) setDraft(null);
 
   useEffect(() => {
-    const up = () => (dragging.current = false);
+    const up = () => {
+      dragging.current = false;
+      const drag = barDragRef.current;
+      if (!drag) return;
+      barDragRef.current = null;
+      setBarDrag(null);
+      commitDragRef.current(drag);
+    };
     window.addEventListener('mouseup', up);
     return () => window.removeEventListener('mouseup', up);
   }, []);
+
+  // The inspector follows the focused cell.
+  const focusedRole = focusKey ? editRows[editIndex.get(focusKey.row) ?? -1]?.assignmentId : undefined;
+  const focusedWeek = focusKey ? buckets[bucketIndex.get(focusKey.bucket) ?? -1]?.weeks[0] : undefined;
+  useEffect(() => {
+    setFocusedCell(focusedRole && focusedWeek ? { roleId: focusedRole, week: focusedWeek } : null);
+  }, [focusedRole, focusedWeek, setFocusedCell]);
 
   useEffect(() => {
     if (!focus) return;
@@ -264,14 +310,12 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     if (shared) toast(me && me.role === 'viewer' ? 'You have view-only access.' : 'You’re offline; editing is paused.');
   };
 
-  const applyToCells = (area: { r0: number; r1: number; c0: number; c1: number }, percent: number) => {
+  /** Applies edits as one change (one undo step), leaving out locked weeks with a note. */
+  const applyEdits = (wanted: { a: Assignment; weeks: WeekKey[]; percent: number }[]) => {
     if (!can.edit) return readOnlyNotice();
-    const weeks = buckets.slice(area.c0, area.c1 + 1).flatMap((b) => b.weeks);
     const edits: AllocationEdit[] = [];
     let blocked: Lock | undefined;
-    for (let r = area.r0; r <= area.r1; r++) {
-      const a = assignmentsById.get(editRows[r].assignmentId!);
-      if (!a) continue;
+    for (const { a, weeks, percent } of wanted) {
       // Locked weeks are left out (the server would refuse the whole edit).
       const open = weeks.filter((w) => {
         const l = lockedFor(a, w);
@@ -290,6 +334,57 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     }
     setAllocations(edits);
   };
+
+  const applyToCells = (area: { r0: number; r1: number; c0: number; c1: number }, percent: number) => {
+    const weeks = buckets.slice(area.c0, area.c1 + 1).flatMap((b) => b.weeks);
+    applyEdits(
+      editRows
+        .slice(area.r0, area.r1 + 1)
+        .map((row) => assignmentsById.get(row.assignmentId!))
+        .filter((a): a is Assignment => !!a)
+        .map((a) => ({ a, weeks, percent })),
+    );
+  };
+
+  /** What a bar drag would change, for the preview and the commit. */
+  const dragEdits = (drag: BarDrag): DragEdits =>
+    drag.kind === 'move'
+      ? moveEdits(drag.run, drag.c - drag.c0)
+      : resizeEdits(drag.run, drag.kind, buckets[drag.c].weeks[0]);
+
+  const commitDrag = (drag: BarDrag) => {
+    const a = assignmentsById.get(editRows[drag.r]?.assignmentId ?? '');
+    if (!a) return;
+    const e = dragEdits(drag);
+    applyEdits([
+      { a, weeks: e.set, percent: e.value },
+      { a, weeks: e.clear, percent: 0 },
+    ]);
+  };
+  // The window's mouseup handler commits with this render's plan and locks.
+  useEffect(() => {
+    commitDragRef.current = commitDrag;
+  });
+
+  /** Starts dragging a bar's edge, or (Alt+drag) the whole bar. */
+  const startBarDrag = (kind: BarDrag['kind'], r: number, c: number, e: MouseEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (!can.edit) return readOnlyNotice();
+    const a = assignmentsById.get(editRows[r].assignmentId!);
+    if (!a) return;
+    const project = d.projectsById.get(a.projectId);
+    const week = buckets[c].weeks[0];
+    const state = (w: WeekKey) => bookingState(weekClass(project, w), isFilled(a));
+    const run = valueRun(a.weekly, week, (w) => state(w) === state(week));
+    if (!run) return;
+    const drag = { kind, r, c0: c, c, run };
+    barDragRef.current = drag;
+    setBarDrag(drag);
+  };
+
+  const dragPreview = barDrag ? { r: barDrag.r, ...dragEdits(barDrag) } : null;
 
   const applyToSelection = (percent: number) => {
     if (rect) applyToCells(rect, percent);
@@ -356,6 +451,9 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     } else if (e.key === 'Escape') {
       setAnchor(null);
       setFocus(null);
+    } else if ((e.key === 'i' || e.key === 'I') && !mod) {
+      e.preventDefault();
+      useUIStore.getState().toggleInspector();
     } else if (shared && (e.key === 'h' || e.key === 'H') && !mod) {
       e.preventDefault();
       openMenuAt(focus, null, 'history');
@@ -382,6 +480,10 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
 
   const onCellMouseDown = (pos: Pos, e: MouseEvent) => {
     if (e.button !== 0) return;
+    if (e.altKey && zoom === 'week') {
+      const a = assignmentsById.get(editRows[pos.r].assignmentId!);
+      if (a?.weekly[buckets[pos.c].weeks[0]]) return startBarDrag('move', pos.r, pos.c, e);
+    }
     dragging.current = true;
     setFocus(pos);
     if (!e.shiftKey || !anchor) setAnchor(pos);
@@ -428,10 +530,12 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     const issues = flags.map((f): IssueKind | null =>
       f.over.length ? 'critical' : f.stretch.length ? 'conflict' : f.risk.length ? 'potential' : null,
     );
+    const shown = stats.map((st) => (zoom === 'week' ? st.avg : st[rollup]));
     return {
       stats,
+      shown,
       states,
-      bars: segmentEdges(stats.map((st, i) => ({ value: st.avg, state: states[i] }))),
+      bars: segmentEdges(shown.map((value, i) => ({ value, state: states[i] }))),
       flags,
       issues,
       issueEdges: edges(issues),
@@ -442,6 +546,7 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     const a = assignmentsById.get(row.assignmentId!);
     if (!a) return <td key={b.key} />;
     const st = tl.stats[c];
+    const v = tl.shown[c];
     const repWeek = b.weeks.find((w) => a.weekly[w]) ?? b.weeks[0];
     const kind = weekKind(d.projectsById.get(a.projectId), repWeek);
     const cls = weekClass(d.projectsById.get(a.projectId), repWeek);
@@ -467,6 +572,10 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     if (st.avg > 0) classes.push('filled');
     if (role) classes.push('open-role');
     if (!can.edit) classes.push('read-only');
+    if (dragPreview?.r === r) {
+      if (b.weeks.some((w) => dragPreview.set.includes(w))) classes.push('drag-add');
+      if (b.weeks.some((w) => dragPreview.clear.includes(w))) classes.push('drag-remove');
+    }
 
     // Shared mode: locks, who else has this cell selected, and recent changes by others.
     let lockNote: string | undefined;
@@ -502,7 +611,9 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     }
 
     const when = b.weeks.length > 1 ? formatWeekRange(b.weeks[0], b.weeks[b.weeks.length - 1]) : `week of ${formatWeek(b.weeks[0])}`;
-    const amount = `${st.mixed ? 'average ' : ''}${fteLabel(st.avg)} (${Math.round(st.avg)}%)`;
+    const amount = st.mixed
+      ? `${fteLabel(v)} ${rollup === 'peak' ? 'peak' : 'average'} (avg ${Math.round(st.avg)}%, peak ${st.peak}%)`
+      : `${fteLabel(v)} (${Math.round(v)}%)`;
     let title: string | undefined;
     if (person && flag && flagWeek) title = `This row: ${amount}. ${loadTitle(person.resourceId, flagWeek, flag)}`;
     else if (role && st.avg > 0) title = `Open role: ${amount} needed, ${when}. Not anyone's load until filled.`;
@@ -518,7 +629,7 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
     if (notes.length) title = [title, ...notes].filter(Boolean).join('\n');
     const spoken =
       st.avg > 0 && state
-        ? [row.name, BOOKING_LABELS[state], fteLabel(st.avg), when, issue === 'critical' || issue === 'conflict' ? 'over capacity' : issue === 'potential' ? 'over capacity if pipeline is won' : '']
+        ? [row.name, BOOKING_LABELS[state], fteLabel(v), when, issue === 'critical' || issue === 'conflict' ? 'over capacity' : issue === 'potential' ? 'over capacity if pipeline is won' : '']
             .filter(Boolean)
             .join(', ')
         : undefined;
@@ -527,7 +638,7 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
       <td
         key={b.key}
         data-pos={`${r}:${c}`}
-        data-value={Math.round(st.avg)}
+        data-value={Math.round(v)}
         className={classes.join(' ')}
         title={title}
         aria-label={spoken}
@@ -549,20 +660,31 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
             : undefined
         }
         onMouseEnter={() => {
+          const drag = barDragRef.current;
+          if (drag) {
+            if (drag.c !== c) setBarDrag((barDragRef.current = { ...drag, c }));
+            return;
+          }
           if (dragging.current) setFocus({ r, c });
         }}
         onDoubleClick={() => {
           // A single click only selects; a double-click cycles 0 → 25 → 50 → 100 → 0.
           if (draft !== null) return;
-          applyToCells({ r0: r, r1: r, c0: c, c1: c }, nextStep(st.avg));
+          applyToCells({ r0: r, r1: r, c0: c, c1: c }, nextStep(v));
         }}
       >
         {state && bar && (
           <span className={`bar bar-${state}${edgeClasses(bar)}`} aria-hidden="true">
+            {canDrag && bar.start && (
+              <span className="bar-handle start" title="Drag to change when this starts" onMouseDown={(e) => startBarDrag('start', r, c, e)} />
+            )}
+            {canDrag && bar.end && (
+              <span className="bar-handle end" title="Drag to change when this ends" onMouseDown={(e) => startBarDrag('end', r, c, e)} />
+            )}
             {(bar.start || cellStyle === 'number') && (
               <span className="bar-label">
                 {st.mixed && '~'}
-                {cellStyle === 'number' ? formatPct(st.avg) : fteLabel(st.avg)}
+                {cellStyle === 'number' ? formatPct(v) : fteLabel(v)}
               </span>
             )}
           </span>
@@ -673,7 +795,22 @@ export function TimeGrid({ zoom, buckets, rows, corner, empty }: Props) {
                 className={['col', b.weeks.includes(thisWeek) ? 'today' : '', monthStarts.has(c) ? 'month-start' : ''].filter(Boolean).join(' ')}
                 title={b.weeks.length > 1 ? `${b.weeks.length} weeks` : undefined}
               >
-                <span className="col-label">{b.label}</span>
+                {zoom === 'week' ? (
+                  <span className="col-label">{b.label}</span>
+                ) : (
+                  <button
+                    type="button"
+                    className="col-label col-drill"
+                    title={`Show the weeks of ${b.label} ${b.sublabel ?? ''}`.trim()}
+                    onClick={() => {
+                      const ui = useUIStore.getState();
+                      ui.setZoom('week');
+                      ui.setAnchor(b.weeks[0]);
+                    }}
+                  >
+                    {b.label}
+                  </button>
+                )}
                 {zoom === 'week' && b.sublabel && <span className="col-sub">{b.sublabel}</span>}
               </th>
             ))}

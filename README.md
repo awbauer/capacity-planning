@@ -35,7 +35,7 @@ By default it runs entirely in your browser. Optionally, a **shared workspace** 
 | **Issues** (panel) | The toolbar's issue counts (conflicts, at risk and open roles in the visible weeks, across the whole plan) open the list: overallocations, at-risk weeks, skill gaps and open roles. Click one to jump to it. |
 | **Capacity** (panel) | Team capacity in FTE-weeks for the next 10 weeks or the weeks on screen: won delivery, pipeline and headroom (or overbooked) as shares of the same supply, then people (click one to highlight their rows), open roles and capabilities. Everyone counts as 1.0 FTE a week. |
 
-Zoom between Week, Month and Quarter. At month and quarter zoom a cell shows the period's average (`~` when its weeks differ) and is flagged if any week in it is over. *Issues only* hides workstreams or people without an issue in the visible weeks; *Filters* narrows by capability, stage and seller.
+Zoom between Week, Month and Quarter. At month and quarter zoom a cell shows the period's average, or its busiest week with **Peak** (`~` when its weeks differ; hover for both). Click a month or quarter header to drill down to its weeks and is flagged if any week in it is over. *Issues only* hides workstreams or people without an issue in the visible weeks; *Filters* narrows by capability, stage and seller.
 
 ## Editing allocations
 
@@ -43,6 +43,8 @@ Zoom between Week, Month and Quarter. At month and quarter zoom a cell shows the
 | --- | --- |
 | Change one week | Double-click: 0 → 25 → 50 → 100 → 0 |
 | Change a range | Drag (or Shift+click), then Space to step, or type 25 / 50 / 100 and Enter |
+| Lengthen, shorten or move a booking | Week view: drag a bar's start or end handle; Alt+drag the bar to move it. One undo step, locked weeks left alone |
+| See a week's details | Select it and press **I** (or **Details** in the toolbar): the booking, the person's whole load that week, why it's flagged, and the role's actions |
 | Clear | Select, then Delete |
 | Move around | Arrow keys, Tab / Shift+Tab |
 | Staff someone for a date range | **+ Person** on a workstream or **+ Workstream** on a person |
@@ -55,7 +57,7 @@ Press **?** in the app for every shortcut. Totals aren't rounded. The bars / % t
 - **Plans:** keep several independent plans (such as scenarios) and switch between them from the dropdown next to the title.
 - **Export / Import** (header **⋯** menu): export saves the open plan as versioned JSON. Importing a file with the same plan name overwrites that plan (you're warned if it's older); a new name adds a plan.
 - **CSV:** a workstream's **•••** menu → *Download CSV* exports its staffing plan. **⋯** → *Export staffing (CSV)* exports everything as one pivot-ready table.
-- **Theme:** Manage → Settings & data → *Appearance*: Auto (follows your system), Light or Dark. Saved in this browser. Colors are design tokens at the top of `src/styles.css`.
+- **Theme:** Manage → Settings & data → *Appearance*: Auto (follows your system), Light or Dark. Saved in this browser, as is *Density* (Comfortable or Compact rows). Colors are design tokens at the top of `src/styles.css`.
 
 **Storage:** without the shared workspace, everything lives in this browser's `localStorage`. It doesn't sync, and clearing site data wipes it, so export regularly. The toolbar shows when you last exported.
 

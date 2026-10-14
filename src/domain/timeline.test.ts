@@ -3,7 +3,8 @@ import { capacityByPerson, capacitySummary, issueCounts, openRoleDemand, shareOf
 import { findOverallocations } from './conflicts';
 import { splitLoads } from './load';
 import { createEmptyPlan } from './sampleData';
-import { bookingState, fte, fteLabel, runs, segmentEdges, type TimelineCell } from './timeline';
+import { bookingState, fte, fteLabel, moveEdits, resizeEdits, runs, segmentEdges, valueRun, type TimelineCell } from './timeline';
+import { addWeeks } from './weeks';
 import type { PlanData } from './types';
 
 const W1 = '2026-10-05';
@@ -133,5 +134,39 @@ describe('capacity in FTE-weeks', () => {
       openRoles: 1,
     });
     expect(issueCounts(over, [], [W3])).toEqual({ conflicts: 0, conflictPeople: 0, risks: 0, openRoles: 0 });
+  });
+});
+
+describe('dragging bars', () => {
+  const W = (n: number) => addWeeks('2026-10-05', n);
+  const weekly = { [W(0)]: 50, [W(1)]: 50, [W(2)]: 50, [W(3)]: 100, [W(5)]: 50 };
+
+  it('finds the run of equal weeks around a week', () => {
+    expect(valueRun(weekly, W(1))).toEqual({ from: W(0), to: W(2), value: 50 });
+    expect(valueRun(weekly, W(3))).toEqual({ from: W(3), to: W(3), value: 100 });
+    expect(valueRun(weekly, W(4))).toBeNull();
+    // A state change (e.g. presales → delivery) ends the bar.
+    expect(valueRun(weekly, W(0), (w) => w < W(2))).toEqual({ from: W(0), to: W(1), value: 50 });
+  });
+
+  it('extends and shrinks either edge', () => {
+    const run = valueRun(weekly, W(0))!;
+    expect(resizeEdits(run, 'end', W(4))).toEqual({ set: [W(3), W(4)], clear: [], value: 50 });
+    expect(resizeEdits(run, 'end', W(0))).toEqual({ set: [], clear: [W(1), W(2)], value: 50 });
+    expect(resizeEdits(run, 'start', W(-2))).toEqual({ set: [W(-2), W(-1)], clear: [], value: 50 });
+    expect(resizeEdits(run, 'start', W(2))).toEqual({ set: [], clear: [W(0), W(1)], value: 50 });
+  });
+
+  it("can't drag an edge past the other one", () => {
+    const run = valueRun(weekly, W(0))!;
+    expect(resizeEdits(run, 'end', W(-3)).clear).toEqual([W(1), W(2)]);
+    expect(resizeEdits(run, 'start', W(9)).clear).toEqual([W(0), W(1)]);
+  });
+
+  it('moves a run, clearing only the weeks it leaves', () => {
+    const run = valueRun(weekly, W(0))!;
+    expect(moveEdits(run, 2)).toEqual({ set: [W(2), W(3), W(4)], clear: [W(0), W(1)], value: 50 });
+    expect(moveEdits(run, -1)).toEqual({ set: [W(-1), W(0), W(1)], clear: [W(2)], value: 50 });
+    expect(moveEdits(run, 0).set).toEqual([]);
   });
 });

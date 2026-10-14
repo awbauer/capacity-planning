@@ -119,6 +119,12 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           title="View and data"
           rows={[
             { what: 'Change the time scale', how: 'Week / Month / Quarter' },
+            { what: 'Month / Quarter columns: average or busiest week', how: <><b>Avg</b> / <b>Peak</b> in the toolbar</> },
+            { what: 'Drill down from a month or quarter to its weeks', how: 'Click its column header' },
+            { what: 'Lengthen or shorten a booking', how: 'Week view: drag the handle at either end of its bar' },
+            { what: 'Move a booking to other weeks', how: <><Keys keys={['Alt']} /> + drag the bar</> },
+            { what: 'Details of the selected week: booking, load, issues, actions', how: <><Keys keys={['I']} /> or <b>Details</b> in the toolbar</> },
+            { what: 'Fit more rows on screen', how: <><b>Manage</b> → Settings &amp; data → Density: <b>Compact</b></> },
             { what: 'Show bars or every week’s %', how: 'Bars / % toggle' },
             { what: 'Move through time', how: <><b>‹</b> <b>Today</b> <b>›</b></> },
             { what: 'Switch plans, or start a new one', how: 'Plan dropdown next to the title' },

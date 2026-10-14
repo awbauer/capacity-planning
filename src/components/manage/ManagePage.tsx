@@ -499,6 +499,8 @@ const THEME_OPTIONS: { id: Theme; label: string }[] = [
 /** Light, dark, or the system's choice; saved in this browser. */
 function AppearanceSetting() {
   const theme = useTheme();
+  const density = useUIStore((s) => s.density);
+  const setDensity = useUIStore((s) => s.setDensity);
   return (
     <fieldset className="shared-setting">
       <legend>Appearance</legend>
@@ -510,6 +512,14 @@ function AppearanceSetting() {
         ))}
       </nav>
       <p className="muted small">Auto follows your system’s light or dark setting. Saved in this browser.</p>
+      <nav className="segmented" aria-label="Density">
+        {(['comfortable', 'compact'] as const).map((d) => (
+          <button key={d} type="button" aria-pressed={density === d} onClick={() => setDensity(d)}>
+            {d === 'comfortable' ? 'Comfortable' : 'Compact'}
+          </button>
+        ))}
+      </nav>
+      <p className="muted small">Compact rows fit more workstreams and people on screen.</p>
     </fieldset>
   );
 }

@@ -245,6 +245,16 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
               </button>
             ))}
           </nav>
+          {ui.zoom !== 'week' && (
+            <nav className="segmented" aria-label="Rollup" title="What a month or quarter column shows">
+              <button type="button" aria-pressed={ui.rollup === 'avg'} title="Average of the period's weeks" onClick={() => ui.setRollup('avg')}>
+                Avg
+              </button>
+              <button type="button" aria-pressed={ui.rollup === 'peak'} title="The period's busiest week" onClick={() => ui.setRollup('peak')}>
+                Peak
+              </button>
+            </nav>
+          )}
           <div className="nav-group">
             <button type="button" className="btn btn-icon" aria-label="Earlier" title="Earlier" onClick={() => ui.setAnchor(shiftAnchor(ui.zoom, ui.anchor, -1))}>
               ‹
@@ -383,6 +393,15 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
               %
             </button>
           </nav>
+          <button
+            type="button"
+            className="btn"
+            aria-pressed={ui.showInspector}
+            title="Details of the selected week: booking, the person's load and issues (I)"
+            onClick={() => ui.toggleInspector()}
+          >
+            Details
+          </button>
           {shared && (
             <button
               type="button"

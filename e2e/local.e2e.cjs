@@ -485,6 +485,88 @@ const moreMenu = (page, item) => choose(page, page.getByRole('button', { name: '
   assert(await page.locator('dialog[open] .stat-label', { hasText: 'target' }).count() === 1, 'demand: person chip opens person details');
   await page.keyboard.press('Escape');
 
+  // ---- Drag bars, rollups, inspector, density (design follow-ups)
+  await page.getByRole('button', { name: 'Workstreams', exact: true }).first().click();
+  await page.getByRole('button', { name: 'Week', exact: true }).click();
+  // A bar whose end has two empty weeks after it.
+  const target = await page.evaluate(() => {
+    for (const td of document.querySelectorAll('tr[id^="row-a:"] td.cell')) {
+      if (!td.querySelector('.bar-handle.end')) continue;
+      const n1 = td.nextElementSibling, n2 = n1?.nextElementSibling;
+      if (n1?.dataset.value === '0' && n2?.dataset.value === '0') return { row: td.closest('tr').id, pos: td.dataset.pos, value: Number(td.dataset.value) };
+    }
+    return null;
+  });
+  assert(target, 'found a bar to drag');
+  const [tr, tc] = target.pos.split(':').map(Number);
+  const cellAt = (c) => page.locator(`[data-pos="${tr}:${c}"]`);
+  const roleId = target.row.slice('row-a:'.length);
+  const weeksOf = async () => Object.keys((await planNow()).assignments.find((x) => x.id === roleId).weekly).length;
+  const before2 = await weeksOf();
+  const handle = cellAt(tc).locator('.bar-handle.end');
+  await cellAt(tc).hover();
+  const hb = await handle.boundingBox();
+  await page.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2);
+  await page.mouse.down();
+  const tb = await cellAt(tc + 2).boundingBox();
+  await page.mouse.move(tb.x + tb.width / 2, tb.y + tb.height / 2, { steps: 5 });
+  assert(await page.locator('td.drag-add').count() === 2, 'drag previews the two added weeks');
+  await page.mouse.up();
+  assert((await weeksOf()) === before2 + 2 && (await val(cellAt(tc + 2))) === target.value, 'dragging the end handle extends the bar with its %');
+  await page.locator('.grid-scroll').focus();
+  await page.keyboard.press('Control+z');
+  assert((await weeksOf()) === before2, 'one undo reverts the drag');
+  // Alt+drag moves the whole bar one week later.
+  const ab = await cellAt(tc).boundingBox();
+  await page.keyboard.down('Alt');
+  await page.mouse.move(ab.x + ab.width / 2, ab.y + ab.height / 2);
+  await page.mouse.down();
+  const nb = await cellAt(tc + 1).boundingBox();
+  await page.mouse.move(nb.x + nb.width / 2, nb.y + nb.height / 2, { steps: 5 });
+  await page.mouse.up();
+  await page.keyboard.up('Alt');
+  assert((await val(cellAt(tc + 1))) === target.value && (await weeksOf()) === before2, 'Alt+drag moves the bar, keeping its length');
+  await page.locator('.grid-scroll').focus();
+  await page.keyboard.press('Control+z');
+  assert((await val(cellAt(tc + 1))) === 0, 'undo moves it back');
+  await shot(page, '35-drag');
+
+  // Inspector: I opens details for the focused week.
+  await cellAt(tc).click();
+  await page.keyboard.press('i');
+  const insp = page.locator('aside[aria-label=Details]');
+  assert(await insp.count() === 1 && (await insp.locator('.inspector-facts').innerText()).includes('This bar'), 'I opens the inspector on the focused bar');
+  assert(await page.locator('.conflicts').count() === 0, 'inspector replaces the issues panel');
+  await shot(page, '36-inspector');
+  await page.keyboard.press('i');
+  assert(await insp.count() === 0, 'I closes it again');
+
+  // Month rollups: Avg / Peak, and a month header drills down to weeks.
+  await page.getByRole('button', { name: 'Month', exact: true }).click();
+  const peakBtn = page.getByLabel('Rollup').getByRole('button', { name: 'Peak' });
+  assert(await peakBtn.count() === 1, 'Avg / Peak shown at Month zoom');
+  const monthVals = () => page.locator('tr[id^="row-a:"] td.cell.filled').evaluateAll((tds) => tds.map((td) => Number(td.dataset.value)));
+  const avgVals = await monthVals();
+  await peakBtn.click();
+  const peakVals = await monthVals();
+  assert(peakVals.every((v, i) => v >= avgVals[i]) && peakVals.some((v, i) => v > avgVals[i]), 'Peak shows each month\'s busiest week');
+  await page.getByLabel('Rollup').getByRole('button', { name: 'Avg' }).click();
+  await page.locator('.col-drill').nth(2).click();
+  assert(await page.locator('nav[aria-label=Zoom] button[aria-pressed=true]', { hasText: 'Week' }).count() === 1, 'clicking a month header drills down to its weeks');
+
+  // Compact density.
+  const rowH = () => page.locator('tr.role-row').first().evaluate((el) => el.getBoundingClientRect().height);
+  const comfy = await rowH();
+  await page.getByRole('button', { name: 'Manage', exact: true }).click();
+  await page.getByRole('button', { name: 'Settings & data' }).click();
+  await page.getByRole('navigation', { name: 'Density' }).getByRole('button', { name: 'Compact' }).click();
+  await page.getByRole('button', { name: 'Workstreams', exact: true }).first().click();
+  const compact = await rowH();
+  assert(compact < comfy, `compact rows are shorter (${comfy} → ${compact})`);
+  await shot(page, '37-compact');
+  await page.getByRole('button', { name: 'Manage', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Density' }).getByRole('button', { name: 'Comfortable' }).click();
+
   // ---- Theme: Auto follows the system; Light / Dark override it and survive a reload
   const bg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
   const isDark = async () => {

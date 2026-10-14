@@ -1,4 +1,5 @@
 import { RowComments } from '../collab/RowComments';
+import { bucketStats } from '../domain/aggregate';
 import { initials } from '../collab/format';
 import { fte, fteLabel } from '../domain/timeline';
 import { MenuItem, Popover } from './Popover';
@@ -60,6 +61,13 @@ export function ProjectView({ buckets }: Props) {
   const plan = usePlan();
   const d = useDerived();
   const zoom = useUIStore((s) => s.zoom);
+  const rollup = useUIStore((s) => s.rollup);
+  /** A Month/Quarter column's value: the average of its weeks, or the busiest one. */
+  const roll = (valueOf: (w: string) => number, weeks: string[]) => {
+    const st = bucketStats(valueOf, weeks);
+    return zoom === 'week' ? st.avg : st[rollup];
+  };
+  const rollWord = rollup === 'peak' ? 'peak week' : 'average';
   const filters = useUIStore((s) => s.filters);
   const expanded = useUIStore((s) => s.expanded);
   const setExpanded = useUIStore((s) => s.setExpanded);
@@ -208,7 +216,7 @@ export function ProjectView({ buckets }: Props) {
         </div>
       ),
       summary: (b) => {
-        const avg = b.weeks.reduce((s, w) => s + (totals?.get(w) ?? 0), 0) / b.weeks.length;
+        const avg = roll((w) => totals?.get(w) ?? 0, b.weeks);
         const inBucket = (sev: Severity) =>
           assignments.some((a) => flagsByAssignment.get(a.id)![sev].some((w) => b.weeks.includes(w)));
         const worst: Severity | null = inBucket('over') ? 'over' : inBucket('stretch') ? 'stretch' : inBucket('risk') ? 'risk' : null;
@@ -218,7 +226,7 @@ export function ProjectView({ buckets }: Props) {
             : worst === 'risk'
               ? ' · someone is over capacity if pipeline work is won'
               : '';
-        const openFte = b.weeks.reduce((n, w) => n + roles.reduce((m, r) => m + (r.weekly[w] ?? 0), 0), 0) / b.weeks.length;
+        const openFte = roll((w) => roles.reduce((m, r) => m + (r.weekly[w] ?? 0), 0), b.weeks);
         const openNote = openFte ? ` · +${fteLabel(openFte)} in open roles` : '';
         return {
           text: avg ? fteLabel(avg) : '',
@@ -233,7 +241,7 @@ export function ProjectView({ buckets }: Props) {
           ].join(' '),
           title:
             avg || openFte
-              ? `${fteLabel(avg)} staffed${b.weeks.length > 1 ? ' (average)' : ''}${openNote}${note}`
+              ? `${fteLabel(avg)} staffed${b.weeks.length > 1 ? ` (${rollWord})` : ''}${openNote}${note}`
               : undefined,
         };
       },
@@ -390,12 +398,12 @@ export function ProjectView({ buckets }: Props) {
         </div>
       ),
       summary: (b) => {
-        const avg = b.weeks.reduce((n, w) => n + fte(w), 0) / b.weeks.length;
+        const avg = roll(fte, b.weeks);
         return {
           text: avg ? fteLabel(avg) : '',
           band: 'staffed',
           className: 'group-sum',
-          title: avg ? `${fteLabel(avg)} staffed across this client's workstreams${b.weeks.length > 1 ? ' (average)' : ''}` : undefined,
+          title: avg ? `${fteLabel(avg)} staffed across this client's workstreams${b.weeks.length > 1 ? ` (${rollWord})` : ''}` : undefined,
         };
       },
     });

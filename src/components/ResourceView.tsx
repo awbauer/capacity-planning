@@ -1,6 +1,6 @@
 import { RowComments } from '../collab/RowComments';
 import { useMemo, useState } from 'react';
-import { bucketStats, totalsGetter } from '../domain/aggregate';
+import { bucketStats, totalsGetter, type BucketStats } from '../domain/aggregate';
 import { assignmentFlagWeeks, resourceLoadFlagged } from '../domain/conflicts';
 import type { Derived } from '../domain/derive';
 import { STATUS_LABELS } from '../domain/labels';
@@ -46,6 +46,9 @@ export function ResourceView({ buckets }: Props) {
   const plan = usePlan();
   const d = useDerived();
   const zoom = useUIStore((s) => s.zoom);
+  const rollup = useUIStore((s) => s.rollup);
+  /** A Month/Quarter column's value: the average of its weeks, or the busiest one. */
+  const pick = (st: BucketStats) => (zoom === 'week' ? st.avg : st[rollup]);
   const filters = useUIStore((s) => s.filters);
   const expanded = useUIStore((s) => s.expanded);
   const setExpanded = useUIStore((s) => s.setExpanded);
@@ -167,6 +170,8 @@ export function ResourceView({ buckets }: Props) {
       summary: (b) => {
         const c = bucketStats(committed, b.weeks);
         const t = bucketStats(tentative, b.weeks);
+        const cv = pick(c);
+        const tv = pick(t);
         const sevs = b.weeks.map(sevOf);
         let className = 'heat';
         if (sevs.includes('over')) className += ' heat-over';
@@ -177,16 +182,16 @@ export function ResourceView({ buckets }: Props) {
             className += ' heat-risk-critical';
           }
         }
-        else if (c.avg >= threshold * 0.8) className += ' heat-full';
-        else if (c.avg > 0) className += ' heat-part';
-        else if (t.avg > 0) className += ' heat-tentative';
+        else if (cv >= threshold * 0.8) className += ' heat-full';
+        else if (cv > 0) className += ' heat-part';
+        else if (tv > 0) className += ' heat-tentative';
         const multi = b.weeks.length > 1;
         const parts: string[] = [];
         if (c.avg || c.peak) parts.push(multi ? `Committed avg ${Math.round(c.avg)}%, peak ${c.peak}%` : `${c.peak}% committed`);
         if (t.avg || t.peak) parts.push(multi ? `pipeline avg +${Math.round(t.avg)}%` : `+${t.peak}% pipeline (tentative)`);
         return {
-          text: c.avg ? String(Math.round(c.avg)) : '',
-          extra: t.avg ? `+${Math.round(t.avg)}` : undefined,
+          text: cv ? String(Math.round(cv)) : '',
+          extra: tv ? `+${Math.round(tv)}` : undefined,
           className,
           title: parts.length ? parts.join(' · ') : 'Unallocated',
         };
@@ -281,8 +286,8 @@ export function ResourceView({ buckets }: Props) {
       ),
       summary: (b) => {
         // Average utilisation of the level's people (%), so groups of any size compare directly.
-        const c = bucketStats(committedOf, b.weeks).avg / 100;
-        const t = bucketStats(tentativeOf, b.weeks).avg / 100;
+        const c = pick(bucketStats(committedOf, b.weeks)) / 100;
+        const t = pick(bucketStats(tentativeOf, b.weeks)) / 100;
         const util = (c / people.length) * 100;
         const extra = (t / people.length) * 100;
         const ppl = `${people.length} ${people.length === 1 ? 'person' : 'people'}`;

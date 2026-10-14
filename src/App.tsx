@@ -4,6 +4,7 @@ import { ConflictsPanel } from './components/ConflictsPanel';
 import { DemandView } from './components/DemandView';
 import { DetailsModal } from './components/DetailsModal';
 import { HelpDialog } from './components/HelpDialog';
+import { InspectorPanel } from './components/InspectorPanel';
 import { ActivityView } from './collab/ActivityView';
 import { CommentsPanel } from './collab/CommentsPanel';
 import { MentionsView } from './collab/MentionsView';
@@ -83,6 +84,8 @@ function PlannerApp() {
   const anchor = useUIStore((s) => s.anchor);
   const showConflicts = useUIStore((s) => s.showConflicts);
   const showUtilization = useUIStore((s) => s.showUtilization);
+  const showInspector = useUIStore((s) => s.showInspector);
+  const density = useUIStore((s) => s.density);
   const showHelp = useUIStore((s) => s.showHelp);
   const setShowHelp = useUIStore((s) => s.setShowHelp);
   const buckets = useMemo(() => makeBuckets(zoom, anchor), [zoom, anchor]);
@@ -114,7 +117,7 @@ function PlannerApp() {
   }, []);
 
   return (
-    <div className={can.edit ? 'app' : 'app view-only'}>
+    <div className={['app', can.edit ? '' : 'view-only', density === 'compact' ? 'density-compact' : ''].filter(Boolean).join(' ')}>
       <Toolbar buckets={buckets} />
       {view === 'manage' ? (
         <main className="main main-scroll">
@@ -139,6 +142,7 @@ function PlannerApp() {
               {view === 'projects' ? <ProjectView buckets={buckets} /> : <ResourceView buckets={buckets} />}
             </div>
             {view === 'projects' && showUtilization && <CapacityPanel buckets={buckets} />}
+            {showInspector && <InspectorPanel />}
             {shared && <CommentsPanel />}
             {showConflicts && !(shared && commentsOpen) && <ConflictsPanel />}
           </main>
@@ -165,7 +169,7 @@ function PlannerApp() {
               </span>
             </span>
             <span>
-              Double-click a week to cycle 0 → 25 → 50 → 100%.{' '}
+              Double-click a week to cycle 0 → 25 → 50 → 100%. Drag a bar’s end to resize it, Alt+drag to move it. I shows details.{' '}
               <button type="button" className="link-inline" onClick={() => setShowHelp(true)}>
                 All shortcuts (?)
               </button>
