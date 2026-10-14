@@ -106,6 +106,13 @@ describe('diff and puts', () => {
   });
 });
 
+describe('references', () => {
+  it('reports duplicate ids', () => {
+    const dup = { ...base, assignments: [...base.assignments, { ...base.assignments[0] }] };
+    expect(checkReferences(dup)).toMatch(/twice/);
+  });
+});
+
 describe('revert', () => {
   it('undoes any op exactly when nothing changed in between', () => {
     for (const op of OPS) {
@@ -128,6 +135,34 @@ describe('revert', () => {
     expect(weekly[NOW]).toBe(50); // mine undone
     expect(weekly['2026-10-12']).toBe(25); // theirs kept
     expect(skipped).toHaveLength(1);
+  });
+
+  it("doesn't delete what it created when others have built on it since", () => {
+    const run = (mine: Op, theirs: Op) => {
+      const a = applyOp(base, mine);
+      const changes = diffPlans(base, a);
+      return revertChanges(applyOp(a, theirs), changes);
+    };
+    // Alice adds workstream P; Bob adds a role on it; Alice undoes.
+    const p = run(OPS[9], {
+      t: 'role.add',
+      role: { id: 'bob-role', projectId: 'proj-new', resourceId: null, name: 'R', tagIds: [], weekly: { [NOW]: 50 } },
+    });
+    expect(p.plan.projects.some((x) => x.id === 'proj-new')).toBe(true);
+    expect(p.plan.assignments.some((x) => x.id === 'bob-role')).toBe(true);
+    expect(p.skipped).toHaveLength(1);
+    // Alice adds a person; Bob puts them in a role.
+    const r = run(OPS[6], { t: 'role.assign', id: 'sample-role1', resourceId: 'res-new' });
+    expect(r.plan.assignments.find((x) => x.id === 'sample-role1')?.resourceId).toBe('res-new');
+    expect(r.skipped).toHaveLength(1);
+    // Alice adds a capability; Bob tags someone with it.
+    const t = run(OPS[0], { t: 'resource.update', id: 'res-sam', p: { set: { tagIds: ['tag-new'] } } });
+    expect(t.plan.resources.find((x) => x.id === 'res-sam')?.tagIds).toEqual(['tag-new']);
+    expect(t.skipped).toHaveLength(1);
+    // Alice adds a role; Bob changes its weeks: the role stays.
+    const w = run(OPS[12], { t: 'cells.set', edits: [{ roleId: 'role-new', weeks: [NOW], value: 100 }] });
+    expect(w.plan.assignments.find((x) => x.id === 'role-new')?.weekly[NOW]).toBe(100);
+    expect(w.skipped).toHaveLength(1);
   });
 
   it('brings back a deleted workstream with its roles', () => {

@@ -49,6 +49,10 @@ export class Workspace extends DurableObject<Env> {
     return this.ws.plan(id);
   }
 
+  abandonPlan(id: string) {
+    this.ws.abandonPlan(id);
+  }
+
   createPlan(actor: string, name: string, note?: string) {
     return this.ws.createPlan(actor, name, note);
   }

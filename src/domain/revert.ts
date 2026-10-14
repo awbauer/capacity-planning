@@ -42,6 +42,22 @@ const asEntity = (plan: PlanData, kind: EntityKind, id: string): Entity | null =
   return kind === 'settings' ? ({ id, ...(v as object) } as Entity) : (v as Entity);
 };
 
+/** Whether anything in the plan refers to this entity (so deleting it would cascade). */
+function hasDependents(plan: PlanData, kind: EntityKind, id: string): boolean {
+  switch (kind) {
+    case 'project':
+      return plan.assignments.some((a) => a.projectId === id);
+    case 'resource':
+      return plan.assignments.some((a) => a.resourceId === id);
+    case 'seller':
+      return plan.projects.some((p) => p.sellerId === id);
+    case 'tag':
+      return [...plan.resources, ...plan.projects, ...plan.assignments].some((x) => x.tagIds.includes(id));
+    default:
+      return false;
+  }
+}
+
 /**
  * Drops or clears references to things that no longer exist (after a revert
  * brings back a role whose workstream is gone, say). Untouched entities keep
@@ -122,9 +138,17 @@ export function revertChanges(plan: PlanData, changes: Change[]): RevertResult {
     }
   }
 
-  // 3. Remove what it created (children first, so cascades don't hide them).
+  // 3. Remove what it created (children first, so cascades don't hide them), unless it
+  //    was changed since or something else now depends on it: deleting it would take
+  //    other people's work with it.
   for (const c of changes.filter((c) => c.before === null && c.field === undefined).sort(byOrder).reverse()) {
-    if (c.kind === 'settings' || !getEntity(next, c.kind, c.id)) continue;
+    if (c.kind === 'settings') continue;
+    const current = getEntity(next, c.kind, c.id);
+    if (!current) continue;
+    if (!deepEqual(current, c.after) || hasDependents(next, c.kind, c.id)) {
+      skipped.push(c);
+      continue;
+    }
     next = applyOp(next, { t: DELETE_OP[c.kind], id: c.id } as Op);
   }
 

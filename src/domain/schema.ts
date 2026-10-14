@@ -99,6 +99,19 @@ export function parsePlanFile(input: unknown): PlanFile {
  * workstream, or a week that isn't a Monday), or null if there is none.
  */
 export function checkReferences(plan: PlanData): string | null {
+  for (const [kind, list] of [
+    ['capability', plan.tags],
+    ['seller', plan.sellers],
+    ['person', plan.resources],
+    ['workstream', plan.projects],
+    ['role', plan.assignments],
+  ] as const) {
+    const seen = new Set<string>();
+    for (const x of list) {
+      if (seen.has(x.id)) return `the ${kind} id "${x.id}" is used twice`;
+      seen.add(x.id);
+    }
+  }
   const tagIds = new Set(plan.tags.map((t) => t.id));
   const sellerIds = new Set(plan.sellers.map((s) => s.id));
   const resourceIds = new Set(plan.resources.map((r) => r.id));

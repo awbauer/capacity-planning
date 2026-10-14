@@ -66,11 +66,15 @@ export type Op =
 
 export type OpType = Op['t'];
 
-/** Splits a store-style patch (undefined = clear the field) into set/unset. */
+/**
+ * Splits a store-style patch (undefined = clear the field) into set/unset.
+ * `id` is never part of a patch (callers often pass a whole entity).
+ */
 export function toPatch<T extends object>(patch: Partial<T>): Patch<T> {
   const set: Partial<T> = {};
   const unset: (keyof T & string)[] = [];
   for (const [k, v] of Object.entries(patch) as [keyof T & string, unknown][]) {
+    if (k === 'id') continue;
     if (v === undefined) unset.push(k);
     else (set as Record<string, unknown>)[k] = v;
   }

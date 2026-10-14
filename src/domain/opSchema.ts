@@ -2,7 +2,9 @@ import { z } from 'zod';
 import { CLICK_STEPS } from './steps';
 import { CAREER_LEVELS } from './types';
 import { normalizeWeek } from './weeks';
+import { getEntity, type Change } from './diff';
 import type { Op } from './ops';
+import type { PlanData } from './types';
 
 /** Ids are uuids or short slugs; nothing that could be mistaken for markup or SQL. */
 export const entityId = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/, 'invalid id');
@@ -143,3 +145,30 @@ export const newLockSchema = z.discriminatedUnion('scope', [
   z.strictObject({ scope: z.literal('project'), id: entityId, projectId: entityId, note: lockNote }),
   z.strictObject({ scope: z.literal('past'), id: entityId, note: lockNote }),
 ]);
+
+/** The full shape each kind of entity must have. */
+export const entitySchemas = { tag, seller, resource, project, role, settings } as const;
+
+/**
+ * Checks every entity a change touched, as it now is, against its full
+ * schema. Patches are only checked for shape, so this is what stops an op
+ * from leaving an entity broken (e.g. unsetting a required field).
+ * Returns a message for the first broken entity, or null.
+ */
+export function validateChanged(after: PlanData, changes: Change[]): string | null {
+  const seen = new Set<string>();
+  for (const c of changes) {
+    const key = `${c.kind}:${c.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const value = c.kind === 'settings' ? after.settings : getEntity(after, c.kind, c.id);
+    if (value === null) continue; // deleted
+    const r = entitySchemas[c.kind].safeParse(value);
+    if (!r.success) {
+      const issue = r.error.issues[0];
+      const label = (value as { name?: string }).name ? `“${(value as { name: string }).name}”` : c.id;
+      return `That would leave ${c.kind === 'role' ? 'role' : c.kind} ${label} invalid (${issue.path.join('.') || c.kind}: ${issue.message}).`;
+    }
+  }
+  return null;
+}

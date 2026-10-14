@@ -9,7 +9,7 @@ import {
   type Put,
 } from '../src/domain/diff';
 import { brokenLocks, type Lock, type NewLock } from '../src/domain/locks';
-import { parseOp } from '../src/domain/opSchema';
+import { parseOp, validateChanged } from '../src/domain/opSchema';
 import { applyOp, flattenOps, type Op } from '../src/domain/ops';
 import { canApply, opNeedsAdmin, type UserRole } from '../src/domain/permissions';
 import type { BatchInfo, RejectCode } from '../src/domain/protocol';
@@ -158,6 +158,8 @@ export class RoomEngine {
     if (problem) return { ok: false, code: 'invalid', msg: problem };
     const changes = diffPlans(before, after);
     if (changes.length === 0) return { ok: 'noop', seq: this.seq };
+    const broken = validateChanged(after, changes);
+    if (broken) return { ok: false, code: 'invalid', msg: broken };
     const locked = this.lockCheck(changes, before, user, thisWeek);
     if (locked) return locked;
     const replace = flattenOps(op).some((o) => o.t === 'plan.replace');
@@ -189,6 +191,8 @@ export class RoomEngine {
     if (diff.length === 0) {
       return { ok: false, code: 'invalid', msg: 'Nothing to undo: everything it changed has been changed again since.' };
     }
+    const broken = validateChanged(after, diff);
+    if (broken) return { ok: false, code: 'invalid', msg: broken };
     const locked = this.lockCheck(diff, before, user, thisWeek);
     if (locked) return locked;
     const result = this.commitRevert(user, cid, before, after, diff, {

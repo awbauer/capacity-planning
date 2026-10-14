@@ -99,7 +99,13 @@ async function route(c: Ctx): Promise<Response> {
     const problem = plan && checkReferences(plan);
     if (problem) throw new HttpError(400, problem);
     const row = await ws.createPlan(me.email, b.name, b.note);
-    await roomStub(env, row.id).init(row.id, { email: me.email, name: me.name }, plan ?? null, `Started plan “${row.name}”${b.note ? ` ${b.note}` : ''}`);
+    try {
+      await roomStub(env, row.id).init(row.id, { email: me.email, name: me.name }, plan ?? null, `Started plan “${row.name}”${b.note ? ` ${b.note}` : ''}`);
+    } catch (err) {
+      // Nothing was saved: don't leave an empty plan holding the name.
+      await ws.abandonPlan(row.id);
+      throw err;
+    }
     return json({ plan: row }, 201);
   }
 

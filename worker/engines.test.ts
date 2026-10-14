@@ -59,6 +59,20 @@ describe('RoomEngine', () => {
     expect(room.seq).toBe(1);
   });
 
+  it('rejects ops whose result breaks an entity (required fields unset or emptied)', () => {
+    for (const op of [
+      { t: 'resource.update', id: 'res-alex', p: { unset: ['name'] } },
+      { t: 'project.update', id: 'proj-acme', p: { unset: ['status'] } },
+      { t: 'project.update', id: 'proj-acme', p: { unset: ['sellerId'] } },
+      { t: 'tag.update', id: 'tag-dc', p: { unset: ['color'] } },
+      { t: 'seller.update', id: 'seller-jordan', p: { set: { name: '  ' } } },
+    ]) {
+      expect(room.apply(bob, `c-${JSON.stringify(op)}`, op, NOW), JSON.stringify(op)).toMatchObject({ ok: false, code: 'invalid' });
+    }
+    expect(room.seq).toBe(1);
+    expect(room.apply(bob, 'ok', { t: 'resource.update', id: 'res-alex', p: { unset: ['role'] } }, NOW)).toMatchObject({ ok: true });
+  });
+
   it('catches up a browser with what changed, or the whole plan', () => {
     const seen = room.current();
     room.apply(bob, 'c1', set('sample-a1', [NOW], 100), NOW);
@@ -142,6 +156,21 @@ describe('WorkspaceEngine', () => {
     expect(ws.touchUser('dan@x.com', 'Dan')).toMatchObject({ disabled: true });
     expect(() => ws.updateUser('bob@x.com', 'alice@x.com', { role: 'viewer' })).toThrow(/owner/);
     expect(ws.updateUser('alice@x.com', 'bob@x.com', { role: 'editor' }).role).toBe('editor');
+  });
+
+  it("won't change an existing person's role through an invite", () => {
+    ws.touchUser('bob@x.com', 'Bob');
+    expect(() => ws.inviteUser('alice@x.com', 'bob@x.com', 'admin')).toThrow(/already/);
+    expect(ws.user('bob@x.com')?.role).toBe('viewer');
+    expect(ws.inviteUser('alice@x.com', 'New@X.com ', 'editor')).toMatchObject({ email: 'new@x.com', role: 'editor' });
+  });
+
+  it('abandons a plan whose content failed to save, freeing its name', () => {
+    const p = ws.createPlan('bob@x.com', 'Q4');
+    ws.abandonPlan(p.id);
+    expect(ws.plans(true)).toEqual([]);
+    expect(ws.activity({ workspace: true }).entries).toEqual([]);
+    expect(ws.createPlan('bob@x.com', 'Q4').name).toBe('Q4');
   });
 
   it('keeps plan names unique, and archives instead of deleting', () => {

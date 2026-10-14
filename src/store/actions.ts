@@ -1,6 +1,7 @@
 import { newId, nextTagColor } from '../domain/ids';
 import { fillWeekly, toPatch, type Op } from '../domain/ops';
 import { createEmptyPlan, createSamplePlan } from '../domain/sampleData';
+import { snapToStep } from '../domain/steps';
 import type {
   Assignment,
   CapabilityTag,
@@ -132,7 +133,7 @@ export function makePlanActions(plan: () => PlanData, dispatch: (op: Op) => void
       const weeks = fill ? weeksBetween(fill.from, fill.to) : [];
       if (existing) {
         if (!fill) return existing;
-        dispatch({ t: 'cells.set', edits: [{ roleId: existing.id, weeks, value: fill.percent }] });
+        dispatch({ t: 'cells.set', edits: [{ roleId: existing.id, weeks, value: snapToStep(fill.percent) }] });
         return { ...existing, weekly: fillWeekly(existing.weekly, weeks, fill.percent) };
       }
       const title = plan().resources.find((r) => r.id === resourceId)?.role ?? '';
@@ -150,7 +151,10 @@ export function makePlanActions(plan: () => PlanData, dispatch: (op: Op) => void
     removeAssignment: (id) => dispatch({ t: 'role.delete', id }),
     setAllocations: (edits) => {
       if (edits.length === 0) return;
-      dispatch({ t: 'cells.set', edits: edits.map((e) => ({ roleId: e.assignmentId, weeks: e.weeks, value: e.percent })) });
+      dispatch({
+        t: 'cells.set',
+        edits: edits.map((e) => ({ roleId: e.assignmentId, weeks: e.weeks, value: snapToStep(e.percent) })),
+      });
     },
 
     addRole: (projectId, input, fill) => {

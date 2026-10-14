@@ -174,7 +174,8 @@ export class WorkspaceEngine {
   inviteUser(actor: string, email: string, role: UserRole): UserRow {
     const clean = email.trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+$/.test(clean)) throw new Error('That isn’t an email address.');
-    if (this.user(clean)) return this.updateUser(actor, clean, { role, disabled: false });
+    // Role changes go through updateUser (which open connections hear about), never through an invite.
+    if (this.user(clean)) throw new Error(`${clean} already has an account; change their role or access in the table.`);
     this.sql.all(
       'INSERT INTO users (email, name, role, disabled, created_at, last_seen_at) VALUES (?, ?, ?, 0, ?, NULL)',
       clean,
@@ -184,6 +185,24 @@ export class WorkspaceEngine {
     );
     this.event(actor, 'user', `Added ${clean} as ${role}`);
     return this.user(clean)!;
+  }
+
+  /**
+   * Removes a plan created moments ago whose content then failed to save
+   * (it has no history yet), along with its "created" event.
+   */
+  abandonPlan(id: string) {
+    this.sql.transaction(() => {
+      const events = this.sql.all<{ batch_id: string }>(
+        "SELECT batch_id FROM activity_refs WHERE kind = 'plan' AND ref_id = ?",
+        id,
+      );
+      for (const e of events) {
+        this.sql.all("DELETE FROM activity WHERE batch_id = ? AND plan_id = ''", e.batch_id);
+        this.sql.all('DELETE FROM activity_refs WHERE batch_id = ?', e.batch_id);
+      }
+      this.sql.all('DELETE FROM plans WHERE id = ?', id);
+    });
   }
 
   plans(includeArchived = false): PlanRow[] {
