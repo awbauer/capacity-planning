@@ -153,7 +153,7 @@ What you get in shared mode:
 3. **Set the variables** (Worker → Settings → Variables; `wrangler.jsonc` has `keep_vars`, so deploys keep them):
    - `TEAM_DOMAIN`: `https://<your-team>.cloudflareaccess.com`
    - `POLICY_AUD`: the Access application's *Application Audience (AUD) Tag*
-   - `OWNER_EMAILS`: comma-separated emails that are always admins (at least yours)
+   - `OWNER_EMAILS`: comma-separated emails that are always admins (at least yours). If it's empty and nobody is an admin yet, the first person to sign in becomes admin (recorded in Activity). Everyone else starts as a viewer (or whatever an admin sets under People & access), and viewers can't create plans.
    - `TIMEZONE` (in `wrangler.jsonc`, default `America/New_York`): decides when "this week" starts for the past-weeks lock.
 4. Open the app, turn on the shared workspace, and upload your plans.
 

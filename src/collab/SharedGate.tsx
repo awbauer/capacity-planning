@@ -4,6 +4,7 @@ import { readLocalPlans } from '../store/localPlanStore';
 import { useCollabStore } from '../store/collabStore';
 import { bootShared, openSharedPlan, readPrefs, RECENT_MS } from '../store/sharedPlanStore';
 import { useCan } from '../store/useCan';
+import { ROLE_LABELS } from '../domain/permissions';
 import { weekInZone } from '../domain/weeks';
 import { createSharedPlanInteractively } from './sharedPlanActions';
 import { UploadLocalPlansDialog } from './UploadLocalPlansDialog';
@@ -41,6 +42,7 @@ export function SharedGate({ children }: { children: ReactNode }) {
   const loaded = useCollabStore((s) => s.loaded);
   const plans = useCollabStore((s) => s.plans);
   const can = useCan();
+  const me = useCollabStore((s) => s.me);
   const [upload, setUpload] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [hasLocal] = useState(() => readLocalPlans().some((p) => p.plan.projects.length + p.plan.resources.length > 0));
@@ -152,7 +154,17 @@ export function SharedGate({ children }: { children: ReactNode }) {
               </button>
             </div>
           ) : (
-            plans.length === 0 && <p className="muted">Ask an editor or admin to create one.</p>
+            <div className="callout gate-viewer">
+              <p>
+                You’re signed in as <strong>{me?.email ?? 'unknown'}</strong> with view-only access
+                {me ? ` (${ROLE_LABELS[me.role]})` : ''}, so you can’t create plans.
+              </p>
+              <p className="muted small">
+                A workspace admin can make you an editor under Manage → People &amp; access. If nobody is an admin yet,
+                add your email to the Worker’s <code>OWNER_EMAILS</code> variable in Cloudflare (Settings → Variables and
+                secrets), then reload this page.
+              </p>
+            </div>
           )}
           {dialog}
         </Screen>

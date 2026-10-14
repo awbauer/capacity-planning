@@ -2560,3 +2560,9 @@ tr.archived {
   opacity: 0.55;
   cursor: not-allowed;
 }
+.gate-viewer {
+  margin-top: 12px;
+}
+.gate-viewer p {
+  margin: 0 0 6px;
+}
