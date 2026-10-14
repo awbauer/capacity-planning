@@ -44,7 +44,9 @@ const moreMenu = (page, item) => choose(page, page.getByRole('button', { name: '
 
   const val = (loc) => loc.getAttribute('data-value').then(Number);
   const plan = () => page.evaluate(() => JSON.parse(localStorage.getItem('capacity-plan:v1')).state.plan);
-  assert(await page.locator('.bar').count() > 20, 'allocations render as bars');
+  assert(await page.locator('.grid svg.pie').count() > 20 && await page.locator('.grid .bar').count() === 0, 'allocations render as circles by default');
+  await page.getByRole('button', { name: 'Bars', exact: true }).click();
+  assert(await page.locator('.bar').count() > 20, 'the Bars display draws bars');
   assert(await page.locator('[id="row-a:sample-a1"] .bar-label').count() < await page.locator('[id="row-a:sample-a1"] td.filled').count(), 'FTE is labelled where a bar starts or changes, not every week');
 
   // Click cycles an empty cell 0 → 25 → 50 → 100 → 0 (Drew on Initech, before the project starts).

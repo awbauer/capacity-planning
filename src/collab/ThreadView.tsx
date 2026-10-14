@@ -43,11 +43,7 @@ export function ThreadView({ thread, label }: { thread: Thread; label?: string }
     <div className={resolved ? 'thread resolved' : 'thread'} data-thread={thread.id}>
       <div className="thread-head">
         {label && <span className="thread-label">{label}</span>}
-        {resolved && (
-          <span className="badge" title={`Resolved by ${thread.resolvedBy} · ${when(thread.resolvedAt!)}`}>
-            Resolved
-          </span>
-        )}
+        {resolved && <span className="badge">Resolved</span>}
         <span className="spacer" />
         {canComment && (
           <button
@@ -64,6 +60,12 @@ export function ThreadView({ thread, label }: { thread: Thread; label?: string }
           <CommentItem key={c.id} thread={thread} comment={c} nameOf={nameOf} />
         ))}
       </ol>
+      {resolved && (
+        <p className="resolved-by">
+          ✓ Resolved by <strong title={thread.resolvedBy}>{thread.resolvedBy ? nameOf(thread.resolvedBy) : 'someone'}</strong> ·{' '}
+          <time dateTime={new Date(thread.resolvedAt!).toISOString()}>{when(thread.resolvedAt!)}</time>
+        </p>
+      )}
       {canComment && (
         <MentionInput
           key={thread.id}

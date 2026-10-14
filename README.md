@@ -50,7 +50,7 @@ Zoom between Week, Month and Quarter. At month and quarter zoom a cell shows the
 | Staff someone for a date range | **+ Person** on a workstream or **+ Workstream** on a person |
 | Undo / redo | Ctrl/⌘+Z, Ctrl/⌘+Shift+Z |
 
-Press **?** in the app for every shortcut. Totals aren't rounded. The toolbar's display toggle switches between **bars** (labelled in FTE where they start or change), **circles** (a Harvey ball in every booked week, filled to its %) and **%** (every week's number).
+Press **?** in the app for every shortcut. Totals aren't rounded. The toolbar's display toggle switches between **circles** (the default: a Harvey ball in every booked week, filled to its %), **bars** (labelled in FTE where they start or change) and **%** (every week's number).
 
 ## Plans, export and settings
 
@@ -76,7 +76,7 @@ Opt-in, per browser: Manage → Settings & data → *Use the shared workspace in
 - **Freeze locks:** right-click to lock cells, a role or a workstream, with a note. Only the lock's owner (or an admin) can change what it covers. Admins can also lock all past weeks.
 - **Comments:**
   - Start one from a cell (right-click → *Comment…*, or **M**) or a row's 💬 button.
-  - Threads can be resolved and reopened.
+  - Threads can be resolved and reopened. A resolved thread says who resolved it and when.
   - The toolbar's *Comments* lists every thread in the plan.
 - **@mentions:**
   - Type `@` to mention someone.

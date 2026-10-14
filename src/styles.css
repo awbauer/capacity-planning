@@ -3658,6 +3658,16 @@ tr.archived {
 .thread.resolved .comments {
   opacity: 0.75;
 }
+.resolved-by {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--won-text);
+}
+
+.resolved-by strong {
+  font-weight: 650;
+}
+
 .thread-head {
   display: flex;
   align-items: center;

@@ -15,8 +15,8 @@ export type DetailsTarget = { kind: 'project'; id: string } | { kind: 'resource'
 export type ManageTab = 'resources' | 'projects' | 'tags' | 'sellers' | 'plans' | 'users' | 'settings';
 
 /**
- * How allocations render: bars labelled in FTE where they change, Harvey-ball
- * circles in every week, or bars with every week's %.
+ * How allocations render: Harvey-ball circles in every week (the default),
+ * bars labelled in FTE where they change, or bars with every week's %.
  */
 export type CellStyle = 'bars' | 'pie' | 'number';
 
@@ -138,7 +138,7 @@ export const useUIStore = create<UIState>()(
       groupByClient: true,
       showHelp: false,
       details: null,
-      cellStyle: 'bars',
+      cellStyle: 'pie',
       highlightResource: null,
       rollup: 'avg',
       density: 'comfortable',
@@ -228,7 +228,7 @@ export const useUIStore = create<UIState>()(
         return {
           ...current,
           ...p,
-          cellStyle: p.cellStyle === 'number' || p.cellStyle === 'pie' ? p.cellStyle : 'bars',
+          cellStyle: p.cellStyle === 'number' || p.cellStyle === 'bars' ? p.cellStyle : 'pie',
           view: (p.view === 'activity' || p.view === 'mentions') && !isShared() ? 'projects' : (p.view ?? current.view),
           manageTab: p.manageTab === 'users' && !isShared() ? 'settings' : (p.manageTab ?? current.manageTab),
         };
