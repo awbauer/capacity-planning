@@ -20,7 +20,25 @@
     "PlanRoom": { "type": "durable-object", "storage": "sqlite" },
     "Workspace": { "type": "durable-object", "storage": "sqlite" }
   },
-  "observability": { "enabled": true },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "redact_query_string": false,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "invocation_logs": true,
+      "persist": true
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "persist": true
+    },
+    "issues": {
+      "enabled": true
+    }
+  },
   // Cloudflare Email Service, for emailing people when they're @mentioned. Nothing is
   // sent until MAIL_FROM and APP_URL are set; see README "Comments and mentions".
   "send_email": [{ "name": "EMAIL" }],
