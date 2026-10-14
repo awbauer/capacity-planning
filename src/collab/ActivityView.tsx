@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, apiDownload } from '../api/client';
 import type { Change } from '../domain/diff';
 import type { Assignment } from '../domain/types';
@@ -75,27 +75,48 @@ export function ActivityView() {
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
 
+  // Each request carries a number; answers to requests that have been superseded are dropped.
+  const requestNo = useRef(0);
   const load = useCallback(
-    async (cursor?: string) => {
-      setLoading(true);
+    async (mode: 'reset' | 'more' | 'newer', cursor?: string) => {
+      // "newer" doesn't supersede anything; it's dropped if a reset or next page started meanwhile.
+      const no = mode === 'newer' ? requestNo.current : ++requestNo.current;
+      if (mode !== 'newer') setLoading(true);
       try {
         const r = await api<{ entries: Entry[]; next?: string }>(`/api/activity?${toQuery(filters, cursor)}`);
-        setEntries((prev) => (cursor ? [...prev, ...r.entries] : r.entries));
-        setNext(r.next);
+        if (no !== requestNo.current) return;
+        if (mode === 'reset') {
+          setEntries(r.entries);
+          setNext(r.next);
+        } else if (mode === 'more') {
+          setEntries((prev) => [...prev, ...r.entries.filter((e) => !prev.some((p) => p.batchId === e.batchId))]);
+          setNext(r.next);
+        } else {
+          // New changes go on top; older pages already loaded (and the open row) stay.
+          setEntries((prev) => [...r.entries.filter((e) => !prev.some((p) => p.batchId === e.batchId)), ...prev]);
+        }
       } catch (e) {
-        toast(e instanceof Error ? e.message : String(e));
+        if (no === requestNo.current) toast(e instanceof Error ? e.message : String(e));
       } finally {
-        setLoading(false);
+        if (no === requestNo.current) setLoading(false);
       }
     },
     [filters, toast],
   );
 
-  // Reload on filter changes, and when the open plan changes (meta.revision), so it stays live.
+  // Start over when the filters change.
   useEffect(() => {
-    const t = setTimeout(() => void load(), 250);
+    const t = setTimeout(() => void load('reset'), 250);
     return () => clearTimeout(t);
-  }, [load, meta.revision]);
+  }, [load]);
+
+  // Stay live: when the open plan changes, fetch the newest page and add what's new.
+  const firstRevision = useRef(meta.revision);
+  useEffect(() => {
+    if (meta.revision === firstRevision.current) return;
+    const t = setTimeout(() => void load('newer'), 400);
+    return () => clearTimeout(t);
+  }, [meta.revision, load]);
 
   const set = (patch: Partial<Filters>) => setFilters((f) => ({ ...f, ...patch }));
   const actors = useMemo(() => [...new Set(entries.map((e) => e.actor))].sort(), [entries]);
@@ -192,7 +213,7 @@ export function ActivityView() {
         </table>
       )}
       {next && (
-        <button type="button" className="btn" disabled={loading} onClick={() => void load(next)}>
+        <button type="button" className="btn" disabled={loading} onClick={() => void load('more', next)}>
           {loading ? 'Loading…' : 'Older changes'}
         </button>
       )}

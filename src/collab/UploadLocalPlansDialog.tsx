@@ -31,24 +31,31 @@ export function UploadLocalPlansDialog({ onClose }: { onClose: () => void }) {
     onClose();
   };
 
+  /** Uploads every ticked plan, keeps going past failures, and unticks each one that made it. */
   const upload = async () => {
     setBusy(true);
     setError(null);
     let first: string | undefined;
-    try {
-      for (const r of rows.filter((x) => x.on)) {
-        const plan = local.find((p) => p.meta.id === r.id)!.plan;
+    let done = 0;
+    const failed: string[] = [];
+    let next = rows;
+    for (const r of rows.filter((x) => x.on)) {
+      const plan = local.find((p) => p.meta.id === r.id)!.plan;
+      try {
         const created = await createSharedPlan(r.name.trim(), plan, '(uploaded from a browser)');
         first ??= created.id;
+        done++;
+        next = next.map((x) => (x.id === r.id ? { ...x, on: false } : x));
+        setRows(next);
+      } catch (e) {
+        failed.push(`“${r.name}”: ${e instanceof Error ? e.message : String(e)}`);
       }
-      toast(`Uploaded ${rows.filter((x) => x.on).length} plan(s).`, 'info');
-      if (first) openSharedPlan(first);
-      close();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
     }
+    setBusy(false);
+    if (done) toast(`Uploaded ${done} plan${done === 1 ? '' : 's'}.`, 'info');
+    if (first) openSharedPlan(first);
+    if (failed.length) setError(`Not uploaded (fix and try again): ${failed.join(' · ')}`);
+    else close();
   };
 
   return (
