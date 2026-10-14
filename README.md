@@ -110,6 +110,8 @@ The toolbar shows when the open plan was last exported and whether it has unexpo
 
 A new browser starts with an empty *Default* plan. To try the app, use Manage → Settings & data → *Load sample data*.
 
+**Theme.** Manage → Settings & data → *Appearance*: Auto (follows your system), Light or Dark. The choice is saved in this browser.
+
 ## Shared workspace
 
 An opt-in mode where plans live on the server and several people edit them at once. Each person turns it on in **their own browser**: Manage → Settings & data → *Use the shared workspace in this browser*. It's off by default; with it off the app works exactly as described above and makes no server calls. Switching never changes the plans saved in your browser. The first time you switch, you're offered an upload of them as new shared plans; after that the two copies are separate. The toolbar shows **Shared**.

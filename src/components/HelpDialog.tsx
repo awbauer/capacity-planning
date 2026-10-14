@@ -122,6 +122,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
             { what: 'Rename or delete plans', how: <><b>Manage</b> → Plans</> },
             { what: 'Back up or move a plan (export bumps its version; import overwrites the plan with the same name, else adds one)', how: <><b>Export</b> / <b>Import</b></> },
             { what: 'One workstream’s staffing plan as a spreadsheet', how: <><b>⤓ CSV</b> on the workstream row</> },
+            { what: 'Light or dark theme (or follow the system)', how: <><b>Manage</b> → Settings &amp; data → <b>Appearance</b></> },
             { what: 'All staffing in one CSV (one line per person per week)', how: <><b>CSV</b> in the toolbar</> },
           ]}
         />

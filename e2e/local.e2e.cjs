@@ -466,6 +466,35 @@ const assert = (cond, msg) => { if (!cond) { throw new Error('ASSERT: ' + msg); 
   assert(await page.locator('dialog[open] .stat-label', { hasText: 'target' }).count() === 1, 'demand: person chip opens person details');
   await page.keyboard.press('Escape');
 
+  // ---- Theme: Auto follows the system; Light / Dark override it and survive a reload
+  const bg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  const isDark = async () => {
+    const [r, g, b] = (await bg()).match(/\d+/g).map(Number);
+    return r + g + b < 3 * 128;
+  };
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.getByRole('button', { name: 'Manage', exact: true }).click();
+  await page.getByRole('button', { name: 'Settings & data' }).click();
+  const themeBtn = (name) => page.getByRole('navigation', { name: 'Theme' }).getByRole('button', { name, exact: true });
+  assert((await themeBtn('Auto').getAttribute('aria-pressed')) === 'true', 'theme: Auto by default');
+  assert(await isDark(), 'theme: Auto follows a dark system');
+  await themeBtn('Light').click();
+  assert(!(await isDark()), 'theme: Light overrides a dark system');
+  await shot(page, '43-theme-light');
+  await page.reload();
+  assert(!(await isDark()), 'theme: Light survives a reload');
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.getByRole('button', { name: 'Manage', exact: true }).click();
+  await page.getByRole('button', { name: 'Settings & data' }).click();
+  await themeBtn('Dark').click();
+  assert(await isDark(), 'theme: Dark overrides a light system');
+  await page.getByRole('button', { name: 'Workstreams', exact: true }).first().click();
+  await shot(page, '44-theme-dark');
+  await page.getByRole('button', { name: 'Manage', exact: true }).click();
+  await page.getByRole('button', { name: 'Settings & data' }).click();
+  await themeBtn('Auto').click();
+  assert(!(await isDark()), 'theme: back on Auto, it follows the (light) system again');
+
   console.log('console errors/warnings:', errors.length ? errors : 'none');
   await browser.close();
 })().catch((e) => { console.error(e); process.exit(1); });

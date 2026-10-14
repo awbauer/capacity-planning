@@ -1,3 +1,4 @@
+import { setTheme, useTheme, type Theme } from '../../store/theme';
 import { useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { hashString } from '../../domain/hash';
@@ -489,6 +490,30 @@ function SharedWorkspaceSetting() {
   );
 }
 
+const THEME_OPTIONS: { id: Theme; label: string }[] = [
+  { id: 'auto', label: 'Auto' },
+  { id: 'light', label: 'Light' },
+  { id: 'dark', label: 'Dark' },
+];
+
+/** Light, dark, or the system's choice; saved in this browser. */
+function AppearanceSetting() {
+  const theme = useTheme();
+  return (
+    <fieldset className="shared-setting">
+      <legend>Appearance</legend>
+      <nav className="segmented" aria-label="Theme">
+        {THEME_OPTIONS.map((o) => (
+          <button key={o.id} type="button" aria-pressed={theme === o.id} onClick={() => setTheme(o.id)}>
+            {o.label}
+          </button>
+        ))}
+      </nav>
+      <p className="muted small">Auto follows your system’s light or dark setting. Saved in this browser.</p>
+    </fieldset>
+  );
+}
+
 /** Shared mode: admins can freeze every week before this one. */
 function PastWeeksLock() {
   const can = useCan();
@@ -517,6 +542,7 @@ function SettingsPanel() {
   return (
     <section className="settings">
       <SharedWorkspaceSetting />
+      <AppearanceSetting />
       {shared && !can.admin && <p className="callout">Only admins can change these settings.</p>}
       {shared && <PastWeeksLock />}
       <fieldset className="plain-fieldset" disabled={!can.admin}>

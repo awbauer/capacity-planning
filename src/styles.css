@@ -33,10 +33,50 @@
   --hatch: rgba(102, 112, 133, 0.12);
   --shadow: 0 8px 30px rgba(16, 24, 40, 0.18);
   --label-w: 340px;
+  --comment: #d97706;
 }
 
+/* Dark: chosen in Manage → Settings (data-theme, set in index.html and store/theme.ts), or by the system when on Auto. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #0f1218;
+  --surface: #171b23;
+  --surface-2: #1e232d;
+  --border: #2b313d;
+  --border-strong: #3a4250;
+  --text: #e6e9ef;
+  --muted: #98a2b3;
+  --accent: #5b8def;
+  --accent-text: #0b1020;
+  --accent-soft: #1e2b47;
+  --fill: #1c2740;
+  --sel: #2a3d66;
+  --today: rgba(91, 141, 239, 0.1);
+  --danger: #ff8a7a;
+  --danger-bg: #4a1d1a;
+  --danger-strong: #7a2a24;
+  --warn: #f3c46b;
+  --warn-bg: #3d2f12;
+  --risk: #f5d742;
+  --risk-bg: #3d3610;
+  --risk-strong: #8a7a1c;
+  --stretch: #fb923c;
+  --stretch-bg: #4a2410;
+  --stretch-strong: #9a4a1c;
+  --presales: #a78bfa;
+  --presales-bg: #2a2140;
+  --edge: #2dd4bf;
+  --ok-bg: #173a24;
+  --part-bg: #1b2433;
+  --hatch: rgba(152, 162, 179, 0.1);
+  --shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+  --comment: #fbbf24;
+}
+:root[data-theme='light'] {
+  color-scheme: light;
+}
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
     --bg: #0f1218;
     --surface: #171b23;
     --surface-2: #1e232d;
@@ -68,6 +108,7 @@
     --part-bg: #1b2433;
     --hatch: rgba(152, 162, 179, 0.1);
     --shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+    --comment: #fbbf24;
   }
 }
 
@@ -2582,14 +2623,6 @@ tr.archived {
   pointer-events: none;
 }
 
-:root {
-  --comment: #d97706;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --comment: #fbbf24;
-  }
-}
 
 .row-comment {
   border: none;
