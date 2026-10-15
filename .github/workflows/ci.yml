@@ -24,6 +24,8 @@ jobs:
       - run: npx oxlint
       - run: npx vitest run
       - run: npm run build
+      # Explicit config forces source bundling, as wrangler preview does after its custom build.
+      - run: npx wrangler deploy --dry-run --config wrangler.jsonc
 
   e2e:
     name: End-to-end (local, shared workspace, adversarial)

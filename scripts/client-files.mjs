@@ -9,6 +9,17 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const OUT = path.join(root, 'worker', 'client-files.generated.json');
 
+// JSON string modules work in both Vite and Wrangler's source bundler. Vite-only
+// `?raw` imports fail when Workers Builds runs `wrangler preview` after its custom build.
+export function writeMcpApp() {
+  const html = readFileSync(path.join(root, 'worker', 'mcp', 'app.html'), 'utf-8');
+  const out = path.join(root, 'worker', 'mcp', 'app.generated.json');
+  const json = JSON.stringify(html);
+  if (!existsSync(out) || readFileSync(out, 'utf-8') !== json) writeFileSync(out, json);
+}
+
+writeMcpApp();
+
 export function writeClientFiles(dir = path.join(root, 'dist', 'client')) {
   const files = {};
   const walk = (d) => {

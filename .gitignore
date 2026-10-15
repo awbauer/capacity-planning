@@ -33,3 +33,5 @@ worker/client-files.generated.json
 
 # Scratch work and isolated end-to-end state
 work/
+
+worker/mcp/app.generated.json
