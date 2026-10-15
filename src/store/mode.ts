@@ -21,11 +21,54 @@ export function getPreferredMode(): AppMode {
   return storage('localStorage')?.getItem(MODE_KEY) === 'shared' ? 'shared' : 'local';
 }
 
+/** `?sync=on|off` (also shared/local, 1/0, true/false) in the address bar. */
+export const SYNC_PARAM = 'sync';
+
+/** The mode a `?sync=` value asks for, or null when it isn't one we know. */
+export function parseSyncParam(value: string | null): AppMode | null {
+  switch (value?.trim().toLowerCase()) {
+    case 'on':
+    case 'shared':
+    case '1':
+    case 'true':
+      return 'shared';
+    case 'off':
+    case 'local':
+    case '0':
+    case 'false':
+      return 'local';
+    default:
+      return null;
+  }
+}
+
+/**
+ * Applies `?sync=` as the same per-browser switch as Manage → Settings, then
+ * removes it from the address bar so a reload or a shared link doesn't keep
+ * re-applying it. Runs before the mode is first read, so no reload is needed.
+ */
+function applySyncParam() {
+  if (typeof window === 'undefined') return;
+  try {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has(SYNC_PARAM)) return;
+    const mode = parseSyncParam(url.searchParams.get(SYNC_PARAM));
+    url.searchParams.delete(SYNC_PARAM);
+    window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
+    if (!mode) return;
+    storage('localStorage')?.setItem(MODE_KEY, mode);
+    storage('sessionStorage')?.removeItem(LOCAL_OVERRIDE_KEY);
+  } catch {
+    // Without storage or history the param simply has no effect.
+  }
+}
+
 let resolved: AppMode | undefined;
 
 /** The mode this page runs in. Fixed for the page's lifetime; switching reloads. */
 export function getMode(): AppMode {
   if (!resolved) {
+    applySyncParam();
     const override = storage('sessionStorage')?.getItem(LOCAL_OVERRIDE_KEY) === '1';
     resolved = !override && getPreferredMode() === 'shared' ? 'shared' : 'local';
   }

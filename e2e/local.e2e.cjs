@@ -683,6 +683,14 @@ const moreMenu = (page, item) => choose(page, page.getByRole('button', { name: '
   await page.getByRole('switch', { name: 'Show lost' }).click();
   await page.getByRole('navigation', { name: 'Swimlanes' }).getByRole('button', { name: 'By seller' }).click();
 
+  // ---- ?sync= sets the shared-workspace switch once and leaves the address bar clean
+  await page.goto(BASE + '/?sync=off&keep=1#h');
+  await page.waitForSelector('.toolbar');
+  assert(new URL(page.url()).search === '?keep=1' && new URL(page.url()).hash === '#h', '?sync= is removed from the address bar, other params stay');
+  assert(await page.evaluate(() => localStorage.getItem('capacity-mode:v1')) === 'local', '?sync=off saves the local choice');
+  assert(await page.getByRole('button', { name: 'Kanban', exact: true }).count() === 1, '?sync=off keeps the app running on this browser\'s plans');
+  await page.goto(BASE + '/');
+
   // ---- Theme: Auto follows the system; Light / Dark override it and survive a reload
   const bg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
   const isDark = async () => {

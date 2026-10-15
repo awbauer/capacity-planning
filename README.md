@@ -69,7 +69,7 @@ Press **?** in the app for every shortcut. Totals aren't rounded. The toolbar's 
 
 ## Shared workspace
 
-Opt-in, per browser: Manage → Settings & data → *Use the shared workspace in this browser*. With it off, the app makes no server calls. Turning it on never changes the plans saved in your browser; the first time, you're offered an upload of them.
+Opt-in, per browser: Manage → Settings & data → *Use the shared workspace in this browser*. A link can set it too: add `?sync=on` (or `off`) to the URL; it's applied once, saved like the switch, and removed from the address bar. With it off, the app makes no server calls. Turning it on never changes the plans saved in your browser; the first time, you're offered an upload of them.
 
 ### Features
 
