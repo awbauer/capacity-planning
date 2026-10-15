@@ -5,6 +5,8 @@ import { DemandView } from './components/DemandView';
 import { DetailsModal } from './components/DetailsModal';
 import { HelpDialog } from './components/HelpDialog';
 import { InspectorPanel } from './components/InspectorPanel';
+import { KanbanPanel } from './components/KanbanPanel';
+import { KanbanView } from './components/KanbanView';
 import { ActivityView } from './collab/ActivityView';
 import { CommentsPanel } from './collab/CommentsPanel';
 import { MentionsView } from './collab/MentionsView';
@@ -92,6 +94,7 @@ function PlannerApp() {
   const can = useCan();
   const shared = isShared();
   const commentsOpen = useCollabStore((s) => s.comments !== null);
+  const kanbanSelected = useUIStore((s) => s.kanbanSelected);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -122,6 +125,11 @@ function PlannerApp() {
       {view === 'manage' ? (
         <main className="main main-scroll">
           <ManagePage />
+        </main>
+      ) : view === 'kanban' ? (
+        <main className="main">
+          <KanbanView />
+          {shared && commentsOpen ? <CommentsPanel /> : kanbanSelected && <KanbanPanel projectId={kanbanSelected} />}
         </main>
       ) : view === 'demand' ? (
         <main className="main main-scroll">

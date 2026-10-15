@@ -11,16 +11,18 @@ import { TagPicker } from './TagPicker';
 interface Props {
   /** Omit to create a new project. */
   project?: Project;
+  /** New workstreams: preset fields (e.g. the Kanban column and swimlane it was added in). */
+  defaults?: Partial<Omit<Project, 'id'>>;
   onClose: () => void;
 }
 
-export function ProjectDialog({ project, onClose }: Props) {
+export function ProjectDialog({ project, defaults, onClose }: Props) {
   const addProject = usePlanStore((s) => s.addProject);
   const updateProject = usePlanStore((s) => s.updateProject);
   const deleteProject = usePlanStore((s) => s.deleteProject);
   const d = useDerived();
   const [draft, setDraft] = useState<Omit<Project, 'id'>>(
-    project ?? { name: '', client: '', sellerId: null, status: 'pipeline', tagIds: [], notes: '' },
+    project ?? { name: '', client: '', sellerId: null, status: 'pipeline', tagIds: [], notes: '', ...defaults },
   );
   const set = (patch: Partial<Omit<Project, 'id'>>) => setDraft((p) => ({ ...p, ...patch }));
   const [moveStaffing, setMoveStaffing] = useState(true);

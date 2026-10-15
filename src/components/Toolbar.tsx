@@ -28,6 +28,7 @@ import { Toggle } from './Toggle';
 
 const VIEWS: { id: View; label: string; sharedOnly?: boolean }[] = [
   { id: 'projects', label: 'Workstreams' },
+  { id: 'kanban', label: 'Kanban' },
   { id: 'resources', label: 'Resources' },
   { id: 'demand', label: 'Demand' },
   { id: 'activity', label: 'Activity', sharedOnly: true },
@@ -466,6 +467,67 @@ export function Toolbar({ buckets }: { buckets: Bucket[] }) {
               </button>
             </>
           )}
+        </div>
+      )}
+      {ui.view === 'kanban' && (
+        <div className="toolbar-row planner-bar kanban-bar">
+          <input
+            type="search"
+            className="search"
+            aria-label="Search"
+            placeholder="Search workstreams, clients, people…"
+            value={ui.filters.text}
+            onChange={(e) => ui.setFilters({ text: e.target.value })}
+          />
+          <select aria-label="Filter by capability" value={ui.filters.tagId ?? ''} onChange={(e) => ui.setFilters({ tagId: e.target.value || null })}>
+            <option value="">All capabilities</option>
+            {[...plan.tags]
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+          </select>
+          <select aria-label="Filter by seller" value={ui.filters.sellerId ?? ''} onChange={(e) => ui.setFilters({ sellerId: e.target.value || null })}>
+            <option value="">All sellers</option>
+            {[...plan.sellers]
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+          </select>
+          <Toggle
+            label="Issues only"
+            checked={ui.filters.conflictsOnly}
+            title="Show only workstreams with someone over capacity or at risk from this week on, or an open role"
+            onChange={(conflictsOnly) => ui.setFilters({ conflictsOnly })}
+          />
+          <Toggle label="Show lost" checked={ui.kanbanShowLost} title="Add a column for lost workstreams" onChange={ui.setKanbanShowLost} />
+          <span className="spacer" />
+          <nav className="segmented" aria-label="Swimlanes">
+            {(['seller', 'client', 'none'] as const).map((l) => (
+              <button key={l} type="button" aria-pressed={ui.kanbanLanes === l} onClick={() => ui.setKanbanLanes(l)}>
+                {l === 'seller' ? 'By seller' : l === 'client' ? 'By client' : 'No lanes'}
+              </button>
+            ))}
+          </nav>
+          {shared && (
+            <button
+              type="button"
+              className="btn"
+              aria-pressed={!!comments}
+              title="Comment threads in this plan"
+              onClick={() => (comments ? useCollabStore.getState().set({ comments: null }) : showComments())}
+            >
+              Comments {openThreads > 0 && <span className="count">{openThreads}</span>}
+            </button>
+          )}
+          <button type="button" className="btn btn-primary edit-only" onClick={() => setCreating(true)}>
+            + Workstream
+          </button>
         </div>
       )}
       {creating && <ProjectDialog onClose={() => setCreating(false)} />}

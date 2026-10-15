@@ -639,6 +639,50 @@ const moreMenu = (page, item) => choose(page, page.getByRole('button', { name: '
   await page.getByRole('button', { name: 'Manage', exact: true }).click();
   await page.getByRole('navigation', { name: 'Density' }).getByRole('button', { name: 'Comfortable' }).click();
 
+  // ---- Kanban: columns by stage and win %, lanes by seller; drag to change, click for details
+  await page.getByRole('button', { name: 'Kanban', exact: true }).click();
+  await page.getByLabel('Search', { exact: true }).fill('');
+  const board = page.getByRole('region', { name: 'Kanban board' });
+  const card = board.getByRole('article', { name: 'Agentforce Service Pilot' });
+  const cellOf = (c) => c.evaluate((el) => el.closest('.kanban-cell').getAttribute('aria-label'));
+  const contosoNow = async () => (await plan()).projects.find((p) => p.id === 'proj-contoso');
+  assert((await contosoNow()).status === 'pipeline' && !(await contosoNow()).winProbability, 'Kanban: Contoso starts in the pipeline with no win %');
+  const startCell = await cellOf(card);
+  assert(startCell.endsWith(' Unknown'), `Kanban: a pipeline workstream without a win % sits in Unknown (${startCell})`);
+  const lane = startCell.slice(0, -' Unknown'.length);
+  assert(await board.locator('.kanban-col-head').count() === 6 && !(await board.locator('.col-lost').count()), 'Kanban: six columns, Lost hidden by default');
+  await card.dragTo(board.getByLabel(`${lane} 50%`, { exact: true }));
+  assert((await contosoNow()).winProbability === 50 && (await contosoNow()).status === 'pipeline', 'Kanban: dragging to 50% sets the win %');
+  assert((await cellOf(card)) === `${lane} 50%`, 'Kanban: the card moved to the 50% column');
+  await card.dragTo(board.getByLabel(`${lane} Sold`, { exact: true }));
+  assert((await contosoNow()).status === 'won', 'Kanban: dragging to Sold marks it won');
+  assert(await card.locator('.kcard-staffing').count() === 1 && await card.locator('.kcard-presales').count() === 0, 'Kanban: a sold card shows staffing instead of presales');
+  await page.keyboard.press('Control+z');
+  assert((await contosoNow()).status === 'pipeline' && (await contosoNow()).winProbability === 50, 'Kanban: undo reverts one drag');
+  await page.keyboard.press('Control+z');
+  assert(!(await contosoNow()).winProbability, 'Kanban: undo again clears the win %');
+  // Details panel
+  await card.getByRole('button', { name: 'Agentforce Service Pilot', exact: true }).click();
+  const kp = page.getByRole('complementary', { name: 'Agentforce Service Pilot details' });
+  assert(await kp.count() === 1 && (await card.getAttribute('aria-current')) === 'true', 'Kanban: clicking a card opens its details and marks it selected');
+  const contosoRoles = (await plan()).assignments.filter((a) => a.projectId === 'proj-contoso').length;
+  assert(await kp.locator('.kp-team tbody tr').count() === contosoRoles, `Kanban: the team table lists every role (${contosoRoles})`);
+  assert(await kp.getByRole('img', { name: /Average load of the \d+ people/ }).count() === 1, 'Kanban: utilization chart for the team');
+  await kp.getByLabel('Win probability for Agentforce Service Pilot').selectOption('75');
+  assert((await cellOf(card)) === `${lane} 75%` && await card.locator('.kcard-staffing').count() === 1, 'Kanban: setting 75% in the panel moves the card and shows staffing');
+  await page.keyboard.press('Control+z');
+  await kp.getByRole('tab', { name: 'Resourcing' }).click();
+  assert(await kp.locator('.kp-roles li').count() === contosoRoles, 'Kanban: Resourcing tab lists the roles');
+  await shot(page, '45-kanban');
+  await page.keyboard.press('Escape');
+  assert(await kp.count() === 0, 'Kanban: Escape closes the details');
+  await page.getByRole('navigation', { name: 'Swimlanes' }).getByRole('button', { name: 'By client' }).click();
+  assert((await cellOf(card)).startsWith('Contoso '), 'Kanban: lanes by client');
+  await page.getByRole('switch', { name: 'Show lost' }).click();
+  assert(await board.locator('.col-lost').count() === 1, 'Kanban: Show lost adds the Lost column');
+  await page.getByRole('switch', { name: 'Show lost' }).click();
+  await page.getByRole('navigation', { name: 'Swimlanes' }).getByRole('button', { name: 'By seller' }).click();
+
   // ---- Theme: Auto follows the system; Light / Dark override it and survive a reload
   const bg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
   const isDark = async () => {
