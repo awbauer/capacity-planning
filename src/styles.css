@@ -3976,7 +3976,7 @@ tr.archived {
 }
 
 .kanban {
-  --kanban-lane-w: 160px;
+  --kanban-lane-w: 140px;
   flex: 1;
   min-width: 0;
   overflow: auto;
@@ -4048,7 +4048,8 @@ tr.archived {
   left: 0;
   z-index: 1;
   display: flex;
-  gap: 10px;
+  flex-direction: column;
+  gap: 6px;
   align-items: flex-start;
   padding: 12px 8px;
   background: var(--bg);
