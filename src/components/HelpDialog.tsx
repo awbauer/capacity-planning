@@ -92,6 +92,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
             { what: 'Show only people with an issue', how: <>Resources view: <b>Issues only</b> switch in the toolbar</> },
             { what: 'Group workstreams by client, seller or stage', how: <><b>Group by</b> in the Workstreams corner (None by default); <b>Groups only</b> collapses to one row per group</> },
             { what: 'How likely a pipeline deal is', how: <>The <b>–%</b> dropdown next to its Pipeline pill (25 / 50 / 75 / 90); <b>Filters</b> → Win % to show only likely ones</> },
+            { what: 'Move a deal along (win %, won, lost) or to another seller', how: <><b>Kanban</b>: drag its card to another column or swimlane, or click it and change it in the details</> },
             { what: 'Team capacity in FTE-weeks: won delivery, pipeline and headroom', how: <><b>Capacity</b> in the toolbar (Workstreams view)</> },
             { what: 'Trace one person across workstreams', how: <>Click them in the <b>Capacity</b> panel</> },
             { what: 'People under their level’s utilization target over the next 10 weeks', how: <><b>Underutilized</b> switch in the toolbar (Resources view)</> },

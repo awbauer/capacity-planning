@@ -6,7 +6,7 @@ import { addWeeks, currentWeek } from '../domain/weeks';
 import { isShared } from './mode';
 
 /** `activity` (the shared workspace's change log) and `mentions` (comment threads that mention you) only exist in shared mode. */
-export type View = 'projects' | 'resources' | 'demand' | 'activity' | 'mentions' | 'manage';
+export type View = 'projects' | 'kanban' | 'resources' | 'demand' | 'activity' | 'mentions' | 'manage';
 
 /** The workstream or person whose details modal is open. */
 export type DetailsTarget = { kind: 'project'; id: string } | { kind: 'resource'; id: string };
@@ -77,6 +77,9 @@ export function workstreamGroupKeys(p: Pick<Project, 'client' | 'sellerId' | 'st
   return p ? [clientGroupKey(p.client), sellerGroupKey(p.sellerId), stageGroupKey(p.status)] : [];
 }
 
+/** How the Kanban board splits its columns into swimlanes. */
+export type KanbanLanes = 'seller' | 'client' | 'none';
+
 export interface ExportRecord {
   at: string;
   hash: string;
@@ -95,6 +98,10 @@ interface UIState {
   showUtilization: boolean;
   /** Workstreams view: group workstreams under their client. */
   groupBy: GroupBy;
+  /** Kanban: swimlanes, whether Lost gets a column, and the card open in the side panel (not persisted). */
+  kanbanLanes: KanbanLanes;
+  kanbanShowLost: boolean;
+  kanbanSelected: string | null;
   showHelp: boolean;
   details: DetailsTarget | null;
   cellStyle: CellStyle;
@@ -122,6 +129,9 @@ interface UIState {
   toggleConflicts: () => void;
   toggleUtilization: () => void;
   setGroupBy: (groupBy: GroupBy) => void;
+  setKanbanLanes: (lanes: KanbanLanes) => void;
+  setKanbanShowLost: (show: boolean) => void;
+  selectKanban: (projectId: string | null) => void;
   resetFilters: () => void;
   setShowHelp: (show: boolean) => void;
   showDetails: (target: DetailsTarget | null) => void;
@@ -152,6 +162,9 @@ export const useUIStore = create<UIState>()(
       showConflicts: true,
       showUtilization: false,
       groupBy: 'none',
+      kanbanLanes: 'seller',
+      kanbanShowLost: false,
+      kanbanSelected: null,
       showHelp: false,
       details: null,
       cellStyle: 'pie',
@@ -194,6 +207,9 @@ export const useUIStore = create<UIState>()(
       setDensity: (density) => set({ density }),
       setFocusedCell: (focusedCell) => set({ focusedCell }),
       setGroupBy: (groupBy) => set({ groupBy }),
+      setKanbanLanes: (kanbanLanes) => set({ kanbanLanes }),
+      setKanbanShowLost: (kanbanShowLost) => set({ kanbanShowLost }),
+      selectKanban: (kanbanSelected) => set({ kanbanSelected }),
       resetFilters: () => set({ filters: NO_FILTERS }),
       setShowHelp: (showHelp) => set({ showHelp }),
       showDetails: (details) => set({ details }),
@@ -224,6 +240,8 @@ export const useUIStore = create<UIState>()(
         showConflicts: s.showConflicts,
         showUtilization: s.showUtilization,
         groupBy: s.groupBy,
+        kanbanLanes: s.kanbanLanes,
+        kanbanShowLost: s.kanbanShowLost,
         cellStyle: s.cellStyle,
         rollup: s.rollup,
         density: s.density,

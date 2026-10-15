@@ -30,6 +30,7 @@ By default it runs entirely in your browser. Optionally, a **shared workspace** 
 | View | What it shows |
 | --- | --- |
 | **Workstreams** | One row per workstream (optionally grouped by client, seller or stage) with its name and client, stage, win % (pipeline) and any issues, and its staffing over time. Click the row to see each person and open role. The row's **•••** menu adds people and open roles, edits the workstream and downloads its CSV; click a person to swap them or leave the role open. |
+| **Kanban** | Workstreams as cards in columns by stage and win % (Unknown, 25–90%, Sold; *Show lost* adds Lost), in swimlanes by seller or client. Each card shows its delivery weeks and FTE, capabilities, and either presales support (early stages) or how much of it is staffed (75% and up, and Sold). Drag a card to another column or lane to change its win %, stage, seller or client (one undo step). Click a card for its details: staffing (confirmed, tentative, unfilled), the team and each person's status, the team's load over the next 10 weeks, and the roles to fill or change. |
 | **Resources** | One row per person, grouped by level, showing total weekly load as a heat map. Expand a person to edit their allocations. *Underutilized* shows people below their level's target over the next 10 weeks. |
 | **Demand** | Live workstreams split into Pipeline and Won: who's supporting each pursuit, who's staffed, open roles and FTE. |
 | **Details** | Click a workstream or person name: a summary, a checklist of problems, roles, and open roles a person could fill. |
