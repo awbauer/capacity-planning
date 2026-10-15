@@ -1,6 +1,5 @@
 /**
- * Local (default): plans live in this browser only, as before.
- * Shared: plans live in the shared workspace (opt-in per browser).
+ * Shared by default; local plans remain available through Manage → Settings.
  */
 export type AppMode = 'local' | 'shared';
 
@@ -18,7 +17,7 @@ const storage = (kind: 'localStorage' | 'sessionStorage'): Storage | undefined =
 
 /** The mode the shared-workspace switch is set to in this browser. */
 export function getPreferredMode(): AppMode {
-  return storage('localStorage')?.getItem(MODE_KEY) === 'shared' ? 'shared' : 'local';
+  return storage('localStorage')?.getItem(MODE_KEY) === 'local' ? 'local' : 'shared';
 }
 
 /** `?sync=on|off` (also shared/local, 1/0, true/false) in the address bar. */
@@ -69,10 +68,17 @@ let resolved: AppMode | undefined;
 export function getMode(): AppMode {
   if (!resolved) {
     applySyncParam();
-    const override = storage('sessionStorage')?.getItem(LOCAL_OVERRIDE_KEY) === '1';
-    resolved = !override && getPreferredMode() === 'shared' ? 'shared' : 'local';
+    const override = storage('sessionStorage')?.getItem(LOCAL_OVERRIDE_KEY) === '1' || isNoBackend();
+    resolved = override ? 'local' : getPreferredMode();
   }
   return resolved;
+}
+
+export const hasExplicitMode = () => ['local', 'shared'].includes(storage('localStorage')?.getItem(MODE_KEY) ?? '');
+export const isNoBackend = () => storage('sessionStorage')?.getItem(LOCAL_OVERRIDE_KEY) === 'no-backend';
+export function noBackendThisSession() {
+  storage('sessionStorage')?.setItem(LOCAL_OVERRIDE_KEY, 'no-backend');
+  window.location.reload();
 }
 
 export const isShared = () => getMode() === 'shared';

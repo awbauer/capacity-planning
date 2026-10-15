@@ -3,10 +3,12 @@ export class ApiError extends Error {
   readonly status: number;
   /** Access wants a fresh sign-in (it redirected the request). */
   readonly signIn: boolean;
-  constructor(status: number, message: string, signIn = false) {
+  readonly noBackend: boolean;
+  constructor(status: number, message: string, signIn = false, noBackend = false) {
     super(message);
     this.status = status;
     this.signIn = signIn;
+    this.noBackend = noBackend;
   }
 }
 
@@ -35,7 +37,7 @@ export async function api<T>(path: string, init: RequestInit & { json?: unknown 
   const type = res.headers.get('Content-Type') ?? '';
   if (!type.includes('application/json')) {
     // e.g. the app's own index.html: no Worker behind /api (a static deploy, or `vite preview`).
-    throw new ApiError(res.status >= 500 ? res.status : 0, 'The shared workspace isn’t available here.');
+    throw new ApiError(res.status >= 500 ? res.status : 0, 'The shared workspace isn’t available here.', false, true);
   }
   const body = (await res.json().catch(() => ({}))) as T & { error?: string };
   if (!res.ok) throw new ApiError(res.status, body.error ?? `Request failed (${res.status})`, res.status === 401);

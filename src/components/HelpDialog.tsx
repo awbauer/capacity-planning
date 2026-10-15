@@ -140,7 +140,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           ]}
         />
         <Section
-          title="Shared workspace (opt-in)"
+          title="Shared workspace (on by default)"
           rows={[
             { what: 'Share plans with your team, edited live', how: <><b>Manage</b> → Settings &amp; data → <b>Use the shared workspace</b> (per browser)</> },
             { what: 'Who else has the plan open, and what they’ve selected', how: 'Avatars in the toolbar; coloured outlines on cells' },

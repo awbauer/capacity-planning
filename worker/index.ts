@@ -1,3 +1,4 @@
+import { handleMcp } from './mcp/route';
 import type { Me } from '../src/domain/protocol';
 import { checkReferences } from '../src/domain/schema';
 import type { PlanData } from '../src/domain/types';
@@ -230,6 +231,8 @@ export default {
         },
       });
     }
+
+    if (url.pathname.replace(/\/+$/, '') === '/api/mcp') return handleMcp(request, env, ctx);
 
     if (!sameOrigin(request)) return fail(403, 'Cross-site request blocked.');
     const auth = await identify(request, env, ctx);

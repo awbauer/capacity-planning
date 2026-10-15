@@ -1,0 +1,1256 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <style>
+      :root {
+        font-family: var(--font-sans, Inter, ui-sans-serif, system-ui, sans-serif);
+        color-scheme: light dark;
+        --bg: #f6f8fa;
+        --panel: #fff;
+        --ink: #182b39;
+        --muted: #657682;
+        --line: #e2e9ee;
+        --accent: #087e80;
+        --soft: #e7f5f2;
+        --amber: #c78622;
+        --danger: #c14b53;
+        --shadow: 0 2px 8px #18304405;
+        color: var(--ink);
+        background: var(--bg);
+        font-size: 14px;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme='light']) {
+          --bg: #142027;
+          --panel: #1b2a32;
+          --ink: #ecf3f5;
+          --muted: #a6b7bf;
+          --line: #33454d;
+          --accent: #63d1c3;
+          --soft: #203f3e;
+          --amber: #e7b35c;
+          --danger: #f28d94;
+        }
+      }
+      :root[data-theme='dark'] {
+        --bg: #142027;
+        --panel: #1b2a32;
+        --ink: #ecf3f5;
+        --muted: #a6b7bf;
+        --line: #33454d;
+        --accent: #63d1c3;
+        --soft: #203f3e;
+        --amber: #e7b35c;
+        --danger: #f28d94;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 20px;
+      }
+      button,
+      input,
+      select {
+        font: inherit;
+      }
+      button {
+        cursor: pointer;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        padding: 8px 12px;
+        background: var(--panel);
+        color: var(--ink);
+        font-weight: 600;
+      }
+      button:hover {
+        border-color: var(--accent);
+        background: var(--soft);
+      }
+      button:disabled {
+        cursor: wait;
+        opacity: 0.55;
+      }
+      button:focus-visible,
+      input:focus-visible,
+      select:focus-visible,
+      summary:focus-visible {
+        outline: 3px solid var(--accent);
+        outline-offset: 3px;
+      }
+      .primary {
+        background: var(--accent);
+        color: var(--panel);
+        border-color: var(--accent);
+      }
+      .ghost {
+        border: 0;
+        background: transparent;
+        padding: 5px 0;
+        color: var(--accent);
+      }
+      .header,
+      .row,
+      .toolbar,
+      .legend {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .header {
+        justify-content: space-between;
+        margin-bottom: 18px;
+      }
+      .identity {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      .logo {
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        display: grid;
+        place-items: center;
+        background: var(--accent);
+        color: var(--panel);
+        font-size: 21px;
+        font-weight: 700;
+      }
+      .eyebrow {
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        font-size: 10px;
+        font-weight: 750;
+        color: var(--muted);
+      }
+      h1 {
+        font-size: 23px;
+        letter-spacing: -0.04em;
+        line-height: 1.2;
+        margin: 7px 0;
+      }
+      h2 {
+        font-size: 15px;
+        margin: 0 0 12px;
+        letter-spacing: -0.02em;
+      }
+      h3 {
+        font-size: 15px;
+        line-height: 1.4;
+        margin: 8px 0;
+      }
+      p {
+        line-height: 1.55;
+        margin: 6px 0;
+      }
+      .muted,
+      .sub {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .sub {
+        margin-bottom: 16px;
+      }
+      .layout {
+        display: grid;
+        gap: 14px;
+      }
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+        margin-bottom: 16px;
+      }
+      .stat,
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 13px;
+        background: var(--panel);
+        box-shadow: var(--shadow);
+        padding: 16px;
+      }
+      .stat strong {
+        overflow-wrap: anywhere;
+        display: block;
+        font-size: 28px;
+        letter-spacing: -0.05em;
+        line-height: 1.35;
+        font-weight: 650;
+        font-variant-numeric: tabular-nums;
+      }
+      .stat small {
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .stat.accent {
+        background: var(--soft);
+        border-color: transparent;
+      }
+      .stat.accent strong {
+        color: var(--accent);
+      }
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 245px), 1fr));
+        gap: 12px;
+      }
+      .card {
+        overflow-wrap: anywhere;
+        min-width: 0;
+      }
+      .card .row {
+        justify-content: space-between;
+      }
+      .pill {
+        font-size: 10px;
+        letter-spacing: 0.04em;
+        border-radius: 6px;
+        padding: 4px 7px;
+        font-weight: 700;
+        background: var(--soft);
+        color: var(--accent);
+        text-transform: uppercase;
+        display: inline-block;
+      }
+      .pill.pipeline {
+        color: var(--amber);
+        background: color-mix(in srgb, var(--amber) 12%, transparent);
+      }
+      .pill.lost,
+      .pill.danger {
+        color: var(--danger);
+        background: color-mix(in srgb, var(--danger) 11%, transparent);
+      }
+      .chips {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-top: 10px;
+      }
+      .chip {
+        background: var(--bg);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 4px 7px;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .meter {
+        display: flex;
+        height: 8px;
+        background: var(--line);
+        border-radius: 20px;
+        overflow: hidden;
+        margin: 12px 0 8px;
+      }
+      .meter span {
+        display: block;
+        min-width: 0;
+      }
+      .committed {
+        background: var(--accent);
+      }
+      .pipeline-bar {
+        background: var(--amber);
+      }
+      .free {
+        background: var(--line);
+      }
+      .legend {
+        gap: 16px;
+        flex-wrap: wrap;
+        font-size: 11px;
+        color: var(--muted);
+        margin: 12px 0;
+      }
+      .legend i {
+        display: inline-block;
+        width: 7px;
+        height: 7px;
+        border-radius: 2px;
+        margin-right: 5px;
+      }
+      .toolbar {
+        justify-content: space-between;
+        margin: 18px 0 12px;
+        flex-wrap: wrap;
+      }
+      .toolbar input {
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: var(--panel);
+        color: var(--ink);
+        padding: 9px 12px;
+        min-width: 190px;
+        flex: 1;
+      }
+      .toolbar select {
+        padding: 8px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        color: var(--ink);
+      }
+      .section {
+        margin-top: 16px;
+      }
+      .section:first-child {
+        margin-top: 0;
+      }
+      .bar-row {
+        margin: 15px 0;
+      }
+      .bar-row .row {
+        justify-content: space-between;
+        font-size: 12px;
+      }
+      .chart {
+        height: 170px;
+        display: block;
+        width: 100%;
+        overflow: visible;
+      }
+      .chart text {
+        fill: var(--muted);
+        font:
+          10px ui-sans-serif,
+          system-ui;
+      }
+      .chart .grid {
+        stroke: var(--line);
+        stroke-dasharray: 3 4;
+      }
+      .chart rect {
+        transition: opacity 0.15s;
+      }
+      .chart rect:hover {
+        opacity: 0.65;
+      }
+      .chart .delivery {
+        fill: var(--accent);
+      }
+      .chart .tentative {
+        fill: var(--amber);
+      }
+      .target {
+        stroke: var(--danger);
+        stroke-dasharray: 4 4;
+      }
+      .chart-wrap {
+        padding: 10px 0;
+      }
+      .empty {
+        padding: 30px 20px;
+        text-align: center;
+        color: var(--muted);
+        border: 1px dashed var(--line);
+        border-radius: 12px;
+        line-height: 1.6;
+      }
+      details {
+        border-top: 1px solid var(--line);
+        padding-top: 12px;
+        margin-top: 12px;
+      }
+      summary {
+        cursor: pointer;
+        color: var(--accent);
+        font-size: 12px;
+        font-weight: 650;
+        padding: 4px 0;
+      }
+      .fact {
+        display: grid;
+        grid-template-columns: 100px minmax(0, 1fr);
+        gap: 10px;
+        padding: 7px 0;
+        font-size: 12px;
+        border-bottom: 1px solid var(--line);
+      }
+      .fact:last-child {
+        border: 0;
+      }
+      .fact > span:first-child {
+        color: var(--muted);
+      }
+      .check {
+        display: flex;
+        align-items: start;
+        gap: 9px;
+        padding: 9px 0;
+        font-size: 12px;
+      }
+      .check .icon {
+        color: var(--accent);
+      }
+      .check.bad .icon {
+        color: var(--amber);
+      }
+      .timeline {
+        border-left: 2px solid var(--line);
+        margin: 10px 0 0 5px;
+        padding-left: 20px;
+      }
+      .event {
+        position: relative;
+        padding: 0 0 20px;
+      }
+      .event:before {
+        content: '';
+        position: absolute;
+        left: -26px;
+        top: 5px;
+        width: 10px;
+        height: 10px;
+        border: 2px solid var(--panel);
+        border-radius: 50%;
+        background: var(--accent);
+      }
+      .event p {
+        font-size: 13px;
+      }
+      .notice {
+        padding: 12px 14px;
+        border-radius: 9px;
+        background: var(--soft);
+        font-size: 12px;
+        margin: 12px 0;
+        line-height: 1.6;
+      }
+      .notice.error {
+        background: color-mix(in srgb, var(--danger) 12%, transparent);
+        color: var(--danger);
+      }
+      .actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 16px;
+      }
+      .footer {
+        border-top: 1px solid var(--line);
+        padding-top: 12px;
+        margin-top: 18px;
+        color: var(--muted);
+        font-size: 10px;
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .notes {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        font-size: 12px;
+      }
+      .split {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+      }
+      .link-name {
+        background: none;
+        border: 0;
+        padding: 0;
+        color: var(--ink);
+        text-align: left;
+        font-size: 15px;
+        letter-spacing: -0.02em;
+      }
+      .link-name:hover {
+        background: transparent;
+        color: var(--accent);
+      }
+      @media (max-width: 520px) {
+        body {
+          padding: 14px;
+        }
+        .stats {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .split {
+          grid-template-columns: 1fr;
+        }
+        .stat strong {
+          overflow-wrap: anywhere;
+          font-size: 25px;
+        }
+        .header {
+          align-items: start;
+        }
+        h1 {
+          font-size: 21px;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          transition: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="header">
+      <div class="identity">
+        <div class="logo" aria-hidden="true">▥</div>
+        <div>
+          <div class="eyebrow">Capacity planner</div>
+          <div class="muted" id="connection">Connecting to workspace</div>
+        </div>
+      </div>
+      <button id="refresh" hidden aria-label="Refresh this view">↻ Refresh</button>
+    </header>
+    <main id="app" aria-live="polite"><div class="empty">Your workspace view will appear here.</div></main>
+    <div id="status" role="status"></div>
+    <footer class="footer">
+      <span>Live workspace · Changes respect your permissions</span><span id="updated"></span>
+    </footer>
+    <script>
+      (() => {
+        'use strict';
+        const root = document.getElementById('app'),
+          status = document.getElementById('status'),
+          pending = new Map();
+        let sequence = 0,
+          current,
+          connected = false,
+          hostTools = false,
+          query = '',
+          filter = 'all';
+        const send = (message) => window.parent.postMessage({ jsonrpc: '2.0', ...message }, '*');
+        function request(method, params) {
+          return new Promise((resolve, reject) => {
+            const id = ++sequence;
+            const timeout = setTimeout(() => {
+              pending.delete(id);
+              reject(new Error('The host did not respond. Please try again.'));
+            }, 30000);
+            pending.set(id, { resolve, reject, timeout });
+            send({ id, method, params });
+          });
+        }
+        const el = (tag, className, text) => {
+          const n = document.createElement(tag);
+          if (className) n.className = className;
+          if (text !== undefined && text !== null) n.textContent = String(text);
+          return n;
+        };
+        const add = (parent, ...nodes) => {
+          nodes.filter(Boolean).forEach((n) => parent.append(n));
+          return parent;
+        };
+        const number = (value) =>
+          new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(
+            Number.isFinite(Number(value)) ? Number(value) : 0,
+          );
+        const pct = (value) => number(value) + '%';
+        const items = (value) => (Array.isArray(value) ? value : (value?.items ?? value?.entries ?? []));
+        const title = (text) => text.replaceAll('_', ' ').replace(/^\w/, (c) => c.toUpperCase());
+        const name = (value) => (typeof value === 'string' ? value : (value?.name ?? 'Unassigned'));
+        const stamp = (value) =>
+          value ? new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '—';
+        const matches = (value) => !query || JSON.stringify(value).toLowerCase().includes(query.toLowerCase());
+        function button(label, action, className = '') {
+          const b = el('button', className, label);
+          b.type = 'button';
+          b.onclick = action;
+          return b;
+        }
+        function notice(text, error = false) {
+          status.replaceChildren(el('div', 'notice' + (error ? ' error' : ''), text));
+        }
+        function summaryCards(values) {
+          const wrap = el('div', 'stats');
+          values.forEach(([label, value, hint], i) => {
+            const c = el('div', 'stat' + (i === 0 ? ' accent' : ''));
+            add(c, el('div', 'eyebrow', label), el('strong', '', value), el('small', '', hint));
+            wrap.append(c);
+          });
+          return wrap;
+        }
+        function meter(committed, pipeline = 0, max = 100) {
+          const m = el('div', 'meter');
+          const total = Math.max(max, committed + pipeline, 1);
+          for (const [value, cls, label] of [
+            [committed, 'committed', 'Committed'],
+            [pipeline, 'pipeline-bar', 'Pipeline'],
+          ]) {
+            const s = el('span', cls);
+            s.style.width = (Math.max(0, value) / total) * 100 + '%';
+            s.title = label + ': ' + number(value);
+            m.append(s);
+          }
+          m.setAttribute('role', 'img');
+          m.setAttribute(
+            'aria-label',
+            'Committed ' + number(committed) + ', pipeline ' + number(pipeline) + ', capacity ' + number(max),
+          );
+          return m;
+        }
+        function legend(withFree = true) {
+          const l = el('div', 'legend');
+          [
+            ['committed', 'Committed'],
+            ['pipeline-bar', 'Pipeline'],
+            ...(withFree ? [['free', 'Available']] : []),
+          ].forEach(([cls, label]) => add(l, add(el('span'), el('i', cls), document.createTextNode(label))));
+          return l;
+        }
+        function fact(label, value) {
+          return add(el('div', 'fact'), el('span', '', label), el('span', '', value ?? '—'));
+        }
+        function heading(text, subtitle) {
+          add(root, el('h1', '', text), subtitle ? el('p', 'sub', subtitle) : null);
+        }
+        function countNote(data) {
+          if (data?.truncated)
+            root.append(
+              el(
+                'p',
+                'muted',
+                'Showing ' +
+                  items(data).length +
+                  ' of ' +
+                  (data.total ?? 'more') +
+                  '. Narrow the request for additional results.',
+              ),
+            );
+        }
+        function toolbar(rows, kinds) {
+          const bar = el('div', 'toolbar'),
+            input = el('input');
+          input.type = 'search';
+          input.placeholder = 'Search this view';
+          input.setAttribute('aria-label', 'Search cards');
+          input.value = query;
+          input.oninput = () => {
+            query = input.value;
+            renderContent();
+            const next = root.querySelector('input[type=search]');
+            next?.focus();
+            next?.setSelectionRange(query.length, query.length);
+          };
+          add(bar, input, el('span', 'muted', rows.filter(matches).length + ' shown'));
+          if (kinds?.length) {
+            const select = el('select');
+            select.setAttribute('aria-label', 'Filter cards');
+            ['all', ...new Set(kinds)].forEach((kind) => {
+              const option = el('option', '', kind === 'all' ? 'All stages' : title(kind));
+              option.value = kind;
+              select.append(option);
+            });
+            select.value = filter;
+            select.onchange = () => {
+              filter = select.value;
+              renderContent();
+            };
+            bar.append(select);
+          }
+          root.append(bar);
+        }
+        function toolAction(tool, args) {
+          return async () => {
+            if (!connected || !hostTools) {
+              notice('This host does not support interactive tool calls. Ask your agent to open this item.');
+              return;
+            }
+            const buttons = document.querySelectorAll('button');
+            buttons.forEach((b) => (b.disabled = true));
+            try {
+              const result = await request('tools/call', {
+                name: tool,
+                arguments: { plan: current?.args?.plan, ...args },
+              });
+              consume(result);
+            } catch (e) {
+              notice(e.message, true);
+            } finally {
+              buttons.forEach((b) => (b.disabled = false));
+            }
+          };
+        }
+        function workstreamCard(row) {
+          const c = el('article', 'card'),
+            stage = row.stage ?? row.status ?? 'pipeline';
+          add(
+            c,
+            add(
+              el('div', 'row'),
+              el(
+                'span',
+                'pill ' + stage,
+                stage === 'won'
+                  ? 'Won'
+                  : stage === 'pipeline'
+                    ? row.winProbability
+                      ? row.winProbability + '% win'
+                      : 'Pipeline'
+                    : 'Lost',
+              ),
+              el('span', 'muted', row.externalId ?? ''),
+            ),
+          );
+          const label = button(row.name, toolAction('get_workstream', { workstream: row.id }), 'link-name');
+          add(c, add(el('h3'), label), el('p', 'muted', row.client ?? 'No client'));
+          const staffed = row.percentStaffed ?? 0;
+          add(
+            c,
+            meter(Math.min(staffed, 100)),
+            add(
+              el('div', 'row'),
+              el('span', 'muted', pct(staffed) + ' staffed'),
+              el('strong', 'muted', number(row.staffedFte) + ' / ' + number(row.demandFte) + ' FTE'),
+            ),
+          );
+          const chips = el('div', 'chips');
+          if (row.openRoles) chips.append(el('span', 'chip', row.openRoles + ' open roles'));
+          if (row.issueCount) chips.append(el('span', 'chip', row.issueCount + ' checks to review'));
+          if (row.seller) chips.append(el('span', 'chip', name(row.seller)));
+          c.append(chips);
+          if (row.startWeek || row.endWeek)
+            c.append(el('p', 'muted', stamp(row.startWeek) + ' → ' + stamp(row.endWeek)));
+          return c;
+        }
+        function personCard(row) {
+          const c = el('article', 'card'),
+            u = row.utilization ?? {},
+            committed = u.committed ?? 0,
+            pipeline = Math.max(0, (u.pipeline ?? 0) - (u.presales ?? 0));
+          add(
+            c,
+            add(el('div', 'row'), el('span', 'pill', row.level ?? 'Team'), el('span', 'muted', row.role ?? '')),
+            add(el('h3'), button(row.name, toolAction('get_person', { person: row.id }), 'link-name')),
+            el('p', 'muted', row.email ?? ''),
+          );
+          add(
+            c,
+            meter(committed, pipeline),
+            add(
+              el('div', 'row'),
+              el('strong', '', pct(committed)),
+              el('span', 'muted', 'Target ' + pct(row.target ?? 100)),
+            ),
+          );
+          const chips = el('div', 'chips');
+          if (row.minFreePercent !== undefined)
+            chips.append(el('span', 'chip', pct(row.minFreePercent) + ' minimum free'));
+          items(row.capabilities)
+            .slice(0, 4)
+            .forEach((t) => chips.append(el('span', 'chip', name(t))));
+          c.append(chips);
+          return c;
+        }
+        function ranges(parent, runs) {
+          const chips = el('div', 'chips');
+          items(runs).forEach((r) =>
+            chips.append(
+              el('span', 'chip', pct(r.percent) + ' · ' + stamp(r.from) + (r.from !== r.to ? ' – ' + stamp(r.to) : '')),
+            ),
+          );
+          if (!chips.childNodes.length) chips.append(el('span', 'muted', 'No allocations in this window'));
+          parent.append(chips);
+        }
+        function roleCard(row) {
+          const c = el('article', 'card');
+          add(
+            c,
+            add(
+              el('div', 'row'),
+              el('span', 'pill', row.person ? 'Assigned' : 'Open role'),
+              el('span', 'muted', row.level ?? ''),
+            ),
+            el('h3', '', row.name || 'Unnamed role'),
+            el('p', 'muted', name(row.person) + ' · ' + name(row.workstream)),
+          );
+          ranges(c, row.ranges);
+          if (row.presales?.length) {
+            const d = add(el('details'), el('summary', '', 'Presales & delivery'));
+            ranges(add(d, el('p', 'muted', 'Presales')), row.presales);
+            ranges(add(d, el('p', 'muted', 'Delivery')), row.delivery);
+            c.append(d);
+          }
+          return c;
+        }
+        function chart(weekly, target = 100) {
+          const wrap = el('div', 'chart-wrap'),
+            ns = 'http://www.w3.org/2000/svg',
+            svg = document.createElementNS(ns, 'svg');
+          svg.classList.add('chart');
+          const chartWidth = Math.max(260, root.clientWidth - 34);
+          svg.setAttribute('viewBox', '0 0 ' + chartWidth + ' 170');
+          svg.setAttribute('role', 'img');
+          svg.setAttribute(
+            'aria-label',
+            'Weekly load: committed and pipeline allocations, capacity line at ' + target + ' percent',
+          );
+          const node = (tag, attrs, text) => {
+            const n = document.createElementNS(ns, tag);
+            Object.entries(attrs).forEach(([k, v]) => n.setAttribute(k, String(v)));
+            if (text !== undefined) n.textContent = text;
+            svg.append(n);
+            return n;
+          };
+          const max = Math.max(125, target, ...weekly.map((w) => (w.committed ?? 0) + (w.tentative ?? 0))),
+            y = (v) => 140 - (v / max) * 120,
+            width = (chartWidth - 50) / Math.max(weekly.length, 1);
+          [0, 50, 100]
+            .filter((v) => v <= max)
+            .forEach((v) => {
+              node('line', { x1: 35, x2: chartWidth - 10, y1: y(v), y2: y(v), class: 'grid' });
+              node('text', { x: 0, y: y(v) + 3 }, v + '%');
+            });
+          node('line', { x1: 35, x2: chartWidth - 10, y1: y(target), y2: y(target), class: 'target' });
+          weekly.forEach((w, i) => {
+            const x = 38 + i * width,
+              committed = w.committed ?? 0,
+              tentative = w.tentative ?? 0;
+            [
+              ['delivery', committed, 0],
+              ['tentative', tentative, committed],
+            ].forEach(([cls, v, base]) => {
+              if (!v) return;
+              const r = node('rect', {
+                x,
+                y: y(v + base),
+                width: Math.max(2, width - 5),
+                height: (v / max) * 120,
+                rx: 3,
+                class: cls,
+              });
+              const t = document.createElementNS(ns, 'title');
+              t.textContent = stamp(w.week) + ': ' + pct(committed) + ' committed, ' + pct(tentative) + ' pipeline';
+              r.append(t);
+            });
+            if (i % Math.max(1, Math.ceil(weekly.length / 7)) === 0) node('text', { x, y: 160 }, stamp(w.week));
+          });
+          add(wrap, svg, legend(false));
+          return wrap;
+        }
+        function threads(data) {
+          const list = items(data);
+          if (!list.length) return;
+          const panel = el('section', 'card section');
+          panel.append(el('h2', '', 'Open conversations'));
+          list.forEach((t) => {
+            const d = add(el('details'), el('summary', '', t.comments?.[0]?.body?.slice(0, 90) ?? 'Conversation'));
+            items(t.comments)
+              .filter((c) => !c.deleted)
+              .forEach((c) => add(d, el('p', 'muted', c.author), el('p', 'notes', c.body)));
+            panel.append(d);
+          });
+          root.append(panel);
+        }
+        function workstreams(data) {
+          const rows = items(data);
+          heading('Workstream overview', 'A clear view of demand, staffing and the pipeline.');
+          add(
+            root,
+            summaryCards([
+              ['Workstreams', data.total ?? rows.length, 'In this selection'],
+              ['Staffed', number(rows.reduce((n, r) => n + (r.staffedFte ?? 0), 0)), 'Average delivery FTE'],
+              ['Open roles', rows.reduce((n, r) => n + (r.openRoles ?? 0), 0), 'Seats to fill'],
+              ['Needs attention', rows.filter((r) => r.issueCount > 0).length, 'Workstreams with checks'],
+            ]),
+          );
+          toolbar(
+            rows,
+            rows.map((r) => r.stage),
+          );
+          const cards = el('div', 'cards');
+          rows
+            .filter(matches)
+            .filter((r) => filter === 'all' || r.stage === filter)
+            .forEach((r) => cards.append(workstreamCard(r)));
+          root.append(cards);
+          countNote(data);
+        }
+        function people(data) {
+          const rows = items(data);
+          heading('People & availability', 'Explore utilization, skills and room for the next piece of work.');
+          const avg = rows.length ? rows.reduce((n, r) => n + (r.utilization?.committed ?? 0), 0) / rows.length : 0;
+          root.append(
+            summaryCards([
+              ['People', data.total ?? rows.length, 'In this selection'],
+              ['Committed', pct(avg), 'Average utilization'],
+              ['Available', rows.filter((r) => r.minFreePercent >= 25).length, 'At least 25% free every week'],
+              ['Below target', rows.filter((r) => r.belowTarget).length, 'Room to grow'],
+            ]),
+          );
+          toolbar(rows);
+          const cards = el('div', 'cards');
+          rows.filter(matches).forEach((r) => cards.append(personCard(r)));
+          root.append(cards);
+          countNote(data);
+        }
+        function capacity(data) {
+          heading('Capacity at a glance', stamp(data.window?.from) + ' – ' + stamp(data.window?.to) + ' · FTE-weeks');
+          root.append(
+            summaryCards([
+              ['Team capacity', number(data.supply), 'Available FTE-weeks'],
+              ['Won work', number(data.delivery), 'Committed delivery'],
+              ['Pipeline', number(data.pipeline), 'Unweighted FTE-weeks'],
+              ['Headroom', number(data.headroom), 'After all planned demand'],
+            ]),
+          );
+          const panel = add(
+            el('section', 'card'),
+            el('h2', '', 'Supply & demand'),
+            meter((data.delivery ?? 0) + (data.other ?? 0), data.pipeline ?? 0, data.supply ?? 100),
+            legend(),
+          );
+          if (data.overflow)
+            panel.append(el('p', 'notice error', number(data.overflow) + ' FTE-weeks beyond team capacity'));
+          root.append(panel);
+          const capability = add(el('section', 'card section'), el('h2', '', 'Capability coverage'));
+          items(data.byCapability).forEach((r) => {
+            const c = add(
+              el('div', 'bar-row'),
+              add(
+                el('div', 'row'),
+                el('strong', '', name(r.capability)),
+                el('span', 'muted', number(r.won + r.pipeline) + ' demand / ' + number(r.available) + ' free FTE'),
+              ),
+            );
+            add(c, meter(r.won, r.pipeline, Math.max(r.available, 1)));
+            capability.append(c);
+          });
+          if (items(data.byCapability).length) root.append(capability);
+          const people = items(data.people);
+          if (people.length) {
+            const d = add(el('details', 'section'), el('summary', '', 'People · ' + people.length));
+            people.forEach((p) => add(d, fact(name(p.person), pct(p.utilization) + ' utilization')));
+            root.append(d);
+          }
+        }
+        function detail(data, personMode) {
+          heading(data.name, [data.externalId, data.client, data.email, data.role].filter(Boolean).join(' · '));
+          if (personMode) {
+            root.append(
+              summaryCards([
+                ['Committed', pct(data.utilization?.committed), 'Capped at 100% per week'],
+                ['Target', pct(data.target), 'Expected utilization'],
+                ['Pipeline', pct(data.utilization?.pipeline), 'Presales plus tentative'],
+                ['Assignments', items(data.allocations).length, 'In this window'],
+              ]),
+            );
+            add(
+              root,
+              add(
+                el('section', 'card'),
+                el('h2', '', 'Weekly allocation'),
+                chart(data.weekly ?? [], data.target ?? 100),
+              ),
+            );
+          } else {
+            const stats = data.stats ?? {};
+            root.append(
+              summaryCards([
+                ['Demand', number((stats.demand ?? 0) / 100), 'Delivery FTE'],
+                ['Staffed', number((stats.staffed ?? 0) / 100), 'Delivery FTE'],
+                ['Unfilled', number((stats.unfilled ?? 0) / 100), 'Delivery FTE'],
+                [
+                  'Stage',
+                  title(data.status ?? 'pipeline'),
+                  data.winProbability ? pct(data.winProbability) + ' win probability' : '',
+                ],
+              ]),
+            );
+            const facts = el('section', 'card');
+            add(
+              facts,
+              fact('Project ID', data.externalId),
+              fact('Seller', name(data.seller)),
+              fact('Dates', stamp(data.startWeek) + ' → ' + stamp(data.endWeek)),
+            );
+            if (data.notes) {
+              const d = add(el('details'), el('summary', '', 'Workstream notes'), el('p', 'notes', data.notes));
+              facts.append(d);
+            }
+            root.append(facts);
+            const checks = items(data.checks);
+            if (checks.length) {
+              const panel = add(el('section', 'card section'), el('h2', '', 'Health checks'));
+              checks.forEach((c) =>
+                panel.append(
+                  add(
+                    el('div', 'check' + (c.ok ? '' : ' bad')),
+                    el('span', 'icon', c.ok ? '✓' : '!'),
+                    add(el('div'), el('strong', '', c.label), el('p', 'muted', c.detail)),
+                  ),
+                ),
+              );
+              root.append(panel);
+            }
+          }
+          const roles = items(personMode ? data.allocations : data.roles);
+          if (roles.length) {
+            root.append(el('h2', 'section', personMode ? 'Workstream allocations' : 'Team & open roles'));
+            const cards = el('div', 'cards');
+            roles.forEach((r) => cards.append(roleCard(r)));
+            root.append(cards);
+          }
+          threads(data.threads);
+        }
+        function issues(data) {
+          const rows = items(data);
+          heading('Attention, where it matters', 'Conflicts, pipeline risks and unfilled demand.');
+          root.append(
+            summaryCards([
+              ['Issues', data.total ?? rows.length, 'In this window'],
+              ['Conflicts', rows.filter((r) => r.type === 'conflict').length, 'Committed load above capacity'],
+              ['At risk', rows.filter((r) => r.type?.includes('risk')).length, 'Pipeline could exceed capacity'],
+              ['Open roles', rows.filter((r) => r.type === 'open-role').length, 'Opportunities to staff'],
+            ]),
+          );
+          toolbar(
+            rows,
+            rows.map((r) => r.type),
+          );
+          const cards = el('div', 'cards');
+          rows
+            .filter(matches)
+            .filter((r) => filter === 'all' || r.type === filter)
+            .forEach((r) => {
+              const c = el('article', 'card');
+              add(
+                c,
+                el('span', 'pill ' + (r.type === 'conflict' ? 'danger' : 'pipeline'), title(r.type ?? 'Issue')),
+                el('h3', '', r.person?.name ?? r.name ?? r.workstream?.name ?? 'Capability gap'),
+                el('p', 'muted', r.workstream?.name ?? ''),
+              );
+              if (r.peak) c.append(el('p', '', pct(r.peak) + ' peak load'));
+              if (r.from) c.append(el('p', 'muted', stamp(r.from) + ' → ' + stamp(r.to ?? r.from)));
+              if (r.candidates?.length) {
+                const d = add(el('details'), el('summary', '', 'Available matches'));
+                r.candidates.forEach((p) => d.append(fact(p.name, pct(p.minFreePercent) + ' free')));
+                c.append(d);
+              }
+              cards.append(c);
+            });
+          root.append(cards);
+          countNote(data);
+        }
+        function activity(data) {
+          const rows = items(data);
+          heading('Workspace activity', 'Decisions and changes, attributed to the people behind them.');
+          toolbar(rows);
+          const panel = el('section', 'card'),
+            timeline = el('div', 'timeline');
+          rows.filter(matches).forEach((r) => {
+            const e = el('article', 'event');
+            add(
+              e,
+              el('span', 'eyebrow', stamp(r.ts ?? r.lastTs) + ' · ' + (r.actor ?? r.lastAuthor ?? '')),
+              el('p', '', r.summary ?? r.excerpt ?? r.label ?? 'Workspace update'),
+              el('span', 'muted', r.planName ?? ''),
+            );
+            timeline.append(e);
+          });
+          panel.append(timeline);
+          root.append(panel);
+          if (data.next)
+            root.append(button('Load more', toolAction('get_activity', { ...current.args, cursor: data.next })));
+        }
+        function context(data) {
+          heading('Your planning workspace', data.user?.email + ' · ' + title(data.user?.role ?? 'viewer'));
+          root.append(
+            summaryCards([
+              ['This week', stamp(data.thisWeek), data.timeZone ?? ''],
+              ['Allocation steps', '0 · 25 · 50 · 100', 'Percent per person, per week'],
+              ['Plans', data.plans?.total ?? items(data.plans).length, 'Available to you'],
+              ['Matched person', data.matchedPerson?.name ?? 'Not linked', 'Set your email in Manage'],
+            ]),
+          );
+          const cards = el('div', 'cards');
+          items(data.plans).forEach((p) => {
+            const c = add(
+              el('article', 'card'),
+              el('span', 'pill', p.archivedAt ? 'Archived' : 'Active'),
+              el('h3', '', p.name),
+            );
+            add(c, button('Explore capacity →', toolAction('get_capacity_summary', { plan: p.id }), 'ghost'));
+            cards.append(c);
+          });
+          root.append(cards);
+        }
+        function outcome(data) {
+          const canUndo = !!data.changeId && !['comment', 'undo_change'].includes(current.tool);
+          heading(
+            data.dryRun ? 'Preview your change' : data.ok === false ? 'Change needs attention' : 'Workspace updated',
+            data.summary ?? data.error ?? '',
+          );
+          if (data.ok === false) {
+            root.append(el('p', 'notice error', data.error));
+            return;
+          }
+          root.append(
+            el(
+              'div',
+              'notice',
+              data.dryRun
+                ? 'Nothing has been saved. This preview uses the same permissions and locks as a real edit.'
+                : data.duplicate
+                  ? 'This change was already applied. No duplicate edit was made.'
+                  : 'Saved to the shared plan. Open browsers update live.',
+            ),
+          );
+          root.append(
+            summaryCards([
+              ['Added flags', data.impact?.added?.length ?? 0, 'Conflicts or risks introduced'],
+              ['Cleared flags', data.impact?.cleared?.length ?? 0, 'Conflicts or risks resolved'],
+              ['Mode', data.dryRun ? 'Preview' : 'Saved', 'Attributed to your identity'],
+              ['Undo', canUndo ? 'Available' : '—', 'Respecting intervening edits'],
+            ]),
+          );
+          items(data.warnings)
+            .filter(Boolean)
+            .forEach((w) => root.append(el('p', 'notice', w)));
+          if (data.dates)
+            root.append(fact('Effective dates', data.dates.from + (data.dates.to ? ' → ' + data.dates.to : '')));
+          if (canUndo) {
+            root.append(
+              button('Undo this change', () => {
+                const c = el('div', 'notice');
+                add(
+                  c,
+                  el('p', '', 'Undo “' + (data.summary ?? 'this change') + '”? Later edits are kept.'),
+                  button('Confirm undo', toolAction('undo_change', { changeId: data.changeId })),
+                  button('Cancel', () => c.remove()),
+                );
+                root.append(c);
+              }),
+            );
+          }
+          if (data.dryRun)
+            root.append(
+              button(
+                'Apply this change',
+                () => {
+                  const c = el('div', 'notice');
+                  add(
+                    c,
+                    el('p', '', 'Apply this preview to the shared workspace?'),
+                    button('Confirm apply', toolAction(current.tool, { ...current.args, dryRun: false })),
+                    button('Cancel', () => c.remove()),
+                  );
+                  root.append(c);
+                },
+                'primary',
+              ),
+            );
+        }
+        function renderContent() {
+          if (!current) return;
+          root.replaceChildren();
+          status.replaceChildren();
+          const { tool, data } = current;
+          if (data?.ok !== undefined) {
+            outcome(data);
+            return;
+          }
+          if (tool === 'get_context') context(data);
+          else if (tool === 'list_workstreams') workstreams(data);
+          else if (tool === 'list_people') people(data);
+          else if (tool === 'get_capacity_summary') capacity(data);
+          else if (tool === 'get_person' || tool === 'get_workstream') detail(data, tool === 'get_person');
+          else if (tool === 'list_issues') issues(data);
+          else if (tool === 'get_activity') activity(data);
+          else if (tool === 'get_allocations') {
+            heading('Allocation explorer', 'Allocation ranges for people, roles and workstreams.');
+            const rows = items(data);
+            toolbar(rows);
+            const cards = el('div', 'cards');
+            rows.filter(matches).forEach((r) => cards.append(roleCard(r)));
+            root.append(cards);
+            countNote(data);
+          } else root.append(el('p', 'empty', 'Ask your agent to explore capacity, workstreams or people.'));
+          if (!root.querySelector('.card,.stat'))
+            root.append(el('div', 'empty', 'No results for this selection. Try a broader search.'));
+        }
+        function consume(result) {
+          let envelope = result?.structuredContent;
+          if (!envelope?.tool) {
+            if (result?.isError) {
+              notice(
+                result.content?.find((c) => c.type === 'text')?.text ?? 'The request could not be completed.',
+                true,
+              );
+              return;
+            }
+            try {
+              const parsed = JSON.parse(result?.content?.find((c) => c.type === 'text')?.text ?? '{}');
+              envelope = { ...current, data: parsed };
+            } catch {
+              return;
+            }
+          }
+          current = envelope;
+          query = '';
+          filter = 'all';
+          renderContent();
+          document.getElementById('updated').textContent =
+            'Updated ' + new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+          document.getElementById('refresh').hidden =
+            !connected || !hostTools || (!current?.tool?.startsWith('get_') && !current?.tool?.startsWith('list_'));
+        }
+        function hostContext(context) {
+          if (context?.theme) document.documentElement.dataset.theme = context.theme;
+          const vars = context?.styles?.variables;
+          if (vars)
+            Object.entries(vars).forEach(([k, v]) => {
+              if (k.startsWith('--') && typeof v === 'string') document.documentElement.style.setProperty(k, v);
+            });
+        }
+        window.addEventListener('message', (event) => {
+          if (event.source !== window.parent || event.data?.jsonrpc !== '2.0') return;
+          const message = event.data;
+          if (message.id !== undefined && pending.has(message.id)) {
+            const p = pending.get(message.id);
+            clearTimeout(p.timeout);
+            pending.delete(message.id);
+            message.error ? p.reject(new Error(message.error.message)) : p.resolve(message.result);
+            return;
+          }
+          if (message.method === 'ui/notifications/tool-result') consume(message.params);
+          if (message.method === 'ui/notifications/host-context-changed') hostContext(message.params);
+          if (message.method === 'ui/resource-teardown' && message.id !== undefined)
+            send({ id: message.id, result: {} });
+        });
+        document.getElementById('refresh').onclick = () => current && toolAction(current.tool, current.args)();
+        let resizeQueued = false,
+          lastHeight = 0;
+        new ResizeObserver(() => {
+          if (resizeQueued || !connected) return;
+          resizeQueued = true;
+          requestAnimationFrame(() => {
+            resizeQueued = false;
+            const height = Math.ceil(document.body.getBoundingClientRect().height);
+            if (height !== lastHeight) {
+              lastHeight = height;
+              send({ method: 'ui/notifications/size-changed', params: { height } });
+            }
+          });
+        }).observe(document.body);
+        request('ui/initialize', {
+          appInfo: { name: 'capacity-planner-cards', version: '1.0.0' },
+          appCapabilities: {},
+          protocolVersion: '2026-01-26',
+        })
+          .then((result) => {
+            connected = true;
+            hostTools = !!result?.hostCapabilities?.serverTools;
+            hostContext(result?.hostContext);
+            document.getElementById('connection').textContent = 'Your team, in focus';
+            send({ method: 'ui/notifications/initialized' });
+            if (current) consume({ structuredContent: current });
+          })
+          .catch(() => {
+            document.getElementById('connection').textContent = 'Workspace snapshot';
+          });
+      })();
+    </script>
+  </body>
+</html>

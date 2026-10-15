@@ -132,6 +132,7 @@ function Panel({ p }: { p: Project }) {
             </div>
             <div>
               <dt>{p.client || '–'}</dt>
+              {p.externalId && <><dd>Project ID</dd><dt>{p.externalId}</dt></>}
               <dd>Client</dd>
             </div>
             <div>

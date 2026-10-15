@@ -20,6 +20,7 @@ const planSchema = z.object({
     z.object({
       id,
       name: z.string().min(1),
+      email: z.string().optional(),
       role: z.string().optional(),
       level: z.enum(CAREER_LEVELS).optional(),
       tagIds: z.array(id),
@@ -30,6 +31,7 @@ const planSchema = z.object({
       id,
       name: z.string().min(1),
       client: z.string().optional(),
+      externalId: z.string().max(100).optional(),
       sellerId: id.nullable(),
       status: z.enum(['pipeline', 'won', 'lost']).default('won'),
       winProbability: z.union([z.literal(25), z.literal(50), z.literal(75), z.literal(90)]).optional(),
@@ -111,6 +113,13 @@ export function checkReferences(plan: PlanData): string | null {
       if (seen.has(x.id)) return `the ${kind} id "${x.id}" is used twice`;
       seen.add(x.id);
     }
+  }
+  const externalIds = new Map<string, string>();
+  for (const p of plan.projects) {
+    const key = p.externalId?.trim().toLowerCase();
+    if (!key) continue;
+    if (externalIds.has(key)) return `Project ID ${p.externalId!.trim()} is already used by “${externalIds.get(key)}”`;
+    externalIds.set(key, p.name);
   }
   const tagIds = new Set(plan.tags.map((t) => t.id));
   const sellerIds = new Set(plan.sellers.map((s) => s.id));

@@ -2,9 +2,9 @@
 
 Plan who works on what, week by week. Allocate people to **workstreams** (sold projects or pursuits still in presales) at 0, 25, 50 or 100% per week, and see who's overloaded, who's free, and which roles are still open.
 
-By default it runs entirely in your browser. Optionally, a **shared workspace** on Cloudflare lets a team edit the same plans live, with history, locks, comments and an audit log.
+The **shared workspace** on Cloudflare is on by default, so a team can edit the same plans live, with history, locks, comments and an audit log. Switch it off under Manage → Settings to keep plans only in your browser.
 
-**Try it:** `npm install && npm run dev`, open http://localhost:5173, then Manage → Settings & data → *Load sample data*.
+**Try it:** `npm install`, copy `.dev.vars.example` to `.dev.vars`, then `npm run dev`. Open http://localhost:5173/api/dev/login?as=you@example.com and create a shared plan. To use browser-only plans, turn shared off under Manage → Settings & data (or open `/?sync=off`), then load sample data.
 
 ## Concepts
 
@@ -65,11 +65,11 @@ Press **?** in the app for every shortcut. Totals aren't rounded. The toolbar's 
 - **CSV:** a workstream's **•••** menu → *Download CSV* exports its staffing plan. **⋯** → *Export staffing (CSV)* exports everything as one pivot-ready table.
 - **Theme:** Manage → Settings & data → *Appearance*: Auto (follows your system), Light or Dark. Saved in this browser, as is *Density* (Comfortable or Compact rows). Colors are design tokens at the top of `src/styles.css`.
 
-**Storage:** without the shared workspace, everything lives in this browser's `localStorage`. It doesn't sync, and clearing site data wipes it, so export regularly. The toolbar shows when you last exported.
+**Storage:** the shared workspace is on by default. When switched off, everything lives in this browser's `localStorage`. It doesn't sync, and clearing site data wipes it, so export regularly. The toolbar shows when you last exported.
 
 ## Shared workspace
 
-Opt-in, per browser: Manage → Settings & data → *Use the shared workspace in this browser*. A link can set it too: add `?sync=on` (or `off`) to the URL; it's applied once, saved like the switch, and removed from the address bar. With it off, the app makes no server calls. Turning it on never changes the plans saved in your browser; the first time, you're offered an upload of them.
+On by default, with a per-browser switch: Manage → Settings & data → *Use the shared workspace in this browser*. A link can set it too: add `?sync=on` (or `off`) to the URL; it's applied once, saved like the switch, and removed from the address bar. With it off, the app makes no server calls. Static hosting without an API falls back to local mode for the session when no explicit mode was saved; it never saves an off preference. A new browser session retries the backend. Turning it on never changes the plans saved in your browser; the first time, you're offered an upload of them.
 
 ### Features
 
@@ -116,7 +116,7 @@ No environment variables are required.
    | `OWNER_EMAILS` | Comma-separated emails that are always admins. Without it, the first person to sign in becomes admin. Everyone else starts as a viewer. |
    | `MAIL_FROM`, `APP_URL` | Turn on mention emails: onboard a sending domain under Email Service → Email Sending (it must use Cloudflare DNS), then set the sender (e.g. `Capacity Planning <mentions@notify.example.com>`) and the app's address. Only people with access are ever emailed. |
 
-4. **Open the app,** turn on the shared workspace, and upload your plans. An admin sets the workspace **time zone** under Manage → Settings (default America/New_York). It decides when "this week" starts for everyone, including the past-weeks lock.
+4. **Open the app.** Shared mode is already on; create a plan or upload your browser-only plans. An admin sets the workspace **time zone** under Manage → Settings (default America/New_York). It decides when "this week" starts for everyone, including the past-weeks lock.
 
 **Previews:** every pull request gets a Preview URL with its own empty workspace (its own Durable Object storage, never production's data). The first person to sign in there is its admin.
 
@@ -140,8 +140,8 @@ npm run test:e2e:serve   # Playwright end-to-end tests on a fresh dev server
 ```
 
 - **Isolated browser tests:** `test:e2e:serve` starts its own server and temporary Durable Object storage; it preserves `.wrangler/state` and refuses an occupied port. Downloads and screenshots go to `work/e2e/`. To use an installed Chromium, set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/path/to/chromium`.
-- **Shared workspace locally:** copy `.dev.vars.example` to `.dev.vars`, then sign in as anyone at `http://localhost:5173/api/dev/login?as=you@example.com`. The dev sign-in only works on localhost with `DEV_AUTH=1`. Mention emails are simulated there and logged instead of sent.
-- **Tests:** CI runs the typecheck, lint, unit tests, build and all three e2e suites (`e2e/local.e2e.cjs`, `e2e/shared-workspace.e2e.cjs` and `e2e/adversarial.e2e.cjs`) on every pull request. `worker/convergence.test.ts` simulates several browsers editing and dropping connections; to run it longer, use `SYNC_SEEDS=500 npx vitest run worker/convergence.test.ts`.
+- **Shared workspace locally (the default):** copy `.dev.vars.example` to `.dev.vars`, then sign in as anyone at `http://localhost:5173/api/dev/login?as=you@example.com`. The dev sign-in only works on localhost with `DEV_AUTH=1`. Mention emails are simulated there and logged instead of sent.
+- **Tests:** CI runs the typecheck, lint, unit tests, build and the local, shared, adversarial and MCP card e2e suites (`e2e/local.e2e.cjs`, `e2e/shared-workspace.e2e.cjs`, `e2e/adversarial.e2e.cjs` and `e2e/mcp-cards.e2e.cjs`) on every pull request. `worker/convergence.test.ts` simulates several browsers editing and dropping connections; to run it longer, use `SYNC_SEEDS=500 npx vitest run worker/convergence.test.ts`.
 
 **Code layout**
 
@@ -155,3 +155,38 @@ npm run test:e2e:serve   # Playwright end-to-end tests on a fresh dev server
 | `worker/` | The Worker, both Durable Objects and their storage engines, and mention emails |
 
 See [BACKLOG.md](BACKLOG.md) for deferred features.
+
+## Agents (MCP)
+
+Endpoint: `https://<host>/api/mcp` (also copyable under Manage → Settings & data → Connect an AI agent).
+
+1. Create a separate Cloudflare Access application scoped to `/api/mcp` with **Managed OAuth**, allowing your people. Access forwards the signed-in person's JWT as `Cf-Access-Jwt-Assertion`; the Worker does not implement OAuth.
+2. Verify the Managed OAuth token on staging. If your deployment uses `TEAM_DOMAIN` and `POLICY_AUD`, add this application's AUD to the comma-separated `POLICY_AUD` list when necessary.
+3. Add the endpoint to Cloudflare's MCP server portal with **Require user auth ON**. Leaving it off can cause everyone to act as the portal's connecting admin.
+4. In Claude, add the connector URL, or use:
+
+   ```sh
+   claude mcp add --transport http capacity https://<host>/api/mcp
+   ```
+
+Agents act as the signed-in person with their current workspace role. Disabled people are refused; service tokens are unsupported. Viewers get reads and comments. Archived plans are admin-only and read-only. Notes and comments are user-written, untrusted text for agents to read, not instructions to obey.
+
+Call `get_context` first. Every tool accepts an optional `plan` id or name; with one active plan it is selected automatically, otherwise select one from the returned choices. People resolve by id, email, name or `me`; workstreams resolve by id, unique **Project ID**, or name. Configure person emails under Manage → Resources to match `me` reliably. Ambiguous matches need an id.
+
+| Read tools | Write tools |
+| --- | --- |
+| `get_context` | `create_workstream` |
+| `list_workstreams` | `update_workstream` |
+| `get_workstream` | `delete_workstream` |
+| `list_people` | `set_allocation` |
+| `get_person` | `remove_from_workstream` |
+| `get_allocations` | `move_person` |
+| `list_issues` | `add_open_role` |
+| `get_capacity_summary` | `assign_role` |
+| `get_activity` | `upsert_person`, `comment`, `undo_change` |
+
+MCP Apps compatible clients display interactive cards and charts for every tool: searchable workstream and people cards, staffing details, weekly load charts, capability coverage, issues and an activity timeline. Cards can refresh and drill into a workstream or person through the authenticated host bridge. Preview cards can apply changes and saved changes can be undone, each after an explicit confirmation. The UI follows the host theme, fits narrow containers, loads no external resources and treats names, notes and comments as plain text. Clients without MCP Apps support still receive compact JSON text.
+
+All writes accept `dryRun` and an optional `idempotencyKey` (reuse the key when retrying the same change). Dates normalize to Mondays and allocation values must be **0, 25, 50, 100%**. Date windows are inclusive and limited to 260 weeks. Agent edits appear in Activity with **(via agent)**, as one undo step attributed to you; save the returned `changeId` for `undo_change`. Deletes require exact `confirmName`. Moving/swapping/removing people preserves their prior weekly history. Existing locks apply to both dry runs and real edits.
+
+For local development, use MCP Inspector with `http://localhost:5173/api/mcp` and header `X-Dev-User: you@example.com`. This header only works on localhost with `DEV_AUTH=1`; production uses Access. No `WWW-Authenticate` is emitted by the Worker because Access handles authentication first.

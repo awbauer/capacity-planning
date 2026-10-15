@@ -18,7 +18,7 @@ import { SharedPlansTable } from '../../collab/SharedPlansTable';
 import { UsersTable } from '../../collab/UsersTable';
 import { newId } from '../../domain/ids';
 import { useCollabStore } from '../../store/collabStore';
-import { getPreferredMode, isLocalOverride, isShared, setPreferredMode } from '../../store/mode';
+import { getPreferredMode, isLocalOverride, isNoBackend, isShared, setPreferredMode } from '../../store/mode';
 import { addLock, removeLock, setWorkspaceTimeZone } from '../../store/sharedPlanStore';
 import { useCan } from '../../store/useCan';
 import { Toggle } from '../Toggle';
@@ -83,6 +83,7 @@ function ResourcesTable() {
           <tr>
             <th>Name</th>
             <th>Level</th>
+            <th>Email</th>
             <th>Role</th>
             <th>Capabilities</th>
             <th>Roles</th>
@@ -110,6 +111,9 @@ function ResourcesTable() {
                       </option>
                     ))}
                   </select>
+                </td>
+                <td>
+                  <InlineText ariaLabel="Email" value={r.email ?? ''} placeholder="Email" onCommit={(email) => s.updateResource(r.id, { email: email.trim() || undefined })} />
                 </td>
                 <td>
                   <InlineText ariaLabel="Role" value={r.role ?? ''} placeholder="Role" onCommit={(role) => s.updateResource(r.id, { role: role || undefined })} />
@@ -471,7 +475,7 @@ function SharedWorkspaceSetting() {
       <Toggle
         label="Use the shared workspace in this browser"
         checked={preferred === 'shared'}
-        title="Off: plans live only in this browser (as before). On: plans live in the shared workspace, with live editing, history, locks and an activity log."
+        title="Off: plans live only in this browser. On: plans live in the shared workspace, with live editing, history, locks and an activity log."
         onChange={(on) => {
           const msg = on
             ? 'Switch to the shared workspace? The page reloads. Plans saved in this browser stay here, untouched; you’ll be offered to upload them.'
@@ -482,12 +486,24 @@ function SharedWorkspaceSetting() {
       <p className="muted small">
         {shared
           ? 'You’re in the shared workspace: everyone with access sees the same plans and each other’s changes live. Changes are recorded in the Activity log.'
+          : isNoBackend() ? 'No shared backend is available here. This session uses browser-only plans; the shared preference is unchanged.'
           : isLocalOverride()
             ? 'The shared workspace is switched on, but you chose to work on this browser’s plans for this session.'
             : 'Off: plans are saved only in this browser. Turn on to work on shared plans with others (needs the shared workspace set up; see the README).'}
       </p>
     </fieldset>
   );
+}
+
+function AgentConnectionSetting() {
+  const [copied, setCopied] = useState(false);
+  const url = `${window.location.origin}/api/mcp`;
+  return <fieldset className="shared-setting"><legend>Connect an AI agent</legend>
+    <p>Connect Claude or your MCP portal to read plans and make changes with your workspace permissions.</p>
+    <label>MCP URL<input readOnly value={url} onFocus={(e) => e.currentTarget.select()} /></label>
+    <button className="btn" onClick={() => { void navigator.clipboard.writeText(url).then(() => setCopied(true)).catch(() => setCopied(false)); }}>{copied ? 'Copied' : 'Copy URL'}</button>
+    <p className="muted small">Your admin must configure Cloudflare Access Managed OAuth and require user authentication in the MCP portal. Agent edits appear in Activity and can be undone.</p>
+  </fieldset>;
 }
 
 const THEME_OPTIONS: { id: Theme; label: string }[] = [
@@ -586,6 +602,7 @@ function SettingsPanel() {
   return (
     <section className="settings">
       <SharedWorkspaceSetting />
+      <AgentConnectionSetting />
       <AppearanceSetting />
       {shared && !can.admin && <p className="callout">Only admins can change these settings.</p>}
       {shared && <TimeZoneSetting />}

@@ -81,7 +81,7 @@ export function sessionExpiry(
 export async function identify(request: Request, env: Env, ctx?: AccessContext, fetcher: typeof fetch = fetch): Promise<AuthResult> {
   const url = new URL(request.url);
   if (devAuthAllowed(env, url)) {
-    const email = cookie(request, 'dev_user')?.trim().toLowerCase();
+    const email = (request.headers.get('X-Dev-User') || cookie(request, 'dev_user'))?.trim().toLowerCase();
     if (email) return { ok: true, identity: { email, name: nameFromEmail(email), exp: Date.now() + 24 * 3600_000 } };
   }
   if (ctx?.access) {

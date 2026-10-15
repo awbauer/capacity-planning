@@ -15,6 +15,7 @@
     "prepare": "node scripts/client-files.mjs --stub"
   },
   "dependencies": {
+    "@modelcontextprotocol/server": "2.3.1",
     "date-fns": "^4.4.0",
     "jose": "^6.2.12",
     "react": "^19.2.8",

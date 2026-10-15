@@ -256,6 +256,7 @@ function WorkstreamDetails({ project, onClose }: { project: Project; onClose: ()
     >
       <p className="details-subtitle">
         <span className={`status-pill status-${project.status}`}>{STATUS_LABELS[project.status]}</span>
+        {project.externalId && <span>Project ID: {project.externalId}</span>}
         {project.client && <span>{project.client}</span>}
         <span>{seller ? `Seller: ${seller.name}` : 'No seller'}</span>
         <span>

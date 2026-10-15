@@ -20,11 +20,12 @@ export const MAX_CELLS = 20_000;
 
 const tag = z.strictObject({ id: entityId, name, color: z.string().regex(/^#[0-9a-fA-F]{3,8}$/) });
 const seller = z.strictObject({ id: entityId, name, email: text().optional() });
-const resource = z.strictObject({ id: entityId, name, role: text().optional(), level: level.optional(), tagIds });
+const resource = z.strictObject({ id: entityId, name, email: text().optional(), role: text().optional(), level: level.optional(), tagIds });
 const project = z.strictObject({
   id: entityId,
   name,
   client: text().optional(),
+  externalId: text(100).optional(),
   sellerId: entityId.nullable(),
   status: z.enum(['pipeline', 'won', 'lost']),
   winProbability: z.union([z.literal(25), z.literal(50), z.literal(75), z.literal(90)]).optional(),

@@ -62,3 +62,25 @@ describe('?sync= URL parameter', () => {
     expect(replaceState).not.toHaveBeenCalled();
   });
 });
+
+describe('shared default and local fallback', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it('defaults to shared unless local was explicitly selected', async () => {
+    expect((await load('')).mode.getMode()).toBe('shared');
+    expect((await load('', 'local')).mode.getMode()).toBe('local');
+    expect((await load('', 'unexpected')).mode.getMode()).toBe('shared');
+  });
+  it('keeps a no-backend fallback in the session without changing the saved preference', async () => {
+    const { mode, session, local, loc } = await load('');
+    expect(mode.hasExplicitMode()).toBe(false);
+    mode.noBackendThisSession();
+    expect(session.get(mode.LOCAL_OVERRIDE_KEY)).toBe('no-backend');
+    expect(mode.isNoBackend()).toBe(true);
+    expect(local.has(mode.MODE_KEY)).toBe(false);
+    expect(loc.reload).toHaveBeenCalled();
+    const loaded = await load('');
+    loaded.session.set(loaded.mode.LOCAL_OVERRIDE_KEY, 'no-backend');
+    expect(loaded.mode.getMode()).toBe('local');
+    expect(loaded.mode.getPreferredMode()).toBe('shared');
+  });
+});

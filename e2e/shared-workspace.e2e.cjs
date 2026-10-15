@@ -27,6 +27,7 @@ async function until(fn, msg, timeout = 5000) {
   const errors = [];
   async function user(email, { shared = true } = {}) {
     const context = await browser.newContext({ viewport: { width: 1500, height: 900 } });
+    if (!shared) await context.addInitScript(() => { if (!localStorage.getItem('capacity-mode:v1')) localStorage.setItem('capacity-mode:v1', 'local'); });
     const page = await context.newPage();
     page.on('pageerror', (e) => errors.push(`${email}: ${e}`));
     page.on('console', (m) => m.type() === 'error' && !/WebSocket|Failed to load resource/.test(m.text()) && errors.push(`${email}: ${m.text()}`));
@@ -56,6 +57,14 @@ async function until(fn, msg, timeout = 5000) {
     await page.locator('.corner-actions').getByRole('button', { name: 'Expand all', exact: true }).click();
   };
   const val = (loc) => loc.getAttribute('data-value').then(Number);
+
+  // A fresh browser with no mode preference opens shared mode.
+  const freshContext = await browser.newContext();
+  const fresh = await freshContext.newPage();
+  await fresh.goto(`${BASE}/api/dev/login?as=zoe@example.com`);
+  await fresh.waitForSelector('text=No plans in the shared workspace yet');
+  assert(await fresh.evaluate(() => localStorage.getItem('capacity-mode:v1')) === null, 'fresh browser opens shared without saving a preference');
+  await freshContext.close();
 
   // ── A viewer on an empty workspace is told why they can't create a plan ──
   const zoe = await user('zoe@example.com');
@@ -119,6 +128,41 @@ async function until(fn, msg, timeout = 5000) {
   await shot(alice, 'c04-users');
   await alice.getByRole('button', { name: 'Workstreams', exact: true }).first().click();
   await alice.waitForSelector('.grid');
+
+  // MCP uses the same room as browsers; dry runs and undo are visible correctly.
+  async function rpc(page, email, method, params = {}) {
+    const response = await page.request.post(`${BASE}/api/mcp`, { headers: { 'X-Dev-User': email, Accept: 'application/json, text/event-stream' }, data: { jsonrpc: '2.0', id: 1, method, params } });
+    assert(response.ok(), `MCP ${method} HTTP ${response.status()}`);
+    const raw = await response.text();
+    return JSON.parse(raw.startsWith('event:') || raw.startsWith('data:') ? raw.split('\n').find((l) => l.startsWith('data:')).slice(5) : raw);
+  }
+  async function tool(name, args = {}, page = alice, email = 'alice@example.com') {
+    const r = await rpc(page, email, 'tools/call', { name, arguments: { plan: global.planId, ...args } });
+    assert(!r.error && !r.result?.isError, `${name} succeeds: ${JSON.stringify(r.error || r.result?.content).slice(0, 300)}`);
+    return JSON.parse(r.result.content[0].text);
+  }
+  const context = await tool('get_context');
+  assert(context.allocationSteps.join(',') === '0,25,50,100', 'MCP context supplies allowed allocation steps');
+  const listed = await tool('list_workstreams');
+  assert(listed.items.length > 0, 'MCP lists workstreams');
+  const alex = await tool('get_person', { person: 'res-alex' });
+  assert(alex.name === 'Alex Rivera', 'MCP resolves people by id');
+  const viewerTools = await rpc(carol, 'carol@example.com', 'tools/list');
+  assert(viewerTools.result.tools.length === 10 && !viewerTools.result.tools.some((t) => t.name === 'set_allocation'), 'viewer has only read tools and comment');
+  const refused = await rpc(carol, 'carol@example.com', 'tools/call', { name: 'set_allocation', arguments: { plan: global.planId, role: 'sample-a1', workstream: 'proj-acme', percent: 100 } });
+  assert(refused.error || refused.result?.isError, 'viewer direct write call is refused');
+  const beforeAgent = await row(bob, 'sample-a1').locator('td.cell').evaluateAll((cells) => cells.map((c) => c.dataset.value).join(','));
+  const allocation = { role: 'sample-a1', workstream: 'proj-acme', from: context.thisWeek, to: context.thisWeek, percent: 100 };
+  await tool('set_allocation', { ...allocation, dryRun: true });
+  assert(await row(bob, 'sample-a1').locator('td.cell').evaluateAll((cells) => cells.map((c) => c.dataset.value).join(',')) === beforeAgent, 'MCP dry-run leaves Bob’s page unchanged');
+  const agentChange = await tool('set_allocation', { ...allocation, idempotencyKey: 'browser-agent-allocation' });
+  await until(() => row(bob, 'sample-a1').locator('td.cell').evaluateAll((cells) => cells.map((c) => c.dataset.value).join(',')).then((v) => v !== beforeAgent), 'Bob sees MCP allocation live');
+  assert(agentChange.changeId && agentChange.summary.includes('(via agent)'), 'agent edit has an undo id and Activity attribution');
+  const retried = await tool('set_allocation', { ...allocation, idempotencyKey: 'browser-agent-allocation' });
+  assert(retried.duplicate && retried.changeId === agentChange.changeId, 'MCP retry returns the same change without another edit');
+  await until(async () => (await tool('get_activity')).entries?.some((r) => r.summary.includes('(via agent)')) || false, 'agent change is indexed in Activity');
+  await tool('undo_change', { changeId: agentChange.changeId });
+  await until(() => row(bob, 'sample-a1').locator('td.cell').evaluateAll((cells) => cells.map((c) => c.dataset.value).join(',')).then((v) => v === beforeAgent), 'MCP undo restores Bob’s page');
 
   // ── Realtime edit ──
   const c3 = await val(cell(alice, 'sample-a1', 3));

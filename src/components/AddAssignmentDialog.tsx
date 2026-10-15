@@ -1,44 +1,16 @@
+import { defaultRange, rangeNote } from '../domain/staffing';
 import { useState, type ReactNode } from 'react';
 import { STATUS_LABELS } from '../domain/labels';
-import { severity, weekClass, weekKind, worse, type Severity } from '../domain/load';
+import { severity, weekClass, worse, type Severity } from '../domain/load';
 import { CLICK_STEPS } from '../domain/steps';
 import type { Project, Resource, WeekKey } from '../domain/types';
-import { addWeeks, currentWeek, formatWeekRange, normalizeWeek, weeksBetween } from '../domain/weeks';
+import { formatWeekRange, normalizeWeek, weeksBetween } from '../domain/weeks';
 import { usePlan, usePlanStore } from '../store/planStore';
 import { useDerived } from '../store/useDerived';
 import { TagChips } from './Chips';
 import { Modal } from './Modal';
 
 type Props = { onClose: () => void } & ({ projectId: string; resourceId?: never } | { resourceId: string; projectId?: never });
-
-/**
- * Pipeline workstreams that haven't started default to the presales period
- * (now until the start date); everything else to the workstream's dates.
- */
-function defaultRange(project: Project | undefined): { from: WeekKey; to: WeekKey } {
-  const now = currentWeek();
-  if (project?.status === 'pipeline' && project.startWeek && project.startWeek > now) {
-    return { from: now, to: addWeeks(project.startWeek, -1) };
-  }
-  const from = project?.startWeek ?? now;
-  return { from, to: project?.endWeek && project.endWeek >= from ? project.endWeek : addWeeks(from, 11) };
-}
-
-/** Explains how the chosen weeks will count: presales before the start date, delivery from it. */
-function rangeNote(project: Project, weeks: WeekKey[]): string {
-  const presales = weeks.filter((w) => weekKind(project, w) === 'presales').length;
-  const delivery = weeks.length - presales;
-  const deliveryCounts =
-    project.status === 'won'
-      ? 'counted'
-      : project.status === 'pipeline'
-        ? 'tentative until the workstream is won'
-        : 'not counted (workstream lost)';
-  const parts: string[] = [];
-  if (presales) parts.push(`${presales} presales week${presales === 1 ? '' : 's'} before the start date (always counted)`);
-  if (delivery) parts.push(`${delivery} delivery week${delivery === 1 ? '' : 's'} (${deliveryCounts})`);
-  return parts.join(' · ');
-}
 
 interface Addition {
   project: Project;

@@ -22,6 +22,7 @@ const moreMenu = (page, item) => choose(page, page.getByRole('button', { name: '
 (async () => {
   const browser = await chromium.launch({ ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH } : {}) });
   const context = await browser.newContext({ viewport: { width: 1600, height: 950 }, acceptDownloads: true });
+  await context.addInitScript(() => { if (!localStorage.getItem('capacity-mode:v1')) localStorage.setItem('capacity-mode:v1', 'local'); });
   const page = await context.newPage();
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') errors.push(m.text()); });
@@ -273,6 +274,15 @@ const moreMenu = (page, item) => choose(page, page.getByRole('button', { name: '
   await page.getByRole('button', { name: 'Create workstream' }).click();
   assert(await page.getByText('Heroku Migration').count() > 0, 'new project in grid');
 
+  // Project IDs are editable and searchable in browser-only mode.
+  await rowMenu(page, page.locator('[id="row-p:proj-contoso"]'), 'Edit workstream…');
+  await page.getByLabel('Project ID', { exact: true }).fill('CRM-123');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  const searchById = page.locator('input[type="search"]').first();
+  await searchById.fill('CRM-123');
+  assert(await page.locator('tr.project-row').count() === 1 && await page.locator('[id="row-p:proj-contoso"]').count() === 1, 'Project ID search finds its workstream');
+  await searchById.fill('');
+
   // CSV downloads: one workstream, and all workstreams.
   await page.getByRole('button', { name: 'Workstreams', exact: true }).click();
   const fs = require('fs');
@@ -285,10 +295,11 @@ const moreMenu = (page, item) => choose(page, page.getByRole('button', { name: '
   const t1 = fs.readFileSync(f1, 'utf8');
   assert(csv1.suggestedFilename().startsWith('staffing-agentforce-service-pilot-'), `workstream CSV filename: ${csv1.suggestedFilename()}`);
   assert(t1.startsWith('\uFEFFWorkstream,Agentforce Service Pilot') && t1.includes('\r\nPhase,') && t1.includes('\r\nTotal FTE,'), 'workstream CSV content');
+  assert(t1.includes('Project ID,CRM-123'), 'workstream CSV includes Project ID');
   const [csv2] = await Promise.all([page.waitForEvent('download'), moreMenu(page, 'Export staffing (CSV)')]);
   const f2 = path.join(SP, 'all.csv');
   await csv2.saveAs(f2);
-  assert(fs.readFileSync(f2, 'utf8').startsWith('\uFEFFWorkstream,Client,Seller,Status,Role,Person,Level,Week of,Phase,Allocation %'), 'all-workstreams CSV content');
+  assert(fs.readFileSync(f2, 'utf8').startsWith('\uFEFFWorkstream,Project ID,Client,Seller,Status,Role,Person,Level,Week of,Phase,Allocation %'), 'all-workstreams CSV content');
   await shot(page, '16-csv-buttons');
 
   // Export, clear, import.

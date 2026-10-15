@@ -14,18 +14,65 @@ function Screen({ title, children }: { title: string; children: ReactNode }) {
     <div className="gate">
       <div className="gate-card">
         <h1>{title}</h1>
+        <LocalPlansNotice />
         {children}
       </div>
     </div>
   );
 }
 
+function LocalPlansNotice() {
+  const can = useCan();
+  const [dismissed, setDismissed] = useState(() => {
+    try {
+      return sessionStorage.getItem('capacity-local-notice') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const [hasPlans] = useState(() => readLocalPlans().some((p) => p.plan.projects.length + p.plan.resources.length > 0));
+  if (can.edit || dismissed || !hasPlans) return null;
+  return (
+    <div className="callout" role="status">
+      <p>
+        Your browser-only plans are still here;{' '}
+        <button className="link" onClick={() => setPreferredMode('local')}>
+          Turn shared off / Download a backup
+        </button>
+      </p>
+      <button
+        className="btn"
+        onClick={() => {
+          try {
+            sessionStorage.setItem('capacity-local-notice', '1');
+          } catch {
+            /* Storage may be disabled. */
+          }
+          setDismissed(true);
+        }}
+      >
+        Dismiss
+      </button>
+    </div>
+  );
+}
+
 const LocalButtons = () => (
   <>
-    <button type="button" className="btn" onClick={workLocallyThisSession} title="Use the plans saved in this browser for now">
+    <button
+      type="button"
+      className="btn"
+      onClick={workLocallyThisSession}
+      title="Use the plans saved in this browser for now"
+    >
       Work locally this session
     </button>
-    <button type="button" className="btn" onClick={() => setPreferredMode('local')} title="Turn the shared workspace off in this browser">
+    <button
+      type="button"
+      className="btn"
+      onClick={() => setPreferredMode('local')}
+      title="Turn the shared workspace off in this browser"
+    >
       Turn shared workspace off
     </button>
   </>
@@ -43,6 +90,11 @@ export function SharedGate({ children }: { children: ReactNode }) {
   const plans = useCollabStore((s) => s.plans);
   const can = useCan();
   const me = useCollabStore((s) => s.me);
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setSlow(true), 4000);
+    return () => clearTimeout(t);
+  }, []);
   const [upload, setUpload] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [hasLocal] = useState(() => readLocalPlans().some((p) => p.plan.projects.length + p.plan.resources.length > 0));
@@ -52,7 +104,8 @@ export function SharedGate({ children }: { children: ReactNode }) {
   }, []);
 
   // Offer this browser's plans once, the first time someone who can edit gets in.
-  const offer = !dismissed && hasLocal && (status === 'live' || status === 'no-plan') && can.edit && !readPrefs().uploadOffered;
+  const offer =
+    !dismissed && hasLocal && (status === 'live' || status === 'no-plan') && can.edit && !readPrefs().uploadOffered;
 
   // Forget "recently changed by" markers once they're old, and keep "this week" current over a Monday.
   useEffect(() => {
@@ -78,15 +131,23 @@ export function SharedGate({ children }: { children: ReactNode }) {
 
   switch (status) {
     case 'booting':
-      return <Screen title="Connecting to the shared workspace…">{null}</Screen>;
+      return <Screen title="Connecting to the shared workspace…">{slow && <LocalButtons />}</Screen>;
     case 'signed-out':
       return (
         <Screen title="Sign in again">
-          <p>{statusMsg ?? 'Your sign-in has expired.'} Edits you hadn’t sent yet are kept and go out once you’re back.</p>
+          <p>
+            {statusMsg ?? 'Your sign-in has expired.'} Edits you hadn’t sent yet are kept and go out once you’re back.
+          </p>
           <div className="gate-actions">
             <button type="button" className="btn btn-primary" onClick={() => window.location.reload()}>
               Sign in
             </button>
+
+            {['localhost', '127.0.0.1'].includes(window.location.hostname) && (
+              <a className="btn" href="/api/dev/login">
+                Development sign in
+              </a>
+            )}
             <LocalButtons />
           </div>
         </Screen>
@@ -105,12 +166,14 @@ export function SharedGate({ children }: { children: ReactNode }) {
         <Screen title="Can’t reach the shared workspace">
           <p>{statusMsg}</p>
           <p className="muted small">
-            If this is a new deployment, an admin needs to finish setting it up (Cloudflare Access, TEAM_DOMAIN and POLICY_AUD; see the README).
+            If this is a new deployment, an admin needs to finish setting it up (Cloudflare Access, TEAM_DOMAIN and
+            POLICY_AUD; see the README).
           </p>
           <div className="gate-actions">
             <button type="button" className="btn btn-primary" onClick={() => void bootShared()}>
               Retry
             </button>
+
             <LocalButtons />
           </div>
         </Screen>
@@ -123,6 +186,7 @@ export function SharedGate({ children }: { children: ReactNode }) {
             <button type="button" className="btn btn-primary" onClick={() => window.location.reload()}>
               Reload
             </button>
+            <LocalButtons />
           </div>
         </Screen>
       );
@@ -161,17 +225,18 @@ export function SharedGate({ children }: { children: ReactNode }) {
               </p>
               <p className="muted small">
                 A workspace admin can make you an editor under Manage → People &amp; access. If nobody is an admin yet,
-                add your email to the Worker’s <code>OWNER_EMAILS</code> variable in Cloudflare (Settings → Variables and
-                secrets), then reload this page.
+                add your email to the Worker’s <code>OWNER_EMAILS</code> variable in Cloudflare (Settings → Variables
+                and secrets), then reload this page.
               </p>
             </div>
           )}
+          <LocalButtons />
           {dialog}
         </Screen>
       );
   }
 
-  if (!loaded) return <Screen title="Opening the plan…">{null}</Screen>;
+  if (!loaded) return <Screen title="Opening the plan…">{slow && <LocalButtons />}</Screen>;
   const readOnlyOffline = status === 'offline' && !can.edit;
   return (
     <>
@@ -182,6 +247,7 @@ export function SharedGate({ children }: { children: ReactNode }) {
             : 'Reconnecting… edits you make now are sent when the connection is back.'}
         </div>
       )}
+      <LocalPlansNotice />
       {children}
       {dialog}
     </>
