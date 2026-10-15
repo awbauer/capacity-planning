@@ -41,7 +41,9 @@ export function ProjectDialog({ project, defaults, onClose }: Props) {
 
   const datesInvalid =
     !!effectiveDraft.startWeek && !!effectiveDraft.endWeek && effectiveDraft.endWeek < effectiveDraft.startWeek;
-  const canSave = draft.name.trim() !== '' && !datesInvalid;
+  const projects = usePlanStore((s) => s.plan.projects);
+  const duplicate = draft.externalId?.trim() && projects.find((p) => p.id !== project?.id && p.externalId?.trim().toLowerCase() === draft.externalId?.trim().toLowerCase());
+  const canSave = draft.name.trim() !== '' && !datesInvalid && !duplicate;
 
   const save = () => {
     if (!canSave) return;
@@ -49,6 +51,7 @@ export function ProjectDialog({ project, defaults, onClose }: Props) {
       ...effectiveDraft,
       name: draft.name.trim(),
       client: draft.client?.trim() || undefined,
+      externalId: draft.externalId?.trim() || undefined,
       notes: draft.notes?.trim() || undefined,
     };
     if (project) updateProject(project.id, clean, offerShift && moveStaffing ? { from: oldStart!, weeks: slip } : undefined);
@@ -105,6 +108,11 @@ export function ProjectDialog({ project, defaults, onClose }: Props) {
           Client
           <input value={draft.client ?? ''} onChange={(e) => set({ client: e.target.value })} />
         </label>
+        <label>
+          Project ID
+          <input maxLength={100} value={draft.externalId ?? ''} onChange={(e) => set({ externalId: e.target.value })} aria-invalid={!!duplicate} />
+        </label>
+        {duplicate && <p className="warn-text" role="alert">Project ID {draft.externalId?.trim()} is already used by “{duplicate.name}”</p>}
         <div className="form-row">
           <label>
             Seller

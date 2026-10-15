@@ -50,6 +50,7 @@ try {
   code = await run('node', ['e2e/local.e2e.cjs', out]);
   if (code === 0) code = await run('node', ['e2e/shared-workspace.e2e.cjs', out]);
   if (code === 0) code = await run('node', ['e2e/adversarial.e2e.cjs', out]);
+  if (code === 0) code = await run('node', ['e2e/mcp-cards.e2e.cjs', out]);
 } finally {
   if (server) {
     if (server.exitCode === null && server.signalCode === null) {

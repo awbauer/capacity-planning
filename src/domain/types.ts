@@ -35,6 +35,7 @@ export type CareerLevel = (typeof CAREER_LEVELS)[number];
 
 /** A person who can be allocated to projects. */
 export interface Resource {
+  email?: string;
   id: string;
   name: string;
   role?: string;
@@ -43,6 +44,7 @@ export interface Resource {
 }
 
 export interface Project {
+  externalId?: string;
   id: string;
   name: string;
   client?: string;

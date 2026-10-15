@@ -35,7 +35,7 @@ function matches(p: Project, f: Filters, d: Derived, hasIssue: boolean): boolean
     a.name,
     a.resourceId ? (d.resourcesById.get(a.resourceId)?.name ?? '') : '',
   ]);
-  return [p.name, p.client ?? '', p.sellerId ? (d.sellersById.get(p.sellerId)?.name ?? '') : '', ...people].some((s) =>
+  return [p.name, p.externalId ?? '', p.client ?? '', p.sellerId ? (d.sellersById.get(p.sellerId)?.name ?? '') : '', ...people].some((s) =>
     s.toLowerCase().includes(q),
   );
 }

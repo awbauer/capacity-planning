@@ -1,3 +1,12 @@
+import { changesPast } from './mcp/changes';
+import { diffPlans } from '../src/domain/diff';
+import { revertChanges } from '../src/domain/revert';
+import { buildCommand } from './mcp/commands';
+import { schemas, type Command } from './mcp/inputs';
+import { impact } from './mcp/impact';
+import { person, role, workstream } from './mcp/resolve';
+import { applyOp } from '../src/domain/ops';
+import type { CommentAnchor } from '../src/domain/comments';
 import { DurableObject } from 'cloudflare:workers';
 import { colorFor } from '../src/domain/colors';
 import type { EntityKind } from '../src/domain/diff';
@@ -32,7 +41,6 @@ interface Conn {
   view?: string;
   sel?: Presence['sel'];
 }
-
 
 /** Most role ids kept from someone's selection (presence lives in the socket attachment, max 16 KiB). */
 const MAX_PRESENCE_ROLES = 100;
@@ -100,12 +108,21 @@ export class PlanRoom extends DurableObject<Env> {
     let msg: ClientMsg;
     try {
       const parsed: unknown = JSON.parse(data);
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || typeof (parsed as { t?: unknown }).t !== 'string') return;
+      if (
+        !parsed ||
+        typeof parsed !== 'object' ||
+        Array.isArray(parsed) ||
+        typeof (parsed as { t?: unknown }).t !== 'string'
+      )
+        return;
       msg = parsed as ClientMsg;
     } catch {
       return;
     }
-    if (msg.t === 'hello' && [msg.epoch, msg.lastSeq].some((n) => n !== undefined && (!Number.isSafeInteger(n) || n < 0))) {
+    if (
+      msg.t === 'hello' &&
+      [msg.epoch, msg.lastSeq].some((n) => n !== undefined && (!Number.isSafeInteger(n) || n < 0))
+    ) {
       ws.close(CLOSE.protocol, 'Invalid sync cursor');
       return;
     }
@@ -147,14 +164,23 @@ export class PlanRoom extends DurableObject<Env> {
         this.send(ws, {
           t: 'welcome',
           proto: PROTOCOL_VERSION,
-          you: { email: fresh.email, name: fresh.name, role: fresh.role, owner: fresh.owner, connId: fresh.connId, color: fresh.color },
+          you: {
+            email: fresh.email,
+            name: fresh.name,
+            role: fresh.role,
+            owner: fresh.owner,
+            connId: fresh.connId,
+            color: fresh.color,
+          },
           plan: { id: this.room.planId ?? '', name: meta.name, archived: meta.archived },
           epoch: this.room.epoch,
           seq: this.room.seq,
           ...catchUp,
           locks: this.room.locks(),
           threads: this.room.threads(),
-          presence: this.others(ws).filter((c) => c.ready).map(presenceOf),
+          presence: this.others(ws)
+            .filter((c) => c.ready)
+            .map(presenceOf),
           thisWeek: this.thisWeek(),
           timeZone: this.room.timeZone,
         });
@@ -182,7 +208,12 @@ export class PlanRoom extends DurableObject<Env> {
         this.finish(ws, msg.cid, this.room.removeLock(user, msg.cid, String(msg.id)));
         return;
       case 'comment.add': {
-        const p = commentAddSchema.safeParse({ threadId: msg.threadId, commentId: msg.commentId, anchor: msg.anchor, body: msg.body });
+        const p = commentAddSchema.safeParse({
+          threadId: msg.threadId,
+          commentId: msg.commentId,
+          anchor: msg.anchor,
+          body: msg.body,
+        });
         if (!p.success) return this.invalid(ws, msg.cid, p.error.issues[0].message);
         this.finish(ws, msg.cid, this.room.addComment(user, msg.cid, p.data));
         return;
@@ -210,7 +241,13 @@ export class PlanRoom extends DurableObject<Env> {
         const sel = msg.sel;
         conn.sel =
           sel && Array.isArray(sel.roleIds) && typeof sel.from === 'string' && typeof sel.to === 'string'
-            ? { roleIds: sel.roleIds.filter((id): id is string => typeof id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(id)).slice(0, MAX_PRESENCE_ROLES), from: sel.from.slice(0, 10), to: sel.to.slice(0, 10) }
+            ? {
+                roleIds: sel.roleIds
+                  .filter((id): id is string => typeof id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(id))
+                  .slice(0, MAX_PRESENCE_ROLES),
+                from: sel.from.slice(0, 10),
+                to: sel.to.slice(0, 10),
+              }
             : undefined;
         ws.serializeAttachment(conn);
         if (conn.ready) this.broadcast({ t: 'presence', presence: presenceOf(conn) }, ws);
@@ -238,12 +275,25 @@ export class PlanRoom extends DurableObject<Env> {
 
   /** Sends the outcome of a change: to everyone if applied (with the cid only to its sender), else to the sender. */
   private finish(ws: WebSocket, cid: string, result: Result) {
+    this.publish(result, { ws, cid });
+  }
+
+  private publish(result: Result, sender?: { ws: WebSocket; cid: string }) {
+    const ws = sender?.ws,
+      cid = sender?.cid;
     if (result.ok === 'dup' || result.ok === 'noop') {
-      this.send(ws, { t: 'ack', cid, dup: true, seq: result.seq });
+      if (ws && cid) this.send(ws, { t: 'ack', cid, dup: true, seq: result.seq });
       return;
     }
     if (result.ok === false) {
-      this.send(ws, { t: 'rejected', cid, code: result.code, msg: result.msg, ...(result.lockIds ? { lockIds: result.lockIds } : {}) });
+      if (ws && cid)
+        this.send(ws, {
+          t: 'rejected',
+          cid,
+          code: result.code,
+          msg: result.msg,
+          ...(result.lockIds ? { lockIds: result.lockIds } : {}),
+        });
       return;
     }
     const base: ServerMsg = {
@@ -376,7 +426,13 @@ export class PlanRoom extends DurableObject<Env> {
   // ── called by the Worker and the Workspace (RPC) ──
 
   /** Creates the plan's content (new plan or upload), recorded as one change by `actor`. */
-  init(planId: string, actor: { email: string; name: string }, plan: PlanData | null, summary: string, timeZone?: string) {
+  init(
+    planId: string,
+    actor: { email: string; name: string },
+    plan: PlanData | null,
+    summary: string,
+    timeZone?: string,
+  ) {
     this.room.setPlanId(planId);
     if (timeZone) this.room.timeZone = timeZone;
     if (plan) {
@@ -392,6 +448,132 @@ export class PlanRoom extends DurableObject<Env> {
 
   batch(batchId: string, withText = false) {
     return this.room.batch(batchId, withText) ?? null;
+  }
+
+  snapshot() {
+    return {
+      plan: this.room.current(),
+      seq: this.room.seq,
+      thisWeek: this.thisWeek(),
+      timeZone: this.room.timeZone,
+      locks: this.room.locks(),
+      threads: this.room.threads(),
+    };
+  }
+
+  private agentResult(
+    result: Result,
+    summary: string,
+    warnings: string[] = [],
+    effect: ReturnType<typeof impact> = { added: [], cleared: [], truncated: false },
+  ) {
+    if (result.ok === false) return { ok: false, error: result.msg, code: result.code };
+    const batch =
+      result.ok === true
+        ? result.batch
+        : result.ok === 'dup'
+          ? this.room.activitySince(result.seq - 1, 1)[0]
+          : undefined;
+    return {
+      ok: true,
+      changeId: batch?.batchId,
+      summary: batch?.summary ?? summary,
+      warnings,
+      impact: effect,
+      duplicate: result.ok === 'dup',
+      skipped: result.ok === true ? result.skipped : undefined,
+    };
+  }
+
+  async command(user: User, input: Command, options: { dryRun?: boolean; cid?: string } = {}) {
+    if ((await this.planMeta()).archived) return { ok: false, error: 'Archived plans are read-only.' };
+    // No awaits after this point: build, validation and commit share one room snapshot.
+    if (user.role === 'viewer' && input.tool !== 'comment') return { ok: false, error: 'Viewers can’t edit.' };
+    const parsed = schemas[input.tool]?.safeParse(input.args);
+    if (!parsed?.success) return { ok: false, error: 'Invalid command arguments.' };
+    const cmd = { tool: input.tool, args: parsed.data } as Command;
+    const dryRun = options.dryRun ?? ('dryRun' in cmd.args && cmd.args.dryRun);
+    const cid = options.cid ?? ('idempotencyKey' in cmd.args ? cmd.args.idempotencyKey : undefined);
+    const dup = !dryRun && this.room.dupOf(user, cid);
+    if (typeof dup === 'number') return this.agentResult({ ok: 'dup', seq: dup }, 'Already applied');
+    if (cmd.tool === 'undo_change') return this.revertNow(user, cmd.args.changeId, dryRun, cid);
+    if (cmd.tool === 'comment') return this.commentNow(user, cmd.args, dryRun, cid);
+    const before = this.room.current(),
+      built = buildCommand(before, cmd, this.thisWeek(), user);
+    if ('error' in built) return { ok: false, error: built.error };
+    const result = dryRun
+      ? this.room.preview(user, built.op, this.thisWeek())
+      : this.room.apply(user, cid, built.op, this.thisWeek());
+    if (!dryRun) this.publish(result);
+    const after = result.ok === false ? before : dryRun ? applyOp(before, built.op) : this.room.current();
+    return {
+      ...this.agentResult(result, built.label, built.warnings, impact(before, after, this.thisWeek())),
+      dates: built.dates,
+      dryRun,
+    };
+  }
+
+  async revertAs(user: User, batchId: string, dryRun = false, cid?: string) {
+    return this.command(user, { tool: 'undo_change', args: { changeId: batchId, dryRun, idempotencyKey: cid } });
+  }
+
+  private revertNow(user: User, batchId: string, dryRun: boolean, cid?: string) {
+    const batch = this.room.batch(batchId);
+    if (!batch || (batch.batch.actor !== user.email && user.role !== 'admin'))
+      return { ok: false, error: 'You can only undo your own changes (admins can undo anyone’s).' };
+    const before = this.room.current();
+    const predicted = revertChanges(before, batch.changes).plan;
+    if (user.role !== 'admin' && changesPast(diffPlans(before, predicted), before, this.thisWeek()))
+      return { ok: false, error: `Past weeks are locked; use from ≥ ${this.thisWeek()}.` };
+    const result = this.room.revert(user, dryRun ? undefined : cid, batchId, this.thisWeek(), dryRun, true);
+    if (!dryRun) this.publish(result);
+    return {
+      ...this.agentResult(
+        result,
+        `Undo ${batch.batch.summary}`,
+        [],
+        impact(before, result.ok === false ? before : dryRun ? predicted : this.room.current(), this.thisWeek()),
+      ),
+      dryRun,
+    };
+  }
+
+  async commentAs(user: User, args: Extract<Command, { tool: 'comment' }>['args']) {
+    return this.command(user, { tool: 'comment', args });
+  }
+
+  async resolveAs(user: User, threadId: string, resolved: boolean, dryRun = false, cid?: string) {
+    return this.commentAs(user, { threadId, resolved, dryRun, idempotencyKey: cid, mentions: [] });
+  }
+
+  private commentNow(user: User, a: Extract<Command, { tool: 'comment' }>['args'], dryRun: boolean, cid?: string) {
+    let result: Result;
+    if (a.resolved !== undefined) {
+      if (!a.threadId || a.body) return { ok: false, error: 'Resolve/reopen requires threadId and no body.' };
+      result = this.room.setResolved(user, dryRun ? undefined : cid, a.threadId, a.resolved, dryRun, true);
+    } else {
+      let anchor: CommentAnchor | undefined;
+      try {
+        const p = a.workstream ? workstream(this.room.current(), a.workstream) : undefined;
+        if (a.role) {
+          if (!p) return { ok: false, error: 'A role comment needs a workstream.' };
+          anchor = { kind: 'role', roleId: role(this.room.current(), p.id, a.role).id };
+        } else if (p) anchor = { kind: 'project', projectId: p.id };
+        else if (a.person) anchor = { kind: 'resource', resourceId: person(this.room.current(), a.person, user).id };
+      } catch (e) {
+        return { ok: false, error: String(e) };
+      }
+      const parsed = commentAddSchema.safeParse({
+        threadId: a.threadId ?? crypto.randomUUID(),
+        commentId: crypto.randomUUID(),
+        anchor,
+        body: a.body ? a.body + a.mentions.map((email) => ` <@${email.toLowerCase()}>`).join('') : undefined,
+      });
+      if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+      result = this.room.addComment(user, dryRun ? undefined : cid, parsed.data, dryRun, true);
+    }
+    if (!dryRun) this.publish(result);
+    return { ...this.agentResult(result, 'Comment (via agent)'), dryRun };
   }
 
   exportPlan() {

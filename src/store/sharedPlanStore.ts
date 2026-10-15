@@ -518,6 +518,8 @@ export function useSharedHistory() {
   return { canUndo: useStore(s, (x) => x.canUndo), canRedo: useStore(s, (x) => x.canRedo) };
 }
 
+import { hasExplicitMode, noBackendThisSession } from './mode';
+
 // ── workspace actions used by the shared-mode UI ──
 
 /** Checks who you are and loads the plan list, then opens the last plan used (or the first). */
@@ -541,6 +543,7 @@ export async function bootShared() {
     else collab.set({ status: 'no-plan' });
   } catch (err) {
     const e = err instanceof ApiError ? err : new ApiError(0, String(err));
+    if (e.noBackend && !hasExplicitMode()) { noBackendThisSession(); return; }
     collab.set({
       status: e.signIn || e.status === 401 ? 'signed-out' : e.status === 403 ? 'forbidden' : 'unreachable',
       statusMsg: e.message,

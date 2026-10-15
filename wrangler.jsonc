@@ -8,7 +8,7 @@
   },
   // No static assets: the Worker serves the app itself (worker/assets.ts), so Cloudflare
   // Access's ctx.access reaches it. In development the Vite dev server serves the app.
-  // The shared workspace (opt-in per browser). Each plan is one PlanRoom; Workspace
+  // The shared workspace (on by default per browser). Each plan is one PlanRoom; Workspace
   // holds people, roles, the plan list and the activity log. Both use SQLite storage.
   "durable_objects": {
     "bindings": [

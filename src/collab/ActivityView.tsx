@@ -316,7 +316,7 @@ function ActivityRow({ entry: e, open, onToggle, isOpenPlan }: { entry: Entry; o
                       {c.week
                         ? `${formatWeek(c.week)}: ${val(c.before, true)} → ${val(c.after, true)}`
                         : c.field
-                          ? `${c.field}: ${val(c.before, false)} → ${val(c.after, false)}`
+                          ? `${c.field === 'externalId' ? 'Project ID' : c.field === 'email' ? 'Email' : c.field}: ${val(c.before, false)} → ${val(c.after, false)}`
                           : c.before === null
                             ? 'created'
                             : 'deleted'}

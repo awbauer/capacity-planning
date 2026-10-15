@@ -63,6 +63,7 @@ export function workstreamCsv(plan: PlanData, projectId: string): string {
 
   const out: Cell[][] = [
     ['Workstream', project.name],
+    ['Project ID', project.externalId],
     ['Client', project.client],
     ['Seller', seller?.name],
     ['Status', STATUS_LABELS[project.status]],
@@ -99,7 +100,7 @@ export function allWorkstreamsCsv(plan: PlanData): string {
   const projects = new Map(plan.projects.map((p) => [p.id, p]));
   const sellers = new Map(plan.sellers.map((s) => [s.id, s.name]));
   const out: Cell[][] = [
-    ['Workstream', 'Client', 'Seller', 'Status', 'Role', 'Person', 'Level', 'Week of', 'Phase', 'Allocation %'],
+    ['Workstream', 'Project ID', 'Client', 'Seller', 'Status', 'Role', 'Person', 'Level', 'Week of', 'Phase', 'Allocation %'],
   ];
   const lines: Cell[][] = [];
   for (const a of plan.assignments) {
@@ -110,6 +111,7 @@ export function allWorkstreamsCsv(plan: PlanData): string {
       if (!pct) continue;
       lines.push([
         p.name,
+        p.externalId,
         p.client,
         p.sellerId ? sellers.get(p.sellerId) : '',
         STATUS_LABELS[p.status],
@@ -122,11 +124,7 @@ export function allWorkstreamsCsv(plan: PlanData): string {
       ]);
     }
   }
-  lines.sort((x, y) =>
-    String(x[0]).localeCompare(String(y[0])) ||
-    String(x[4]).localeCompare(String(y[4])) ||
-    String(x[5]).localeCompare(String(y[5])) ||
-    String(x[7]).localeCompare(String(y[7])),
-  );
+  const sortColumns = ['Workstream', 'Role', 'Person', 'Week of'].map((name) => out[0].indexOf(name));
+  lines.sort((x, y) => sortColumns.reduce((order, index) => order || String(x[index] ?? '').localeCompare(String(y[index] ?? '')), 0));
   return toCsv([...out, ...lines]);
 }

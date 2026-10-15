@@ -34,6 +34,8 @@ const show = (v: unknown, pct = false): string => {
 };
 
 const FIELD_LABELS: Record<string, string> = {
+  externalId: 'Project ID',
+  email: 'email',
   resourceId: 'person',
   sellerId: 'seller',
   tagIds: 'capabilities',

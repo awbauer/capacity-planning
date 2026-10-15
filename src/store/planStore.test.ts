@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+vi.mock('./mode', () => ({ isShared: () => false }));
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createEmptyPlan, createSamplePlan } from '../domain/sampleData';
 import { defaultMeta, serializePlan } from '../domain/plans';
 import { parsePlan, parsePlanFile } from '../domain/schema';

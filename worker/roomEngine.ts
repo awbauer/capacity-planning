@@ -197,6 +197,18 @@ export class RoomEngine {
   apply(user: User, cid: string | undefined, input: unknown, thisWeek: WeekKey): Result {
     const dup = this.dupOf(user, cid);
     if (dup !== undefined) return { ok: 'dup', seq: dup };
+    const prepared = this.prepare(user, input, thisWeek);
+    if (!('prepared' in prepared)) return prepared;
+    return this.commit(user, cid, prepared.before, prepared.after, prepared.changes, prepared.info);
+  }
+
+  /** Runs exactly the apply checks without recording a batch or changing the plan. */
+  preview(user: User, input: unknown, thisWeek: WeekKey): Result {
+    const prepared = this.prepare(user, input, thisWeek);
+    return 'prepared' in prepared ? { ok: 'noop', seq: this.seq } : prepared;
+  }
+
+  private prepare(user: User, input: unknown, thisWeek: WeekKey): Result | { prepared: true; before: PlanData; after: PlanData; changes: Change[]; info: { op: string; summary: string; replace: boolean; adminOnly: boolean } } {
     const parsed = parseOp(input);
     if ('error' in parsed) return { ok: false, code: 'invalid', msg: parsed.error };
     const { op } = parsed;
@@ -220,16 +232,16 @@ export class RoomEngine {
     const locked = this.lockCheck(changes, before, user, thisWeek);
     if (locked) return locked;
     const replace = flattenOps(op).some((o) => o.t === 'plan.replace');
-    return this.commit(user, cid, before, after, changes, {
+    return { prepared: true as const, before, after, changes, info: {
       op: op.t === 'group' ? flattenOps(op)[0].t : op.t,
       summary: describeOp(op, before),
       replace,
       adminOnly: opNeedsAdmin(op),
-    });
+    } };
   }
 
   /** Undoes a recorded batch where nothing has changed it since. */
-  revert(user: User, cid: string | undefined, batchId: string, thisWeek: WeekKey): Result {
+  revert(user: User, cid: string | undefined, batchId: string, thisWeek: WeekKey, dryRun = false, viaAgent = false): Result {
     const dup = this.dupOf(user, cid);
     if (dup !== undefined) return { ok: 'dup', seq: dup };
     if (user.role === 'viewer') return { ok: false, code: 'forbidden', msg: 'Viewers can’t edit.' };
@@ -252,9 +264,12 @@ export class RoomEngine {
     if (broken) return { ok: false, code: 'invalid', msg: broken };
     const locked = this.lockCheck(diff, before, user, thisWeek);
     if (locked) return locked;
+    const problem = checkReferences(after);
+    if (problem) return { ok: false, code: 'invalid', msg: problem };
+    if (dryRun) return { ok: 'noop', seq: this.seq };
     const result = this.commitRevert(user, cid, before, after, diff, {
       op: 'revert',
-      summary: `Undid: ${batch.summary}`,
+      summary: `Undid: ${batch.summary}${viaAgent ? ' (via agent)' : ''}`,
       revertOf: batchId,
       replace: !!batch.admin_only && diff.length > 500,
       adminOnly: !!batch.admin_only,
@@ -314,7 +329,7 @@ export class RoomEngine {
   }
 
   /** Adds a comment: to a thread, or starting one when `anchor` is given. Anyone with access can comment. */
-  addComment(user: User, cid: string | undefined, input: CommentAdd): Result {
+  addComment(user: User, cid: string | undefined, input: CommentAdd, dryRun = false, viaAgent = false): Result {
     const dup = this.dupOf(user, cid);
     if (dup !== undefined) return { ok: 'dup', seq: dup };
     const plan = this.current();
@@ -348,7 +363,8 @@ export class RoomEngine {
       thread = { id: input.threadId, anchor: input.anchor, createdBy: user.email, createdAt: now, comments: [comment] };
       what = 'Commented on';
     }
-    const summary = `${what} ${anchorLabel(plan, thread.anchor)}: “${excerpt(input.body)}”`;
+    const summary = `${what} ${anchorLabel(plan, thread.anchor)}: “${excerpt(input.body)}”${viaAgent ? ' (via agent)' : ''}`;
+    if (dryRun) return { ok: 'noop', seq: this.seq };
     return this.recordComment(user, cid, thread, 'comment.add', summary, {
       comment: { id: comment.id, before: null, after: comment.body },
       notices: mentions.map((email) => this.notice(email, thread, comment.id, user.email, now, comment.body)),
@@ -397,7 +413,7 @@ export class RoomEngine {
   }
 
   /** Resolves or reopens a thread. Anyone with access can. */
-  setResolved(user: User, cid: string | undefined, threadId: string, resolved: boolean): Result {
+  setResolved(user: User, cid: string | undefined, threadId: string, resolved: boolean, dryRun = false, viaAgent = false): Result {
     const dup = this.dupOf(user, cid);
     if (dup !== undefined) return { ok: 'dup', seq: dup };
     const thread = this.thread(threadId);
@@ -411,7 +427,8 @@ export class RoomEngine {
       delete next.resolvedAt;
       delete next.resolvedBy;
     }
-    const summary = `${resolved ? 'Resolved' : 'Reopened'} the thread on ${anchorLabel(this.current(), thread.anchor)}`;
+    const summary = `${resolved ? 'Resolved' : 'Reopened'} the thread on ${anchorLabel(this.current(), thread.anchor)}${viaAgent ? ' (via agent)' : ''}`;
+    if (dryRun) return { ok: 'noop', seq: this.seq };
     return this.recordComment(user, cid, next, resolved ? 'comment.resolve' : 'comment.reopen', summary, {});
   }
 
@@ -646,7 +663,7 @@ export class RoomEngine {
 
   // ── internals ──
 
-  private dupOf(user: User, cid: string | undefined): number | undefined {
+  dupOf(user: User, cid: string | undefined): number | undefined {
     if (!cid) return undefined;
     const row = one(this.sql.all<{ seq: number }>('SELECT seq FROM batches WHERE actor = ? AND client_op_id = ?', user.email, cid));
     return row?.seq;
@@ -675,6 +692,7 @@ export class RoomEngine {
       if (t === 'resource.add' && has(plan.resources, o.resource.id)) return 'That person already exists.';
       if (t === 'project.add' && has(plan.projects, o.project.id)) return 'That workstream already exists.';
       if (t === 'role.add' && has(plan.assignments, o.role.id)) return 'That role already exists.';
+      plan = applyOp(plan, o);
     }
     return undefined;
   }

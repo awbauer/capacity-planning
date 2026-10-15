@@ -40,6 +40,7 @@ function matchesFilters(p: Project, f: Filters, d: Derived): boolean {
   if (!q) return true;
   const haystack = [
     p.name,
+    p.externalId ?? '',
     p.client ?? '',
     p.sellerId ? (d.sellersById.get(p.sellerId)?.name ?? '') : '',
     // People and role names, so "architect" finds workstreams with that role, open or filled.
@@ -163,7 +164,7 @@ export function ProjectView({ buckets }: Props) {
           <div className="row-main">
             <div
               className="row-title"
-              title={`${p.name}${p.client ? ` · ${p.client}` : ''}${seller ? ` · seller ${seller.name}` : ''}. Click to ${open ? 'collapse' : 'expand'}; ••• → Details for checks and roles`}
+              title={`${p.name}${p.externalId ? ` · Project ID ${p.externalId}` : ''}${p.client ? ` · ${p.client}` : ''}${seller ? ` · seller ${seller.name}` : ''}. Click to ${open ? 'collapse' : 'expand'}; ••• → Details for checks and roles`}
             >
               <span className="ws-name">{p.name}</span>
               {p.client && groupBy !== 'client' && <span className="client">· {p.client}</span>}
